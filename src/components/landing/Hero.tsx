@@ -8,12 +8,12 @@ import { simulate, BASELINE_CONDITIONS } from "@/lib/domain/engine/model";
 const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
 
 const TELEMETRY = [
-  { k: "RPM", pos: "top-[18%] left-[6%]", get: (s: ReturnType<typeof simulate>) => s.rpm.toFixed(0), u: "" },
-  { k: "CHT", pos: "top-[30%] right-[7%]", get: (s: ReturnType<typeof simulate>) => s.cht.toFixed(0), u: "°C" },
-  { k: "EGT", pos: "top-[52%] right-[4%]", get: (s: ReturnType<typeof simulate>) => s.egt.toFixed(0), u: "°C" },
-  { k: "OIL PRESSURE", pos: "bottom-[26%] left-[8%]", get: (s: ReturnType<typeof simulate>) => s.oilPressure.toFixed(1), u: "BAR" },
-  { k: "FUEL FLOW", pos: "bottom-[14%] right-[10%]", get: (s: ReturnType<typeof simulate>) => s.fuelFlow.toFixed(1), u: "L/h" },
-  { k: "VIBRATION", pos: "top-[64%] left-[4%]", get: (s: ReturnType<typeof simulate>) => s.vibrationRms.toFixed(2), u: "G" },
+  { k: "RPM", pos: "top-[16%] left-[46%]", get: (s: ReturnType<typeof simulate>) => s.rpm.toFixed(0), u: "" },
+  { k: "CHT", pos: "top-[28%] right-[6%]", get: (s: ReturnType<typeof simulate>) => s.cht.toFixed(0), u: "°C" },
+  { k: "EGT", pos: "top-[50%] right-[4%]", get: (s: ReturnType<typeof simulate>) => s.egt.toFixed(0), u: "°C" },
+  { k: "OIL PRESSURE", pos: "bottom-[22%] left-[44%]", get: (s: ReturnType<typeof simulate>) => s.oilPressure.toFixed(1), u: "BAR" },
+  { k: "FUEL FLOW", pos: "bottom-[12%] right-[10%]", get: (s: ReturnType<typeof simulate>) => s.fuelFlow.toFixed(1), u: "L/h" },
+  { k: "VIBRATION", pos: "top-[68%] left-[52%]", get: (s: ReturnType<typeof simulate>) => s.vibrationRms.toFixed(2), u: "G" },
 ];
 
 function BootOverlay({ onDone }: { onDone: () => void }) {
