@@ -1,24 +1,67 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Nav } from "@/components/landing/Nav";
+import { Hero } from "@/components/landing/Hero";
+import {
+  ArchitectureStrip,
+  ExplainSection,
+  FinaleSection,
+  FleetSection,
+  Footer,
+  LiveSection,
+  MaintenanceSection,
+  MissionSection,
+  PhysicsSection,
+  PredictiveSection,
+  ProblemSection,
+  ReplaySection,
+  RulSection,
+  SimulationSection,
+  TwinSection,
+} from "@/components/landing/sections";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "AERIS-TWIN — Digital Twin for Aero Piston Engines" },
+      {
+        name: "description",
+        content:
+          "AERIS-TWIN is a real-time digital twin for MALE UAV aero piston engines: live telemetry, physics residuals, explainable fault prediction, RUL estimation and mission-risk assessment.",
+      },
+      { property: "og:title", content: "AERIS-TWIN — Digital Twin for Aero Piston Engines" },
+      {
+        property: "og:description",
+        content: "Know the engine before it knows it's failing. Explainable predictive engine intelligence for mission reliability.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: Landing,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function Landing() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="relative">
+      <Nav />
+      <main>
+        <Hero />
+        <ProblemSection />
+        <TwinSection />
+        <LiveSection />
+        <PhysicsSection />
+        <PredictiveSection />
+        <ExplainSection />
+        <RulSection />
+        <MissionSection />
+        <SimulationSection />
+        <ReplaySection />
+        <MaintenanceSection />
+        <FleetSection />
+        <ArchitectureStrip />
+        <FinaleSection />
+      </main>
+      <Footer />
     </div>
   );
 }
