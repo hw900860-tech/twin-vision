@@ -78,16 +78,16 @@ export function TelemetryDashboard({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3">
         {channels.map((c) => {
           const tone = TONE_HEX[c.tone ?? "cyan"]!;
           return (
-            <div key={c.key} className="bg-panel/80 p-3">
+            <div key={c.key} className="min-w-0 bg-panel/80 p-3">
               <div className="flex items-baseline justify-between">
-                <span className="label-xs">{c.label}</span>
+                <span className="label-xs truncate">{c.label}</span>
                 <span className="label-xs text-[9px] opacity-60">{c.unit}</span>
               </div>
-              <div className="readout mt-1 text-lg" style={{ color: tone }}>
+              <div className="readout mt-1 truncate text-lg" style={{ color: tone }}>
                 {c.get(state).toFixed(c.digits)}
               </div>
               <Sparkline data={series[c.key]!} tone={tone} />
