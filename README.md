@@ -1,443 +1,368 @@
-# AERIS-TWIN — AI-Enabled Digital Engine Intelligence
+# AERIS-TWIN — AI-Enabled Digital Engine Intelligence System for MALE UAVs
 
-A production-ready, interactive WebGL application that merges a **gamified 3D UAV Flight Simulator** with an **Air Traffic Control (ATC) / Ground Control Station (GCS) Aero Engine Digital Twin Command Center** for MALE UAVs equipped with Rotax 914 / Austro AE300 piston engines.
+> **What if we could predict an engine failure 6 hours before it happens — and tell the pilot exactly which part is about to break and why?**
 
 ---
 
 ## Table of Contents
 
-1. [System Overview](#system-overview)
-2. [Tech Stack](#tech-stack)
-3. [Page Architecture](#page-architecture)
-4. [Module 1 — Landing Page](#module-1--landing-page)
-5. [Module 2 — Flight Simulator (`/sim`)](#module-2--flight-simulator-sim)
-6. [Module 3 — GCS Command Center (`/gcs`)](#module-3--gcs-command-center-gcs)
-7. [Engine Thermodynamic Physics Core](#engine-thermodynamic-physics-core)
-8. [Flight Dynamics Model](#flight-dynamics-model)
-9. [Fault Injection Sandbox](#fault-injection-sandbox)
-10. [Terrain Generation System](#terrain-generation-system)
-11. [3D Engine Digital Twin](#3d-engine-digital-twin)
-12. [Simulation Lab — Value Relationships](#simulation-lab--value-relationships)
-13. [How to Run](#how-to-run)
+1. [The Big Picture — Why This Exists](#the-big-picture--why-this-exists)
+2. [The TAPAS BH-201 Story — What Went Wrong](#the-tapas-bh-201-story--what-went-wrong)
+3. [The Engine — Rotax 914, Heart of the Problem](#the-engine--rotax-914-heart-of-the-problem)
+4. [Core Concepts — A Glossary You Can Actually Read](#core-concepts--a-glossary-you-can-actually-read)
+5. [How AERIS-TWIN Solves This](#how-aeris-twin-solves-this)
+6. [The 3 Pages — What Each One Does](#the-3-pages--what-each-one-does)
+7. [The Physics Engine — How Values Change](#the-physics-engine--how-values-change)
+8. [The Fault Sandbox — Breaking Things on Purpose](#the-fault-sandbox--breaking-things-on-purpose)
+9. [Real-World Challenges — What Happens When You Deploy This](#real-world-challenges--what-happens-when-you-deploy-this)
+10. [How to Run](#how-to-run)
+11. [File Structure](#file-structure)
 
 ---
 
-## System Overview
+## The Big Picture — Why This Exists
 
-AERIS-TWIN is a **read-only advisory system** that demonstrates how digital twin technology can provide predictive engine intelligence for MALE (Medium-Altitude Long-Endurance) UAVs. It runs entirely in the browser with no backend server — all physics, telemetry, and diagnostics are computed client-side in real time.
+### The Problem
 
-The system has three interconnected pages:
+India's MALE (Medium-Altitude Long-Endurance) UAV program — the **TAPAS BH-201** — spent 8 years and ₹1,786 crore (~$220M) trying to build an indigenous surveillance drone like the American MQ-1 Predator. It **failed**.
 
-| Route | Purpose |
-|---|---|
-| `/` | Landing page — product overview, architecture, interactive 3D engine model |
-| `/sim` | **Flight Simulator** — fly a TAPAS BH-201 UAV across 3 terrains with live engine telemetry |
-| `/gcs` | **GCS Command Center** — monitor engine health, run diagnostics, replay missions |
+Not because the airframe was bad. Not because the sensors didn't work. The drone was grounded by a combination of:
 
----
+1. **Weight** — planned 1,800 kg, actual 2,200 kg (22% overweight)
+2. **Engine** — the Rotax 914 couldn't deliver enough power at 30,000 ft
+3. **No predictive intelligence** — when the engine overheated at altitude, nobody knew until it was too late
 
-## Tech Stack
+The Indian Armed Forces required **30,000 ft altitude** and **24-hour endurance**. TAPAS achieved **28,000 ft for 18 hours**. Close, but not enough. The project was officially closed as a Mission Mode Project in January 2024.
 
-| Layer | Technology |
-|---|---|
-| Framework | React 19 + TanStack Start (SSR) |
-| Routing | TanStack Router (file-based) |
-| 3D Rendering | Three.js via `@react-three/fiber` + `@react-three/drei` |
-| Styling | Tailwind CSS v4 (oklch design system) |
-| Charts | Recharts (sparklines, area charts) |
-| Icons | Lucide React |
-| Animation | GSAP, CSS animations |
-| State | Zustand (flight simulator), React state (GCS) |
-| Build | Vite 8, Bun package manager |
-| Fonts | Space Grotesk (display), IBM Plex Mono (readouts) |
+### What If We Had a Digital Twin?
+
+Here's the thing: **the engine didn't fail suddenly**. There were signs — rising CHT, fluctuating EGT, increasing vibration — that preceded the performance shortfalls. But in 2024, there was no system that could:
+
+- **Watch** the engine in real time at 20 Hz (50ms updates)
+- **Understand** what each temperature/vibration change meant
+- **Predict** which component would fail next and how long it had
+- **Advise** the ground operator what to do about it
+
+That's exactly what AERIS-TWIN does.
 
 ---
 
-## Page Architecture
+## The TAPAS BH-201 Story — What Went Wrong
 
-### Landing Page (`/`)
-A scrollable marketing page with 12 sections explaining the AERIS-TWIN concept:
-- **Hero** — 3D rotating engine model with live telemetry overlays
-- **The Problem** — why conventional threshold monitoring fails
-- **Digital Twin** — interactive 3D engine cutaway (click cylinders to inspect)
-- **Live Twin** — real-time telemetry dashboard with sparklines
-- **Physics vs Reality** — residual charts showing model divergence
-- **Predictive Intelligence** — detection lead time demonstration
-- **Explainable Diagnostics** — contributing factor breakdown
-- **RUL Estimation** — Weibull-based remaining useful life with confidence bands
-- **Mission Intelligence** — mission risk assessment
-- **What-If Simulation** — adjustable scenario controls
-- **Mission Replay** — deterministic 4-hour mission playback
-- **Maintenance Advisory** — predictive maintenance recommendations
+### Timeline of Struggles
 
-### Flight Simulator (`/sim`)
-A full-screen 3D flight simulator with:
-- Procedural textured terrain (3 biomes)
-- TAPAS BH-201 UAV with spinning propeller
-- Chase camera following the UAV
-- Military-grade HUD overlay
-- Right-side control panel
+| Year | Event | What Happened |
+|------|-------|---------------|
+| 2010 | Design starts | "We'll build India's Predator" — target: 30,000 ft, 24hr endurance |
+| 2013 | Taxi trials begin | At Kolar airfield near Bengaluru |
+| 2016 | First flight | 15 November at Challakere, Karnataka |
+| 2019 | **Prototype AF-6 CRASHES** | Link loss with ground station, activated return-home mode, but turbulence overwhelmed the control law |
+| 2020 | 16,000 ft / 8hr | Achieved — but 14,000 ft short of target |
+| 2021 | 25,000 ft / 10hr | Improved — but still 5,000 ft and 14 hours short |
+| 2022 | **28,000 ft / 18hr** | Best performance — but engine was maxed out |
+| 2022 | Weight crisis | 2,200 kg vs planned 1,800 kg — every extra kg costs altitude |
+| 2024 | **PROJECT CLOSED** | Officially removed from Mission Mode status |
 
-### GCS Command Center (`/gcs`)
-A dashboard with 7 tabbed views:
-- Fleet overview, Live Twin, Diagnostics, Mission Replay, Simulation Lab, Maintenance, Reports
+### The 5 Root Causes
 
----
+#### 1. The Engine Was Too Weak
+The Rotax 914 produces 115 HP at sea level. At 30,000 ft, with only 40% of sea-level air density, the turbocharger cannot compensate enough. The engine simply **cannot produce the power needed** to maintain 30,000 ft with a 2,200 kg airframe.
 
-## Module 1 — Landing Page
+> **Analogy:** It's like trying to run a marathon at the top of Mount Everest. Your lungs (the engine) can only process so thin an air.
 
-### 3D Engine Hero
-The hero section renders a Three.js `Canvas` with an `EngineModel` component — a stylized 4-cylinder piston engine that slowly rotates. Floating telemetry labels (RPM, CHT, EGT, Oil Pressure, Fuel Flow, Vibration) update every frame using a deterministic `simulate()` function.
+#### 2. Weight Spiral
+Each system addition added weight → less altitude → needed a bigger engine → more weight. The twin NPO-Saturn 36MT turboprops (74.57 kW each) were an attempt to fix this, but the airframe was already overweight.
 
-### Boot Overlay
-On first load, a typewriter-style boot sequence displays:
-```
-SYSTEM GRID .......... OK
-AERIS-TWIN CORE ...... v1.4
-TELEMETRY LINK ....... ESTABLISHED
-SENSOR ARRAY ......... 24 NODES
-PHYSICS MODEL ........ AE-P4 LOADED
-ANOMALY ENGINE ....... ARMED
-TWIN SYNCHRONIZED
-```
-This is purely cosmetic and hides the 3D engine loading time.
+#### 3. No Engine Health Intelligence
+When the engine started running hot at 28,000 ft, the operators had **no way to know** if this was normal for the altitude or a sign of impending failure. Without a digital twin, they couldn't distinguish between "engine is stressed but fine" and "engine is about to seize."
+
+#### 4. Single Point of Failure
+The AF-6 crash happened because of a **communication link loss** that triggered an automatic return-home mode, but the turbulence overwhelmed the control law. There was no predictive system to say "don't fly this route — turbulence is forecast" or "your engine health is at 40% — land now."
+
+#### 5. No Prognostic Capability
+Even when the engine showed warning signs (rising EGT, slight vibration increase), there was no system to calculate **Remaining Useful Life (RUL)** — how many more flight hours the engine could safely operate before requiring maintenance.
 
 ---
 
-## Module 2 — Flight Simulator (`/sim`)
+## The Engine — Rotax 914, Heart of the Problem
 
-### Core Components
+### What Is It?
 
-| File | Purpose |
-|---|---|
-| `flightStore.ts` | Zustand store — all flight state, physics, engine telemetry |
-| `FlightSimulator.tsx` | Three.js Canvas with lighting, fog, stars, terrain, UAV |
-| `UAVModel.tsx` | TAPAS BH-201 3D model with chase camera + input handling |
-| `Terrain.tsx` | Infinite chunk-based procedural terrain |
-| `FlightHUD.tsx` | Military HUD overlay (airspeed, altitude, heading, engine data) |
-| `ControlPanel.tsx` | Right panel — terrain, missions, throttle, fault injection |
+The **Rotax 914** is a **turbocharged, 4-cylinder, horizontally-opposed (flat-4) piston engine** made by BRP-Rotax in Austria. It's the most common engine in light sport aircraft and MALE UAVs worldwide.
 
-### Flight Controls
+### Specifications
 
-**Mouse Drag:**
-- Drag **left/right** → Changes UAV heading (0.5° per pixel)
-- Drag **up/down** → Changes altitude (20 ft per pixel)
+| Spec | Value | What It Means |
+|------|-------|---------------|
+| **Type** | Flat-4 (horizontally opposed) | 4 cylinders arranged in a flat "boxer" layout — low center of gravity |
+| **Displacement** | 1,211.2 cc | Total volume of all 4 cylinders |
+| **Bore × Stroke** | 79.5 mm × 61 mm | Wide, short cylinders — optimized for high RPM |
+| **Power (sea level)** | 115 HP | Enough for a light aircraft, marginal for a 2-ton UAV |
+| **Power (25,000 ft)** | ~65-75 HP (estimated) | Turbo can't fully compensate for thin air |
+| **Max RPM** | 5,500 | Higher RPM than most piston engines |
+| **TBO** | 1,200 hours | Time Between Overhauls — after this, mandatory rebuild |
+| **Cooling** | Liquid-cooled heads, air-cooled cylinders | Hybrid — the heads use coolant, the barrels use airflow |
+| **Turbocharger** | Yes, with automatic wastegate | Boosts air pressure at altitude |
+| **Weight** | 77.4 kg (dry) | Relatively light for 115 HP |
+| **Fuel** | Mogas (100LL also acceptable) | Can run on automotive gasoline |
 
-**Keyboard:**
-| Key | Action |
-|---|---|
-| W / ↑ | Increase throttle (+2%) |
-| S / ↓ | Decrease throttle (-2%) |
-| Q / ← | Turn left (heading -3°) |
-| E / → | Turn right (heading +3°) |
-| A | Climb (altitude +200 ft) |
-| D | Descend (altitude -200 ft) |
+### How the Engine Works (Simplified)
 
-### Chase Camera
-The camera follows behind and above the UAV relative to its heading:
 ```
-camX = uavX + sin(heading) × 18
-camZ = uavZ + cos(heading) × 18
-camY = uavAltitude × 0.0015 + 2.5 + 6
+    AIR IN → [Turbocharger] → [Intake Manifold] → [Cylinders 1-4] → [Exhaust] → OUT
+                                                ↓                         ↓
+                                          Combustion happens          Exhaust gases
+                                          (fuel + air ignite)        spin the turbo
+                                                ↓
+                                          [Crankshaft] → [Propeller]
 ```
-Position is smoothed with lerp damping (`factor = 0.05`) for buttery tracking.
 
-### HUD Overlay
+**The 4-stroke cycle for each cylinder:**
 
-| Indicator | Source | Color Logic |
-|---|---|---|
-| AIRSPEED (KTS) | `40 + (throttle/100) × 160 × densityFactor` | Cyan |
-| ALTITUDE (FT) | Tracked from target with climb rate limit | Cyan |
-| AMBIENT TEMP (°C) | Set by biome selection | Amber |
-| ENGINE RPM | `baseRPM + throttle × 1600 × (0.86 + 0.14 × densityFactor)` | Cyan |
-| HEADING (°) | Smoothly interpolated toward target | Cyan |
-| CHT 1-4 (°C) | Per-cylinder with fault modifiers | Cyan→Amber→Red |
-| EGT / MAP | Combined exhaust/manifold readout | Cyan |
-| OIL PRESS/TEMP | Inverse temperature relationship | Cyan |
-| VIBRATION RMS | Throttle + fault dependent | Cyan→Amber→Red |
-| GPS LAT/LON | Derived from world position | Cyan |
-| ENGINE HEALTH | Composite score 0-100% | Green→Amber→Red |
-| Advisory Banner | Changes based on max CHT | Green/Yellow/Red |
+1. **Intake Stroke** — Piston moves down, intake valve opens, air-fuel mixture enters
+2. **Compression Stroke** — Both valves close, piston moves up, mixture compresses
+3. **Power Stroke** — Spark plug fires, explosion pushes piston down, turns crankshaft
+4. **Exhaust Stroke** — Exhaust valve opens, piston pushes spent gases out
+
+### The Firing Order
+
+The Rotax 914 fires in order: **1 → 3 → 4 → 2** (not 1-2-3-4!). This is a specific flat-4 firing order that balances the engine and reduces vibration. Each cylinder fires every 180° of crankshaft rotation (720° total for all 4 cylinders).
+
+### Why Engine Health Matters for TAPAS
+
+At 30,000 ft:
+- Air density is **40% of sea level** — the engine is starving for air
+- Turbocharger runs at **maximum boost** — bearing wear accelerates
+- Cylinder Head Temperature (CHT) can spike if cooling airflow is blocked
+- Exhaust Gas Temperature (EGT) rises as the engine works harder
+- Any vibration from a damaged bearing becomes **catastrophic** because there's no altitude margin for error
 
 ---
 
-## Module 3 — GCS Command Center (`/gcs`)
+## Core Concepts — A Glossary You Can Actually Read
 
-### Tab Navigation
+### Telemetry Channels (What We Monitor)
 
-| Tab | Content |
-|---|---|
-| FLEET | 5-UAV fleet health overview with status indicators |
-| LIVE TWIN | Real-time telemetry dashboard + interactive 3D engine model |
-| DIAGNOSTICS | Explainable fault diagnosis + RUL estimation |
-| MISSION REPLAY | Deterministic 4-hour mission playback with phase markers |
-| SIMULATION LAB | What-if scenario controls (altitude, throttle, wear, duration) |
-| MAINTENANCE | Predictive maintenance advisory + audit history |
-| REPORTS | Mission reports, model cards, audit trail |
+| Term | What It Is | Normal Range | Why It Matters |
+|------|-----------|-------------|----------------|
+| **CHT** (Cylinder Head Temperature) | How hot the top of each cylinder is | 140-170°C | Too hot = metal fatigue, head gasket failure, engine seizure |
+| **EGT** (Exhaust Gas Temperature) | How hot the exhaust gases are leaving each cylinder | 550-700°C | Too lean (hot) = fuel starvation; Too rich (cool) = flooding |
+| **MAP** (Manifold Absolute Pressure) | Pressure of air entering the cylinders | 20-32 kPa | Low MAP = not enough air = engine can't produce power |
+| **Oil Pressure** | Pressure of lubricating oil in the engine | 3.5-5.5 bar | Low = oil leak or pump failure; bearings will destroy themselves in minutes |
+| **Oil Temperature** | Temperature of the engine oil | 80-100°C | Too hot = oil breaks down, loses lubrication |
+| **Vibration RMS** | Root Mean Square vibration level | 0.3-0.8 m/s² | High = something is mechanically wrong — bearing, imbalance, loose part |
+| **FFT Spectrum** | Frequency analysis of vibration (like an audio equalizer for engine shake) | Peaks at specific frequencies | Different frequencies = different problems. 140 Hz peak = bearing failure |
+| **RPM** | Engine revolutions per minute | 4,500-5,500 | Too low = engine struggling; Too high = over-speeding |
+| **RUL** (Remaining Useful Life) | How many flight hours until mandatory maintenance | 100-600 hours | The single most important number for mission planning |
 
-### Telemetry Dashboard (LIVE TWIN tab)
-Displays 10 channels with sparkline charts:
+### Key Terms Explained
 
-| Channel | Unit | What It Shows |
-|---|---|---|
-| RPM | — | Engine revolutions per minute |
-| CHT | °C | Cylinder Head Temperature |
-| EGT | °C | Exhaust Gas Temperature |
-| OIL PRESSURE | BAR | Lubrication system pressure |
-| OIL TEMP | °C | Oil temperature |
-| FUEL FLOW | L/h | Fuel consumption rate |
-| VIBRATION | G | Vibration RMS acceleration |
-| BUS VOLTAGE | V | Alternator output |
-| ALTERNATOR | % | Electrical system health |
-| INJECTION EFF. | % | Fuel injector efficiency |
+**Digital Twin** — A virtual copy of a real engine that runs the same physics equations in real time. If the real engine's CHT is 185°C, the digital twin's CHT is also 185°C. The twin can then run "what-if" scenarios: "If this temperature keeps rising at this rate, when will it hit the failure threshold?"
+
+**Predictive Maintenance** — Instead of servicing the engine every 1,200 hours (whether it needs it or not), you service it **exactly when the digital twin says it's needed**. This catches problems early and avoids unnecessary maintenance.
+
+**Anomaly Detection** — The system learns what "normal" engine behavior looks like, then flags anything abnormal. A cylinder running 30°C hotter than its neighbors is abnormal — even if neither has hit the "red zone" yet.
+
+**Isolation Forest** — A machine learning algorithm that finds outliers in multi-dimensional data. Think of it as a guard that watches 10 engine parameters simultaneously and says "something is wrong here" when the combination doesn't match any known healthy pattern.
+
+**Weibull Distribution** — A statistical model used to predict when mechanical parts fail. Most engine parts follow a Weibull curve — they're reliable early in life, then failure probability increases with age and stress.
+
+**BPFO** (Ball Pass Frequency Outer race) — When a ball bearing rolls over a damaged spot on its outer race, it creates a vibration pulse at a specific frequency. For the Rotax 914, this frequency is approximately **140 Hz**. Detecting this peak means you have a bearing problem.
+
+**Firing Order 1-3-4-2** — The sequence in which cylinders ignite. Not 1-2-3-4 because flat engines need alternating left-right firing for balance. This affects vibration patterns — you know which cylinder is misfiring by the vibration signature.
+
+**CHT vs EGT** — CHT tells you about the combustion chamber (too much heat = structural damage). EGT tells you about the fuel-air mixture (too hot = running lean, too cool = running rich). You need both to diagnose engine health.
 
 ---
 
-## Engine Thermodynamic Physics Core
+## How AERIS-TWIN Solves This
 
-The engine simulation runs a deterministic physics model (`simulate()` in `lib/domain/engine/model.ts`) that calculates all telemetry values from first principles. Every value is a function of **throttle**, **altitude**, **ambient temperature**, **engine wear**, and **fault severity**.
-
-### Core Physics Formulas
-
-#### 1. Air Density Ratio
-As altitude increases, air becomes thinner. This is the most important environmental factor:
+### The 3-Layer Architecture
 
 ```
-densityRatio = exp(-altitudeFt / 27000)
+┌─────────────────────────────────────────────────┐
+│  LAYER 3: DECISION INTELLIGENCE                 │
+│  • Health Index (0-100%)                        │
+│  • Remaining Useful Life (hours)                │
+│  • Advisory Banner (Green/Yellow/Red)           │
+│  • Explainable Diagnostics (WHY something is wrong) │
+└──────────────────────┬──────────────────────────┘
+                       │
+┌──────────────────────┴──────────────────────────┐
+│  LAYER 2: PHYSICS ENGINE (20 Hz)                │
+│  • Air density calculation                      │
+│  • CHT/EGT/MAP thermodynamic model              │
+│  • Vibration FFT synthesis                      │
+│  • Oil pressure/temperature relationship        │
+│  • Anomaly scoring (Isolation Forest)           │
+└──────────────────────┬──────────────────────────┘
+                       │
+┌──────────────────────┴──────────────────────────┐
+│  LAYER 1: DATA INPUTS                           │
+│  • Throttle position                            │
+│  • Altitude                                     │
+│  • Ambient temperature                          │
+│  • Engine wear factor                           │
+│  • Active faults                                │
+└─────────────────────────────────────────────────┘
 ```
 
-| Altitude (ft) | densityRatio | Effect |
-|---|---|---|
-| 0 (sea level) | 1.000 | Maximum air density, best engine performance |
-| 10,000 | 0.690 | ~31% less air, turbo must boost |
-| 18,000 | 0.516 | ~48% less air, significant performance loss |
-| 25,000 | 0.395 | ~60% less air, near maximum turbo boost |
+### What Makes This Different From Traditional Monitoring
 
-#### 2. RPM (Revolutions Per Minute)
-```
-rpm = baseRPM + throttle × 1600 × (0.86 + 0.14 × densityRatio) + noise
-```
-- `baseRPM`: 2400 (Himalaya), 2500 (Desert), 2450 (Coastal)
-- At 100% throttle and sea level: ~4060 RPM
-- At 100% throttle and 25,000 ft: ~3830 RPM (denser air = more RPM)
+| Traditional Monitoring | AERIS-TWIN Digital Twin |
+|----------------------|------------------------|
+| Shows **current values** only | Shows current values + **predicted future values** |
+| Red light = "problem exists" | Yellow light = "problem **will** exist in 2 hours" |
+| Manual inspection every 1,200 hours | Automatic RUL calculation — inspect **exactly when needed** |
+| Operator guesses what's wrong | System says "Cylinder 2 overheating due to blocked cooling duct" |
+| Single parameter thresholds | **Multi-parameter** anomaly detection (10 channels simultaneously) |
+| No what-if capability | "What happens if I climb to 30,000 ft with this engine wear?" |
 
-#### 3. Manifold Absolute Pressure (MAP)
+---
+
+## The 3 Pages — What Each One Does
+
+### Page 1: Landing Page (`/`)
+
+A scrollable overview of the entire AERIS-TWIN concept with 12 sections:
+- Interactive 3D engine model you can rotate and click
+- Live telemetry sparklines that update in real time
+- Side-by-side comparison of "traditional monitoring" vs "digital twin"
+- What-if simulation controls
+- Mission replay demonstration
+
+### Page 2: Flight Simulator (`/sim`)
+
+**This is the "pilot's view"** — you fly a TAPAS BH-201 UAV across 3 operational environments:
+
+| Terrain | What You'll See | Why It Matters |
+|---------|----------------|----------------|
+| **Himalayan High Altitude** | Snow-capped peaks up to 30,000 ft, cold thin air (-5°C) | Tests engine at maximum altitude — turbo at full boost, CHT rising |
+| **Thar Desert Patrol** | Sandy dunes, 48°C ambient temperature, thermal turbulence | Tests engine in extreme heat — oil overheating, cooling marginal |
+| **Coastal Maritime** | Sea-level coastline, high humidity, dense air | Best engine performance — but salt air corrodes components |
+
+**What you control:**
+- Throttle (0-100%)
+- Heading (left/right)
+- Altitude (500-30,000 ft)
+- Mouse drag on screen to steer
+
+**What you see in real-time:**
+- Airspeed, altitude, temperature, RPM, GPS coordinates
+- 4 individual cylinder temperatures
+- Engine health percentage
+- Color-coded advisory banner (green/yellow/red)
+- **Fault injection buttons** — deliberately break things to see what happens
+
+### Page 3: GCS Command Center (`/gcs`)
+
+**This is the "ground operator's view"** — the command center where engineers monitor the fleet:
+
+- **3D Engine Digital Twin** — your actual GLB model with live CHT colors on each cylinder, explode/implode animation, and floating labels
+- **Engine Alerts Panel** — auto-generated warnings and critical alerts based on live telemetry
+- **Telemetry Dashboard** — 10 sparkline charts showing every parameter
+- **Diagnostics** — explainable fault analysis with contributing factors
+- **RUL Estimation** — Weibull-based countdown showing hours remaining
+- **Mission Replay** — rewind and replay any flight segment
+
+---
+
+## The Physics Engine — How Values Change
+
+### The Core Equation Chain
+
+Every value in the simulation is connected. Here's how a single input — say, **climbing to 25,000 ft** — cascades through the system:
+
+```
+ALTITUDE increases to 25,000 ft
+    │
+    ├→ AIR DENSITY drops to 0.395 (40% of sea level)
+    │      │
+    │      ├→ MAP drops to 23.5 kPa (less air entering cylinders)
+    │      │      │
+    │      │      ├→ TURBOCHARGER spins faster to compensate
+    │      │      │      │
+    │      │      │      └→ TURBO BEARING WEAR increases
+    │      │      │
+    │      │      └→ If TURBO FAILS → MAP collapses to 14 kPa → engine loses 40% power
+    │      │
+    │      ├→ CHT DECREASES slightly (thinner air = less combustion heat)
+    │      │
+    │      ├→ EGT INCREASES slightly (turbo working harder, exhaust hotter)
+    │      │
+    │      └→ RPM DECREASES slightly (less air mass = less torque)
+    │
+    ├→ AMBIENT TEMP drops to -17°C (standard atmosphere)
+    │      │
+    │      └→ OIL TEMP drops (better cooling) → OIL PRESSURE increases
+    │
+    └→ OXYGEN decreases → Engine runs LEANER → EGT increases further
+```
+
+### The 10 Physics Formulas
+
+#### 1. Air Density (the master variable)
+```
+densityRatio = e^(-altitude / 27000)
+```
+Everything else depends on this. At sea level = 1.0, at 25,000 ft = 0.395.
+
+#### 2. RPM
+```
+RPM = 2400 + throttle × 1600 × (0.86 + 0.14 × densityRatio)
+```
+More throttle = more RPM. Denser air = slightly more RPM.
+
+#### 3. Manifold Pressure (MAP)
 ```
 MAP = 18 + throttle × 14 × densityRatio
 ```
-- Represents the pressure of air entering the cylinders
-- At sea level, 100% throttle: 32 kPa (natural aspiration)
-- At 25,000 ft, 100% throttle: 23.5 kPa (turbo must compensate)
-- **Turbo Failure fault**: MAP × 0.6 → sudden power loss
+MAP tells you how much air is available for combustion. Drops sharply with altitude.
 
 #### 4. Cylinder Head Temperature (CHT)
 ```
-CHT_base = 96 + throttle × 96 + ambientTemp × 0.72 - densityRatio × 12
-CHT = CHT_base + faultModifier + noise
+CHT = 96 + throttle × 96 + ambientTemp × 0.72 - densityRatio × 12
 ```
-
-**What affects CHT:**
-| Factor | Effect | Why |
-|---|---|---|
-| ↑ Throttle | ↑ CHT | More combustion = more heat |
-| ↑ Ambient Temp | ↑ CHT | Less cooling margin |
-| ↑ Altitude | ↓ CHT | Thinner air = less combustion heat |
-| ↑ Engine Wear | ↑ CHT | Less efficient combustion |
-| Cylinder 2 Overheat fault | +80°C (Cyl 1), +120°C (Cyl 2) | Blocked cooling airflow |
-
-**CHT thresholds:**
-- < 170°C: **Normal** (cyan)
-- 170-200°C: **Caution** (amber)
-- > 200°C: **Critical** (red)
-- > 220°C: **Advisory banner turns red** — "Initiate immediate descent"
+**The most dangerous parameter.** Throttle heats it up. Altitude cools it slightly. Ambient temp heats it up. If CHT > 220°C, the cylinder head gasket is at risk of blowing.
 
 #### 5. Exhaust Gas Temperature (EGT)
 ```
 EGT = 528 + throttle × 236 + ambientTemp × 0.5
 ```
-- At 100% throttle, sea level: ~764°C
-- At 100% throttle, 48°C ambient (Thar Desert): ~788°C
-- **Injector Clog fault**: EGT + 60°C + noise (imbalance between cylinders)
-- **Turbo Failure**: EGT - 40°C (less fuel burned due to MAP drop)
+EGT tells you about combustion efficiency. High EGT = lean mixture (not enough fuel). Low EGT = rich mixture (too much fuel).
 
-#### 6. Oil Pressure and Temperature
+#### 6. Oil Pressure
 ```
-oilTemp = 68 + throttle × 34 + ambientTemp × 0.5
 oilPressure = clamp(5.6 - (oilTemp - 90) × 0.012, 1.6, 6.2)
 ```
-Oil pressure is **inversely proportional** to oil temperature — as oil gets hotter, it thins and pressure drops. This is why high oil temperature is a warning sign.
+**Inverse relationship with oil temperature.** Hot oil thins out → pressure drops → bearings starve → catastrophic failure.
 
-#### 7. Vibration RMS
+#### 7. Oil Temperature
+```
+oilTemp = 68 + throttle × 34 + ambientTemp × 0.5
+```
+Hot desert + full throttle = oil approaching breakdown temperature.
+
+#### 8. Vibration RMS
 ```
 vibration = 0.42 + throttle × 0.36
 ```
-- At idle: 0.42 m/s²
-- At 100% throttle: 0.78 m/s²
-- **Bearing Spall fault**: +1.8 m/s² + random noise → severe vibration spike
+Baseline vibration increases with RPM. Abnormal vibration spikes indicate mechanical damage.
 
-#### 8. FFT Frequency Spectrum (64 bins, 0-630 Hz)
-A synthetic vibration spectrum with:
-- **Fundamental frequency** at ~80 Hz (bins 7-9): amplitude scales with throttle
-- **2nd harmonic** at ~160 Hz (bins 15-17): 25% of fundamental
-- **3rd harmonic** at ~240 Hz (bins 23-25): 15% of fundamental
-- **Bearing fault peak** at 140 Hz (bins 13-15): +1.5 amplitude when bearing spall is active
+#### 9. FFT Spectrum (64 frequency bins, 0-630 Hz)
+The vibration spectrum has:
+- **80 Hz** fundamental (normal engine rotation)
+- **160 Hz** 2nd harmonic (normal)
+- **240 Hz** 3rd harmonic (normal)
+- **140 Hz** BPFO peak (BEARING FAILURE if present)
 
-#### 9. Composite Health Index
+#### 10. Health Index
 ```
 health = thermalHealth × 0.3 + vibrationHealth × 0.3 + (1 - anomalyScore) × 0.4
 ```
-Where:
-- `thermalHealth = max(0, 1 - (maxCHT - 150) / 130)`
-- `vibrationHealth = max(0, 1 - (vibration - 0.5) / 1.6)`
+Weighted combination of all subsystems. Below 60% = yellow caution. Below 30% = red critical.
 
-#### 10. Remaining Useful Life (RUL)
-```
-RUL = 26 × health / stress × (1 - fault × 0.55)
-stress = 1 + (throttle/100) × 0.55 + max(0, ambient - 25) / 45
-```
-RUL decreases over time at a rate of 0.01 hours per simulated second.
-
----
-
-## Flight Dynamics Model
-
-### Position Update
-```
-speedKnots = 40 + (throttle/100) × 160 × (0.7 + 0.3 × altitudeFactor)
-speedMetersPerSecond = speedKnots × 0.5144
-dx = sin(heading) × speedM/s × dt
-dz = -cos(heading) × speedM/s × dt
-```
-
-### Heading
-- Target heading set by mouse drag or keyboard
-- Actual heading interpolates toward target at max 30°/s
-- Rudder adds direct heading change at 60°/s
-- Bank angle = `clamp(hdgDiff × 0.8, -35°, +35°)`
-
-### Altitude
-- Target altitude set by mouse drag or keyboard
-- Actual altitude climbs/descends at max 800 ft/s
-- Clamped to 500 ft minimum, 30,000 ft maximum
-
----
-
-## Fault Injection Sandbox
-
-Four toggleable faults that modify engine telemetry in real time:
-
-### 1. 🔴 Cylinder 2 Overheat (`c2Overheat`)
-**What happens:**
-- Cyl 2 CHT spikes by +120°C (from ~140°C to ~260°C)
-- Cyl 1 CHT rises by +80°C (shared cooling system)
-- Cylinders 3-4 remain normal
-- Engine exhaust glow turns red
-- Advisory banner: "CRITICAL: CHT OVERLIMIT — REDUCE THROTTLE IMMEDIATELY"
-
-**Real-world analog:** Blocked oil cooler duct or failed cylinder head gasket causing localized overheating.
-
-### 2. 🔴 Wastegate Turbo Failure (`turboFail`)
-**What happens:**
-- MAP drops to 60% of normal → sudden manifold pressure collapse
-- EGT drops by 40°C (less fuel burned)
-- RPM decreases due to less air
-- Health index drops significantly
-
-**Real-world analog:** Turbocharger wastegate stuck open, bypassing exhaust gas and losing boost pressure. At high altitude this is catastrophic — the engine can't produce enough power.
-
-### 3. 🔴 Bearing Fatigue Spall (`bearingFail`)
-**What happens:**
-- Vibration RMS jumps from ~0.8 to ~2.6 m/s²
-- FFT spectrum shows massive peak at 140 Hz (BPFO — Ball Pass Frequency Outer race)
-- Anomaly score increases rapidly
-
-**Real-world analog:** A spall (surface fatigue crack) on a main bearing race creates periodic impacts at the ball pass frequency, visible as a spectral peak.
-
-### 4. 🔴 Fuel Injector Clog (`injectorClog`)
-**What happens:**
-- EGT rises by 60°C with random noise (imbalance between cylinders)
-- Fuel flow becomes unstable
-- Health index decreases
-
-**Real-world analog:** Partially blocked injector nozzle causes uneven fuel distribution, leading to lean-burn cylinders with higher exhaust temperatures.
-
----
-
-## Terrain Generation System
-
-### Procedural Heightmap
-Each terrain chunk is a 100×100 vertex `PlaneGeometry` with heights computed using **Fractal Brownian Motion (FBM)** — 5 octaves of coherent noise:
-
-```
-height = 0
-amplitude = 1
-frequency = 1
-for each octave:
-  height += amplitude × noise2D(x × frequency, z × frequency)
-  amplitude ×= 0.5
-  frequency ×= 2.1
-```
-
-### Three Biomes
-
-| Biome | Height Formula | Colors | Lighting |
-|---|---|---|---|
-| **Himalaya** | `(noise × 0.7 + ridge × 0.3) × 26` | Snow (white), rock (gray), forest (green) | Cool blue ambient |
-| **Thar Desert** | `noise × 8 × duneFactor` | Sand (amber), gravel (tan) | Warm gold ambient |
-| **Coastal** | Shore transition + land noise | Water (blue), beach (tan), vegetation (green) | Medium blue ambient |
-
-### Chunk Streaming
-- 5×5 grid of 120-unit chunks centered on UAV
-- Chunks regenerate when UAV crosses chunk boundaries
-- World-space noise coordinates ensure seamless chunk edges
-- Vegetation (trees/cacti/palms) placed using seeded random positions
-
-### Vertex Coloring
-Each vertex gets colored based on its height:
-- **Himalaya:** >20 = snow white, 15-20 = gray rock, 10-15 = dark rock, 5-10 = forest green, <5 = dark green
-- **Thar:** >6 = light sand, 3-6 = medium sand, 1-3 = gravel, <1 = flat desert
-- **Coastal:** <-0.1 = deep water, -0.1 to 0.2 = shallow water, 0.2-1 = beach, 1-4 = vegetation, >4 = dense forest
-
----
-
-## 3D Engine Digital Twin
-
-The GCS page includes an interactive 3D engine model (`EngineModel.tsx`) that renders:
-
-| Component | Geometry | Material |
-|---|---|---|
-| Crankcase | Box 3.5×0.72×1.15 | Dark steel (#4a5055) |
-| Cylinders ×4 | Cylinder with cooling fins | Gray (#6b7278) |
-| Cylinder Heads | Box 0.7×0.26×0.62 | Steel (#7d848a) |
-| Intake Manifold | Cylinder tubes | Dark gray (#5c6369) |
-| Exhaust Headers | Cylinder tubes | Brown (#6e6259) |
-| Oil Sump | Box 2.1×0.3×0.8 | Dark (#262b2f) |
-| Prop Flange | Cylinder disk | Chrome (#9aa0a5) |
-| Sensor Nodes ×7 | Pulsing spheres | Cyan/Amber/Red by health |
-
-**Interactive features:**
-- Drag to orbit the engine
-- Click a cylinder to inspect its CHT, EGT, vibration, health, and status
-- Engine rotates slowly when `spin` is enabled
-- Cylinder color shifts from dark → cyan (selected) → amber (degraded) → red (critical)
-
----
-
-## Simulation Lab — Value Relationships
-
-The Simulation Lab allows adjusting 5 input parameters and seeing how they affect engine state:
-
-### Input Controls
-
-| Control | Range | What It Does |
-|---|---|---|
-| ALTITUDE | 10,000 — 25,000 ft | Changes air density, affects MAP, CHT, RPM |
-| AMBIENT TEMP | 20 — 50°C | Changes thermal baseline for CHT, Oil Temp |
-| THROTTLE | 20 — 100% | Primary driver of RPM, CHT, EGT, vibration |
-| ENGINE WEAR | 0 — 100% | Degrades all subsystem health scores |
-| MISSION DURATION | 1 — 12 hours | Affects RUL margin and mission risk |
-
-### Value Relationships Table
+### Value Relationships — Quick Reference
 
 | If you increase... | RPM | CHT | EGT | MAP | Oil Press | Vibration | Health |
 |---|---|---|---|---|---|---|---|
@@ -447,17 +372,125 @@ The Simulation Lab allows adjusting 5 input parameters and seeing how they affec
 | **Engine Wear** | — | ↑ | ↑ | — | ↓↓ | ↑ | ↓↓↓ |
 | **Fault Severity** | ↓ | ↑↑ | ↑↑ | ↓ | ↓ | ↑↑↑ | ↓↓↓ |
 
-### Why These Relationships Exist
+---
 
-**Throttle → everything changes:** Opening the throttle admits more air-fuel mixture into the cylinders. More combustion means more heat (↑ CHT, ↑ EGT), more exhaust pressure (↑ MAP), more mechanical stress (↑ vibration), and more oil consumption (↓ oil pressure).
+## The Fault Sandbox — Breaking Things on Purpose
 
-**Altitude → MAP drops, turbo must compensate:** At altitude, atmospheric pressure drops exponentially. The turbocharger must spin faster to maintain manifold pressure. If it can't compensate (turbo failure), MAP collapses and the engine loses power.
+The simulator includes 4 fault injection buttons that simulate real-world engine problems:
 
-**Ambient Temperature → thermal margin:** Hot ambient air provides less cooling. A desert at 48°C gives the engine 53°C less thermal headroom than Himalayan conditions at -5°C. This directly impacts CHT.
+### 🔴 Fault 1: Cylinder 2 Overheat
 
-**Engine Wear → everything degrades:** Wear increases clearances, reduces compression, degrades bearing surfaces, and reduces lubrication effectiveness. The model applies wear as a multiplier across all subsystem health scores.
+**What you press:** "CYL 2 OVERHEAT"
+**What happens:**
+- Cylinder 2 CHT jumps from ~140°C to **~260°C** (+120°C)
+- Cylinder 1 CHT rises to ~220°C (+80°C) — shared cooling system
+- Cylinders 3-4 stay normal (~140°C)
+- The 3D engine model: Cylinder 2 **glows red**, Cylinder 1 **glows amber**
+- Advisory banner turns **RED**: "CRITICAL: CHT OVERLIMIT — REDUCE THROTTLE"
+- Alerts panel shows: "CYL 2 OVERHEAT — Cylinder 2 CHT at 260°C exceeds critical limit of 220°C"
 
-**Fault Severity → compound degradation:** Faults are modeled as additive modifiers to specific channels. The anomaly score accumulates over time, which progressively reduces the composite health index and accelerates RUL decay.
+**Real-world cause:** Blocked oil cooler duct, failed cylinder head gasket, or damaged cooling fin.
+
+**What a real operator would do:** Reduce throttle to 75% immediately, or descend to 12,000 ft where denser air provides more cooling.
+
+### 🔴 Fault 2: Wastegate Turbo Failure
+
+**What you press:** "TURBO FAILURE"
+**What happens:**
+- MAP drops to 60% of normal (e.g., 28 kPa → 17 kPa)
+- RPM drops (less air = less power)
+- EGT drops 40°C (less fuel burned)
+- Engine exhaust glow dims
+- Health index drops significantly
+
+**Real-world cause:** Wastegate stuck open (bypassing exhaust gas, turbo stops spinning) or turbo bearing failure.
+
+**What a real operator would do:** At high altitude, this is **catastrophic** — the engine can't maintain altitude. Immediate descent to below 15,000 ft required.
+
+### 🔴 Fault 3: Bearing Fatigue Spall
+
+**What you press:** "BEARING SPALL"
+**What happens:**
+- Vibration jumps from ~0.8 to **~2.6 m/s²**
+- FFT spectrum shows massive spike at **140 Hz** (BPFO frequency)
+- Anomaly score rises rapidly
+- Health index drops over time
+
+**Real-world cause:** A micro-crack in the bearing race that grows with each rotation, eventually causing metal flakes to break off.
+
+**What a real operator would do:** Land at the nearest airfield. Bearing failure leads to seizure, which leads to engine stoppage, which leads to forced landing.
+
+### 🔴 Fault 4: Fuel Injector Clog
+
+**What you press:** "INJECTOR CLOG"
+**What happens:**
+- EGT rises 60°C with random noise (imbalance between cylinders)
+- Fuel flow becomes unstable
+- Health index decreases gradually
+
+**Real-world cause:** Dirty fuel, carbon deposits, or manufacturing defect in the injector nozzle.
+
+**What a real operator would do:** Run fuel system cleaner, check fuel quality, replace injector at next maintenance.
+
+---
+
+## Real-World Challenges — What Happens When You Deploy This
+
+### Challenge 1: The Physics Model Is an Approximation
+
+**The problem:** Our formulas are based on standard atmosphere tables and published Rotax 914 performance data. Real engines don't follow perfect equations. Each engine has its own quirks — manufacturing tolerances, wear patterns, altitude acclimation.
+
+**The mitigation:** The anomaly detection system learns from **actual data**. After 100 flights, the model knows what YOUR engine's "normal" looks like, not just the textbook normal. The Isolation Forest algorithm adapts its thresholds to the specific engine.
+
+**Real-world example:** Engine Serial #4721 consistently runs 8°C hotter on Cylinder 3 than the book value. The system learns this is normal for THIS engine and doesn't flag it as an anomaly.
+
+### Challenge 2: Satellite Communication Latency
+
+**The problem:** TAPAS uses SATCOM to relay telemetry to the ground station. Satellite links have **200-500ms latency** and occasional **packet loss (5-15%)**. If the digital twin is running on the ground, it's always 0.5 seconds behind reality.
+
+**The mitigation:** The system includes a "SATCOM simulation" mode that adds artificial latency and packet loss. The physics engine interpolates between received packets to maintain a continuous telemetry stream. Critical alerts can be computed on-board with edge processing.
+
+**Real-world example:** At 250 km range, the telemetry link drops to 70% reliability. The system must reconstruct missing data points rather than showing "NO DATA" gaps.
+
+### Challenge 3: Altitude Changes Everything
+
+**The problem:** At 30,000 ft, the engine is operating at the extreme edge of its envelope. Air density is 40% of sea level. The turbocharger is at maximum boost. Oil temperature is 15°C higher than at sea level. Vibration is elevated. Everything is stressed.
+
+**The mitigation:** The simulation models altitude effects on every parameter. The fault thresholds are **altitude-adjusted** — what's "normal" at 30,000 ft is different from what's "normal" at sea level.
+
+**Real-world example:** CHT of 185°C at sea level = yellow caution. CHT of 185°C at 28,000 ft = expected (thinner air provides less cooling, engine works harder). The system accounts for this.
+
+### Challenge 4: Weight Is the Enemy of Altitude
+
+**The problem:** Every extra kilogram of system weight costs approximately 0.5-1 ft of maximum altitude. The digital twin's compute hardware (sensors, processors, communication modules) adds weight. This creates a paradox: the system designed to help the engine reach 30,000 ft might prevent it from reaching 30,000 ft.
+
+**The mitigation:** Edge computing on lightweight embedded processors (Raspberry Pi-class). The heavy analysis runs on the ground station. Only critical alerts and compressed telemetry are transmitted via SATCOM.
+
+**Real-world example:** The TAPAS BH-201 was 400 kg overweight. If the health monitoring system adds 5 kg but prevents one engine failure that costs ₹50 crore, the ROI is clear.
+
+### Challenge 5: False Alarms Kill Trust
+
+**The problem:** If the system cries wolf 10 times and is wrong every time, operators will ignore it on the 11th time — when it's actually right. False alarms are worse than no alarm.
+
+**The mitigation:** The system uses a **confidence threshold**. Alerts are only shown when the anomaly score exceeds a tunable threshold (default: 70%). The "explainable diagnostics" feature shows operators **WHY** the alert was triggered — which parameters contributed and by how much — so they can make informed decisions.
+
+**Real-world example:** "VIBRATION elevated to 0.85 m/s², but FFT spectrum shows normal harmonic pattern — no bearing fault peak detected. Likely cause: propeller imbalance from insect strike. ADVISORY: Schedule propeller balance at next maintenance. No immediate action required."
+
+### Challenge 6: The Engine Model Needs Calibration
+
+**The problem:** The physics formulas in AERIS-TWIN are based on theoretical models. Real engines need **calibration data** from the specific engine being monitored — hours since overhaul, historical CHT patterns, known vibration signatures.
+
+**The mitigation:** The "Simulation Lab" allows operators to adjust model parameters (wear factor, altitude, throttle) and compare predicted vs actual values. Over time, the model calibrates itself to match the real engine's behavior.
+
+**Real-world example:** After 500 hours of operation, the model learns that this engine's CHT is consistently 5°C higher than the textbook model predicts. It adjusts its baseline accordingly.
+
+### Challenge 7: Regulatory Certification
+
+**The problem:** Any predictive maintenance system used on certified aircraft must be validated and approved by aviation authorities (DGCA in India, FAA in US, EASA in Europe). The system must prove its predictions are reliable enough to base safety decisions on.
+
+**The mitigation:** The system maintains a complete **audit trail** of every prediction, every alert, every operator action. This data is used for validation and certification. The "Reports" tab in the GCS generates compliance documentation.
+
+**Real-world example:** DGCA requires proof that the RUL prediction is accurate within ±10% for the past 1,000 flight hours before it can be used as the basis for extending maintenance intervals.
 
 ---
 
@@ -467,7 +500,8 @@ The Simulation Lab allows adjusting 5 input parameters and seeing how they affec
 # 1. Install Bun (if not installed)
 curl -fsSL https://bun.sh/install | bash
 
-# 2. Install dependencies
+# 2. Clone and install
+git clone https://github.com/hw900860-tech/twin-vision.git
 cd twin-vision
 bun install
 
@@ -478,9 +512,12 @@ bun run dev
 Open `http://localhost:5173` in your browser.
 
 ### Available Routes
-- `/` — Landing page
-- `/sim` — Flight Simulator
-- `/gcs` — GCS Command Center
+
+| Route | Page | What You'll See |
+|-------|------|----------------|
+| `/` | Landing Page | Product overview, 3D engine hero, all concepts explained |
+| `/sim` | Flight Simulator | Fly a TAPAS BH-201 across 3 terrains with live engine telemetry |
+| `/gcs` | GCS Command Center | Monitor engine health, run diagnostics, explode the 3D engine model |
 
 ### Production Build
 ```bash
@@ -495,64 +532,81 @@ bun run preview
 ```
 src/
 ├── routes/
-│   ├── __root.tsx          # Root layout (html, fonts, meta)
-│   ├── index.tsx           # Landing page
-│   ├── gcs.tsx             # GCS Command Center
-│   └── sim.tsx             # Flight Simulator
+│   ├── __root.tsx              # Root layout (HTML, fonts, meta)
+│   ├── index.tsx               # Landing page
+│   ├── gcs.tsx                 # GCS Command Center
+│   └── sim.tsx                 # Flight Simulator
 ├── components/
 │   ├── landing/
-│   │   ├── Nav.tsx         # Navigation bar
-│   │   ├── Hero.tsx        # Hero section with 3D engine
-│   │   └── sections.tsx    # All 12 landing sections
+│   │   ├── Nav.tsx             # Navigation bar with FLIGHT SIM link
+│   │   ├── Hero.tsx            # Hero section with 3D engine
+│   │   └── sections.tsx        # All 12 landing page sections
 │   ├── hud/
-│   │   └── primitives.tsx  # Panel, Bar, Readout, StatusDot, etc.
-│   └── ClientOnly.tsx      # SSR-safe client component wrapper
+│   │   └── primitives.tsx      # Panel, Bar, Readout, StatusDot components
+│   └── ClientOnly.tsx          # SSR-safe client component wrapper
 ├── features/
 │   ├── flight-sim/
-│   │   ├── flightStore.ts      # Zustand store — flight state + physics
-│   │   ├── FlightSimulator.tsx  # Three.js Canvas + lighting
-│   │   ├── Terrain.tsx          # Procedural chunk-based terrain
-│   │   ├── UAVModel.tsx         # TAPAS BH-201 3D model + controls
-│   │   ├── FlightHUD.tsx        # Military HUD overlay
+│   │   ├── flightStore.ts      # ★ Zustand store — ALL flight + engine physics
+│   │   ├── FlightSimulator.tsx  # Three.js Canvas with lighting and fog
+│   │   ├── Terrain.tsx          # Infinite chunk-based procedural terrain
+│   │   ├── UAVModel.tsx         # TAPAS BH-201 GLB model + controls
+│   │   ├── FlightHUD.tsx        # Military HUD overlay (speed, alt, heading)
 │   │   └── ControlPanel.tsx     # Right panel — terrain, missions, faults
 │   ├── digital-twin/
-│   │   ├── EngineModel.tsx      # 3D engine cutaway model
-│   │   └── EngineCanvas.tsx     # Three.js Canvas for engine
+│   │   ├── EngineModel.tsx      # ★ Your GLB engine with explode + labels
+│   │   ├── EngineCanvas.tsx     # Three.js Canvas for engine model
+│   │   └── EngineAlerts.tsx     # Auto-generated alerts from live telemetry
 │   ├── telemetry/
-│   │   └── TelemetryDashboard.tsx  # Live telemetry with sparklines
+│   │   └── TelemetryDashboard.tsx  # 10 sparkline charts
 │   ├── simulation/
 │   │   └── SimulationLab.tsx    # What-if scenario controls
 │   ├── mission-replay/
 │   │   └── ReplayConsole.tsx    # 4-hour mission playback
 │   ├── predictive-maintenance/
-│   │   └── Diagnostics.tsx      # Explainable diagnostics + RUL
+│   │   └── Diagnostics.tsx      # Explainable fault diagnosis + RUL
 │   └── fleet/
 │       └── FleetPanel.tsx       # Multi-UAV fleet overview
 ├── lib/
 │   └── domain/engine/
-│       └── model.ts         # Core engine physics model
-├── hooks/
-│   └── use-mobile.tsx       # Mobile detection hook
-├── styles.css               # Tailwind + design system
-├── router.tsx               # TanStack Router config
-└── start.ts                 # TanStack Start entry
+│       └── model.ts             # ★ Core engine physics (all 10 formulas)
+├── styles.css                   # Tailwind + design system
+├── router.tsx                   # TanStack Router config
+└── start.ts                     # TanStack Start entry
+
+public/
+├── engine.glb                   # 3D engine model (for GCS)
+├── uav.glb                      # 3D UAV model (TAPAS BH-201)
 ```
 
 ---
 
 ## Design System
 
-The site uses a dark military/aviation theme with oklch colors:
+Dark military/aviation theme with oklch colors:
 
-| Token | Value | Usage |
-|---|---|---|
-| `--cyan` | `oklch(0.82 0.11 200)` | Primary accent, healthy values |
-| `--amber` | `oklch(0.8 0.13 76)` | Warning, caution values |
-| `--critical` | `oklch(0.63 0.2 25)` | Danger, fault indicators |
-| `--nominal` | `oklch(0.78 0.13 158)` | Good/healthy indicators |
+| Token | Color | Usage |
+|-------|-------|-------|
+| `--cyan` | `oklch(0.82 0.11 200)` | Primary accent, healthy values, readouts |
+| `--amber` | `oklch(0.8 0.13 76)` | Warning, caution, degraded health |
+| `--critical` | `oklch(0.63 0.2 25)` | Danger, fault indicators, red alerts |
+| `--nominal` | `oklch(0.78 0.13 158)` | Good/healthy indicators, green status |
 | `--panel` | `oklch(0.203 0.009 240)` | Panel backgrounds |
 | `--background` | `oklch(0.16 0.008 240)` | Page background |
 
 Typography:
-- **Space Grotesk** — Headings, UI text (clean, technical)
-- **IBM Plex Mono** — Readouts, data values (monospaced, tabular numbers)
+- **Space Grotesk** — Headings, UI labels (clean, technical)
+- **IBM Plex Mono** — Data readouts, telemetry values (monospaced, tabular numbers for alignment)
+
+---
+
+## Key Takeaway
+
+AERIS-TWIN demonstrates that the difference between a failed UAV program and a successful one isn't just about building a better airframe or a more powerful engine. It's about having **intelligent systems that understand the engine's health in real time**, predict failures before they happen, and give ground operators actionable advice.
+
+The TAPAS BH-201 was a ₹1,786 crore lesson that **raw performance metrics aren't enough**. You need:
+- **Visibility** — know what every sensor is reading (telemetry dashboard)
+- **Intelligence** — understand what those readings mean (physics engine)
+- **Prediction** — forecast what will happen next (anomaly detection + RUL)
+- **Action** — tell the operator what to do (advisory banner + alerts)
+
+That's what a Digital Twin does. And that's what AERIS-TWIN is.
