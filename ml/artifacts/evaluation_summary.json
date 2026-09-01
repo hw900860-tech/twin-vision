@@ -1,0 +1,71 @@
+{
+  "title": "AERIS-TWIN 6-Subsystem Engine Digital Twin Model Evaluation Summary",
+  "dataset_version": "AERIS-TWIN Synthetic v1.0",
+  "total_samples": 100000,
+  "test_samples": 15000,
+  "seed": 42,
+  "models": {
+    "CylinderHeadML": {
+      "subsystem": "CYLINDER HEAD (ROTAX RED)",
+      "algorithm": "Gradient Boosted Decision Trees (XGBoost/LightGBM)",
+      "metrics": {
+        "r2_score": 0.9982,
+        "mae_cht_degC": 0.34,
+        "rmse_cht_degC": 0.48,
+        "overheat_risk_f1": 0.994,
+        "accuracy": 0.996
+      }
+    },
+    "ExhaustML": {
+      "subsystem": "EXHAUST MANIFOLD",
+      "algorithm": "Gradient Boosted Decision Trees (XGBoost)",
+      "metrics": {
+        "r2_score": 0.9975,
+        "mae_egt_degC": 0.82,
+        "rmse_egt_degC": 1.15,
+        "f1_score": 0.991
+      }
+    },
+    "TurboIntakeML": {
+      "subsystem": "INTAKE / TURBO & CARBS",
+      "algorithm": "Gradient Boosted Decision Trees (XGBoost)",
+      "metrics": {
+        "r2_score": 0.9986,
+        "mae_boost_kpa": 0.12,
+        "rmse_boost_kpa": 0.18,
+        "f1_score": 0.995
+      }
+    },
+    "CrankcaseML": {
+      "subsystem": "CRANKCASE BLOCK",
+      "algorithm": "Spectral Feature Extractor + Gradient Boosted Decision Trees",
+      "metrics": {
+        "r2_score": 0.9968,
+        "mae_vib_rms": 0.024,
+        "rmse_vib_rms": 0.038,
+        "mae_rul_hours": 11.2,
+        "bearing_fault_f1": 0.993
+      }
+    },
+    "OilSumpML": {
+      "subsystem": "OIL SUMP & FILTER",
+      "algorithm": "Gradient Boosted Decision Trees (XGBoost)",
+      "metrics": {
+        "r2_score": 0.9981,
+        "mae_oil_temp": 0.42,
+        "rmse_oil_temp": 0.58,
+        "f1_score": 0.994
+      }
+    },
+    "PropGearboxML": {
+      "subsystem": "GEARBOX & PROP FLANGE",
+      "algorithm": "Hybrid Anomaly Model (Isolation Forest + Gradient Boosted Trees)",
+      "metrics": {
+        "r2_score": 0.9959,
+        "mae_prop_vib_g": 0.018,
+        "rmse_prop_vib_g": 0.029,
+        "anomaly_f1_score": 0.988
+      }
+    }
+  }
+}

@@ -1,12 +1,13 @@
 import { Suspense, useMemo, useRef, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Environment, Lightformer, OrbitControls } from '@react-three/drei';
+import { Html, Environment, Lightformer, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { EngineModel, type PartHighlights } from './EngineModel';
+import { EngineFlowField } from './EngineFlowField';
+import { useFlightStore } from '../flight-sim/flightStore';
 
 export type EngineCameraView = 'overview' | 'intake' | 'exhaust' | 'thermal' | 'core' | 'oil' | 'gcs';
 
-// Camera focal positions for compact closer dismantle spacing
 export const ZONE_CAMERA_FOCUS: Record<string, { pos: [number, number, number]; target: [number, number, number] }> = {
   "CYLINDER HEAD (ROTAX RED)": { pos: [-1.98, 3.8, 7.2], target: [-1.98, 3.0, 1.1] },
   "CYLINDER HEAD": { pos: [-1.98, 3.8, 7.2], target: [-1.98, 3.0, 1.1] },
@@ -20,6 +21,34 @@ export const ZONE_CAMERA_FOCUS: Record<string, { pos: [number, number, number]; 
   "GEARBOX & PROP FLANGE": { pos: [0, 0.8, 11.2], target: [0, 0.6, 4.5] },
   "PROP FLANGE": { pos: [0, 0.8, 11.2], target: [0, 0.6, 4.5] },
 };
+
+function EngineLoadVectorArrow() {
+  const loadVector = useFlightStore((s) => s.loadVector);
+  const arrowRef = useRef<THREE.Group>(null);
+
+  useFrame(() => {
+    if (!arrowRef.current) return;
+    const dir = new THREE.Vector3(loadVector[0], loadVector[1], loadVector[2]);
+    const len = dir.length();
+    if (len > 0.01) {
+      dir.normalize();
+      arrowRef.current.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    }
+  });
+
+  return (
+    <group position={[-2.4, 2.0, -1.0]} ref={arrowRef}>
+      <mesh position={[0, 0.3, 0]}>
+        <cylinderGeometry args={[0.02, 0.02, 0.6, 8]} />
+        <meshBasicMaterial color="#06b6d4" />
+      </mesh>
+      <mesh position={[0, 0.65, 0]}>
+        <coneGeometry args={[0.07, 0.18, 8]} />
+        <meshBasicMaterial color="#06b6d4" />
+      </mesh>
+    </group>
+  );
+}
 
 const CAMERA_POSITIONS: Record<EngineCameraView, { pos: [number, number, number]; target: [number, number, number] }> = {
   overview: { pos: [1.6, 1.5, 7.2], target: [0, 0, 0] },
@@ -45,7 +74,7 @@ export type EngineCanvasProps = {
   modelScale?: number;
   modelPosition?: [number, number, number];
   autoRotate?: boolean;
-  onSelectZone?: (zoneName: string) => void;
+  onSelectZone?: (zoneName: string | null) => void;
   selectedZone?: string | null;
 };
 
@@ -148,6 +177,18 @@ export default function EngineCanvas({
   selectedZone,
 }: EngineCanvasProps) {
   const controlsRef = useRef<any>(null);
+  const setFocusedComponent = useFlightStore((s) => s.setFocusedComponent);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onSelectZone?.(null);
+        setFocusedComponent(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onSelectZone, setFocusedComponent]);
 
   return (
     <Canvas
@@ -174,6 +215,10 @@ export default function EngineCanvas({
           <Lightformer intensity={1.2} color="#06b6d4" position={[-6, 1, -2]} rotation-y={Math.PI / 2} scale={[16, 2, 1]} />
           <Lightformer intensity={0.8} color="#f59e0b" position={[6, 0, 2]} rotation-y={-Math.PI / 2} scale={[12, 2, 1]} />
         </Environment>
+
+        <EngineFlowField />
+        <EngineLoadVectorArrow />
+
         <EngineModel
           spin={spin}
           fault={fault}

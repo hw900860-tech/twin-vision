@@ -25,7 +25,7 @@ export function ControlPanel() {
   const s = useFlightStore();
 
   return (
-    <div className="pointer-events-auto absolute bottom-0 left-0 right-0 max-h-[52svh] overflow-y-auto border-t border-[var(--border)] bg-[var(--panel)]/95 backdrop-blur-md z-10 lg:top-0 lg:right-0 lg:left-auto lg:max-h-none lg:w-[300px] lg:border-t-0 lg:border-l">
+    <div className="pointer-events-auto w-full h-full overflow-y-auto bg-[var(--panel)]/95 backdrop-blur-md">
       {/* Terrain Selector */}
       <div className="border-b border-[var(--border)] p-3">
         <div className="label-xs mb-2 text-[var(--cyan)]">TERRAIN</div>

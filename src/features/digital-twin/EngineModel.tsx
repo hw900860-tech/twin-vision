@@ -2,6 +2,7 @@ import { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useGLTF, Html } from '@react-three/drei';
 import * as THREE from 'three';
+import { useFlightStore } from '../flight-sim/flightStore';
 
 const CYAN = '#06b6d4';
 const AMBER = '#f59e0b';
@@ -237,17 +238,27 @@ export function EngineModel({
   const { scene } = useGLTF('/engine.glb');
   const h = highlights ?? EMPTY_HIGHLIGHTS;
 
+  const vizMode = useFlightStore((s) => s.vizMode);
+  const componentStress = useFlightStore((s) => s.componentStress);
+  const faults = useFlightStore((s) => s.faults);
+  const engineDecision = useFlightStore((s) => s.engineDecision);
+  const setFocusedComponent = useFlightStore((s) => s.setFocusedComponent);
+
   const subAssemblies = useMemo(() => create6SeparateSubAssemblies(scene), [scene]);
 
   useEffect(() => () => {
-    subAssemblies.forEach(zm => { zm.geometry.dispose(); zm.material.dispose(); });
+    subAssemblies.forEach((zm) => {
+      zm.geometry.dispose();
+      zm.material.dispose();
+    });
   }, [subAssemblies]);
 
-  // Smooth 60 FPS animation loop — compact, elegant dismantle explosion without lines
+  // Smooth 60 FPS animation loop — dynamic pressure/thermal/vibration heatmaps & bearing vibration
   useFrame((_, delta) => {
     const target = exploded ? explodeAmount : 0;
     explodeP.current += (target - explodeP.current) * Math.min(1, delta * 6);
     const p = explodeP.current;
+    const t = Date.now() / 1000;
 
     if (group.current && spin) group.current.rotation.y += delta * 0.12;
 
@@ -257,33 +268,73 @@ export function EngineModel({
       const mesh = meshRefs.current.get(zm.zone.name);
       if (!mesh) return;
 
-      zm.material.wireframe = wireframe;
+      zm.material.wireframe = wireframe || vizMode === 'XRAY';
 
-      // Animate position closer together
+      // Position lerping for Exploded / Dismantle mode
       const dir = new THREE.Vector3(...zm.zone.dir);
       mesh.position.copy(dir).multiplyScalar(ease);
+
+      // Localized Bearing Spall Vibration Pulse
+      if (zm.zone.id === 'crankcase' && faults.bearingFail) {
+        const pulse = Math.sin(t * 30) * 0.025;
+        mesh.position.x += pulse;
+        mesh.position.y += pulse;
+      }
+
+      // Compute stress value for this component
+      let stress = 0.2;
+      let mlRisk = 0;
+      if (zm.zone.id === 'cylhead') {
+        stress = Math.max(...componentStress.cylinders);
+        mlRisk = engineDecision?.subsystems?.cylinderHead ? 1 - engineDecision.subsystems.cylinderHead.health / 100 : 0;
+      } else if (zm.zone.id === 'exhaust') {
+        stress = Math.max(...componentStress.exhaustRunners);
+        mlRisk = engineDecision?.subsystems?.exhaust ? 1 - engineDecision.subsystems.exhaust.health / 100 : 0;
+      } else if (zm.zone.id === 'turbo') {
+        stress = componentStress.turbo;
+        mlRisk = engineDecision?.subsystems?.turboIntake ? 1 - engineDecision.subsystems.turboIntake.health / 100 : 0;
+      } else if (zm.zone.id === 'crankcase') {
+        stress = componentStress.crankcase;
+        mlRisk = engineDecision?.subsystems?.crankcase ? 1 - engineDecision.subsystems.crankcase.health / 100 : 0;
+      } else if (zm.zone.id === 'oilsump') {
+        stress = componentStress.oilSystem;
+        mlRisk = engineDecision?.subsystems?.oilSump ? 1 - engineDecision.subsystems.oilSump.health / 100 : 0;
+      } else if (zm.zone.id === 'propflange') {
+        stress = componentStress.gearbox;
+        mlRisk = engineDecision?.subsystems?.propGearbox ? 1 - engineDecision.subsystems.propGearbox.health / 100 : 0;
+      }
 
       const isHovered = hoveredZone === zm.zone.name;
       const isSelected = selectedZone === zm.zone.name;
 
-      if (selectedZone) {
+      if (vizMode === 'XRAY') {
+        zm.material.opacity = isSelected || isHovered ? 0.85 : 0.22;
+        zm.material.emissive.set(isSelected || isHovered ? '#06b6d4' : '#38bdf8');
+        zm.material.emissiveIntensity = isSelected || isHovered ? 0.8 : 0.25;
+      } else if (vizMode === 'PRESSURE' || vizMode === 'THERMAL' || vizMode === 'VIBRATION' || vizMode === 'ML_RISK') {
+        const valueToMap = vizMode === 'ML_RISK' ? mlRisk : stress;
+        const heatColor = getStressColor(valueToMap);
+        zm.material.opacity = selectedZone ? (isSelected ? 1.0 : 0.25) : 1.0;
+        zm.material.emissive.copy(heatColor);
+        zm.material.emissiveIntensity = 0.35 + valueToMap * 0.55 + (isHovered ? 0.2 : 0);
+      } else {
+        // NORMAL mode — Dynamic stress highlight driven by Throttle, Rudder & Flight Physics
+        const heatColor = getStressColor(stress);
+        zm.material.opacity = selectedZone ? (isSelected ? 1.0 : 0.3) : 1.0;
         if (isSelected) {
-          zm.material.opacity = 1.0;
           zm.material.emissive.set('#06b6d4');
-          zm.material.emissiveIntensity = 0.18;
+          zm.material.emissiveIntensity = 0.5;
+        } else if (isHovered) {
+          zm.material.emissive.set('#06b6d4');
+          zm.material.emissiveIntensity = 0.35;
+        } else if (stress > 0.22) {
+          // Dynamically glow to visually highlight parts experiencing high load from Throttle & Rudder!
+          zm.material.emissive.copy(heatColor);
+          zm.material.emissiveIntensity = Math.min(0.95, (stress - 0.18) * 1.15);
         } else {
-          zm.material.opacity = 0.22;
           zm.material.emissive.set('#000000');
           zm.material.emissiveIntensity = 0;
         }
-      } else if (isHovered) {
-        zm.material.opacity = 1.0;
-        zm.material.emissive.set('#06b6d4');
-        zm.material.emissiveIntensity = 0.15;
-      } else {
-        zm.material.opacity = 1.0;
-        zm.material.emissive.set('#000000');
-        zm.material.emissiveIntensity = 0;
       }
     });
 
@@ -299,7 +350,9 @@ export function EngineModel({
         {subAssemblies.map((zm) => (
           <mesh
             key={zm.zone.name}
-            ref={(m) => { if (m) meshRefs.current.set(zm.zone.name, m); }}
+            ref={(m) => {
+              if (m) meshRefs.current.set(zm.zone.name, m);
+            }}
             geometry={zm.geometry}
             material={zm.material}
             castShadow
@@ -317,6 +370,7 @@ export function EngineModel({
             onClick={(e: ThreeEvent<MouseEvent>) => {
               e.stopPropagation();
               onSelectZone?.(zm.zone.name);
+              setFocusedComponent(zm.zone.name);
             }}
           />
         ))}
@@ -333,7 +387,10 @@ export function EngineModel({
               explodeP={explodeP}
               isHovered={hoveredZone === zone.name}
               isSelected={selectedZone === zone.name}
-              onSelect={() => onSelectZone?.(zone.name)}
+              onSelect={() => {
+                onSelectZone?.(zone.name);
+                setFocusedComponent(zone.name);
+              }}
               onHover={(isH) => setHoveredZone(isH ? zone.name : null)}
             />
           ))}
@@ -343,80 +400,54 @@ export function EngineModel({
   );
 }
 
+function getStressColor(stress: number): THREE.Color {
+  if (stress > 0.72) return new THREE.Color('#ef4444');
+  if (stress > 0.48) return new THREE.Color('#f97316');
+  if (stress > 0.28) return new THREE.Color('#eab308');
+  if (stress > 0.14) return new THREE.Color('#10b981');
+  return new THREE.Color('#06b6d4');
+}
+
 function ZoneLabel({
   zone,
   h,
   explodeP,
   isHovered,
-  isSelected,
-  onSelect,
-  onHover,
 }: {
   zone: typeof ZONES[number];
   h: PartHighlights;
   explodeP: React.MutableRefObject<number>;
   isHovered: boolean;
-  isSelected: boolean;
-  onSelect: () => void;
-  onHover: (hovered: boolean) => void;
+  isSelected?: boolean;
+  onSelect?: () => void;
+  onHover?: (hovered: boolean) => void;
 }) {
+  const componentStress = useFlightStore((s) => s.componentStress);
+  if (!isHovered) return null;
+
   const p = explodeP.current;
   const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
   const dir = new THREE.Vector3(...zone.dir);
   const baseCenter = new THREE.Vector3(...zone.center);
-
   const labelPos = baseCenter.clone().add(dir.clone().multiplyScalar(ease));
   labelPos.y += 0.20;
 
-  const glowColor = isHovered || isSelected ? CYAN : zone.glow;
+  let stress = 0.2;
+  if (zone.id === 'cylhead') stress = Math.max(...componentStress.cylinders);
+  else if (zone.id === 'exhaust') stress = Math.max(...componentStress.exhaustRunners);
+  else if (zone.id === 'turbo') stress = componentStress.turbo;
+  else if (zone.id === 'crankcase') stress = componentStress.crankcase;
+  else if (zone.id === 'oilsump') stress = componentStress.oilSystem;
+  else if (zone.id === 'propflange') stress = componentStress.gearbox;
+
+  const pct = Math.round(stress * 100);
+  const glowColor = pct > 85 ? '#ef4444' : pct > 70 ? '#f97316' : '#06b6d4';
 
   return (
-    <Html
-      position={[labelPos.x, labelPos.y, labelPos.z]}
-      center
-      distanceFactor={9}
-      style={{ pointerEvents: 'auto' }}
-    >
-      <div
-        onClick={(e) => {
-          e.stopPropagation();
-          onSelect();
-        }}
-        onMouseEnter={() => {
-          onHover(true);
-          document.body.style.cursor = 'pointer';
-        }}
-        onMouseLeave={() => {
-          onHover(false);
-          document.body.style.cursor = 'auto';
-        }}
-        style={{
-          background: isHovered || isSelected ? 'rgba(11,18,24,0.96)' : 'rgba(7,9,11,0.90)',
-          border: `1px solid ${glowColor}`,
-          borderRadius: '2px',
-          padding: '5px 9px',
-          whiteSpace: 'nowrap',
-          boxShadow: isHovered || isSelected ? `0 0 24px ${CYAN}88` : `0 0 14px ${glowColor}33`,
-          minWidth: '105px',
-          transform: isHovered || isSelected ? 'scale(1.08)' : 'scale(1)',
-          transition: 'all 0.18s ease-out',
-          cursor: 'pointer',
-        }}
-      >
-        <div style={{ width: '100%', height: '1.5px', background: `linear-gradient(90deg, transparent, ${glowColor}, transparent)`, marginBottom: '3px' }} />
-        <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: '7.5px', letterSpacing: '0.16em', color: glowColor, fontWeight: 700 }}>
-          {zone.name}
-        </div>
-        <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: '10px', color: zone.valC(h), fontWeight: 700, marginTop: '1px' }}>
-          {zone.val(h)}
-        </div>
-        <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: '6px', color: '#85939c', marginTop: '2px', letterSpacing: '0.06em' }}>
-          {zone.sub}
-        </div>
-        <div style={{ marginTop: '3px', fontSize: '6px', fontFamily: 'IBM Plex Mono, monospace', color: CYAN, letterSpacing: '0.12em', textAlign: 'right' }}>
-          [CLICK TO STUDY]
-        </div>
-        <div style={{ width: '100%', height: '1.5px', background: `linear-gradient(90deg, transparent, ${glowColor}66, transparent)`, marginTop: '3px' }} />
+    <Html position={[labelPos.x, labelPos.y, labelPos.z]} center distanceFactor={9} style={{ pointerEvents: 'none' }}>
+      <div className="bg-[#05080c]/95 border border-cyan/70 px-2.5 py-1 rounded text-[9px] font-mono text-cyan shadow-xl backdrop-blur-md whitespace-nowrap flex items-center gap-2">
+        <span className="font-bold tracking-wider">{zone.name}</span>
+        <span className="font-bold" style={{ color: glowColor }}>{pct}% LOAD</span>
       </div>
     </Html>
   );

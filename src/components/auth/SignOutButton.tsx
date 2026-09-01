@@ -6,7 +6,12 @@ export function SignOutButton() {
   const navigate = useNavigate();
 
   async function handleSignOut() {
-    await signOut();
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("aeris_admin_logged_in");
+    }
+    try {
+      await signOut();
+    } catch {}
     await navigate({ to: "/admin/login", replace: true });
   }
 

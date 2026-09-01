@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { terrainHeightAt } from './terrainMath';
+import { runEngineDecisionEngine, type EngineDecisionResult, type SubsystemStatus } from '../digital-twin/engineMlService';
 
 export type Biome = 'himalaya' | 'thar' | 'coastal';
 export type MissionPreset = 'nominalRoutine' | 'highAltitudeFailure' | 'coastalRecovery';
@@ -19,6 +20,64 @@ export interface FaultFlags {
   turboFail: boolean;
   bearingFail: boolean;
   injectorClog: boolean;
+}
+
+export interface FaultSmoothState {
+  c2Overheat: number;
+  turboFail: number;
+  bearingFail: number;
+  injectorClog: number;
+}
+
+export interface TelemetryHistoryPoint {
+  time: number;
+  chtMax: number;
+  egt: number;
+  map: number;
+  oilTemp: number;
+  oilPressure: number;
+  vibrationRMS: number;
+  health: number;
+}
+
+export type VizMode = 'NORMAL' | 'PRESSURE' | 'THERMAL' | 'VIBRATION' | 'ML_RISK' | 'XRAY';
+
+export interface ComponentStressState {
+  cylinders: [number, number, number, number];
+  exhaustRunners: [number, number, number, number];
+  turbo: number;
+  crankcase: number;
+  oilSystem: number;
+  gearbox: number;
+  overallLoad: number;
+}
+
+export interface TelemetryLogEntry {
+  timestamp: number;
+  altitude: number;
+  speed: number;
+  verticalSpeed: number;
+  pitch: number;
+  roll: number;
+  heading: number;
+  throttle: number;
+  engineLoad: number;
+  rpm: number;
+  map: number;
+  boost: number;
+  cht1: number;
+  cht2: number;
+  cht3: number;
+  cht4: number;
+  egt1: number;
+  egt2: number;
+  egt3: number;
+  egt4: number;
+  oilTemp: number;
+  oilPressure: number;
+  vibrationRMS: number;
+  health: number;
+  faultState: string;
 }
 
 export interface FlightState {
@@ -53,6 +112,7 @@ export interface FlightState {
   missionElapsed: number;
   waypoints: { x: number; z: number; label: string }[];
   faults: FaultFlags;
+  faultSmooth: FaultSmoothState;
   emergencyState: EmergencyState;
   emergencyTimer: number;
   crashCoordinates: CrashCoordinates | null;
@@ -60,6 +120,26 @@ export interface FlightState {
   isDragging: boolean;
   dragStartX: number;
   dragStartY: number;
+
+  // Real-Time Physics & 3D Load Field State
+  airDensity: number;
+  dynamicPressure: number;
+  loadVector: [number, number, number];
+  componentStress: ComponentStressState;
+  vizMode: VizMode;
+  focusedComponent: string | null;
+
+  // Telemetry Logger & Replay
+  isRecording: boolean;
+  recordedLogs: TelemetryLogEntry[];
+  isReplaying: boolean;
+  replayIndex: number;
+
+  // Connected 6 ML Engine Digital Twin State
+  engineDecision: EngineDecisionResult | null;
+  selectedSubsystem: string | null;
+  historyBuffer: TelemetryHistoryPoint[];
+
   setThrottle: (v: number) => void;
   setRudder: (v: number) => void;
   setTargetHeading: (h: number) => void;
@@ -72,6 +152,14 @@ export interface FlightState {
   toggleFault: (fault: keyof FaultFlags) => void;
   resetFaults: () => void;
   resetSimulation: () => void;
+  setSelectedSubsystem: (name: string | null) => void;
+  setVizMode: (mode: VizMode) => void;
+  setFocusedComponent: (comp: string | null) => void;
+  toggleRecording: () => void;
+  clearLogs: () => void;
+  exportCSV: () => void;
+  startReplay: () => void;
+  stopReplay: () => void;
   tick: (dt: number) => void;
 }
 
@@ -81,78 +169,201 @@ const BIOME_CONFIG: Record<Biome, { ambientTemp: number; baseRPM: number }> = {
   coastal: { ambientTemp: 28, baseRPM: 2450 },
 };
 
-/** Safe modulo that always returns [0, modulus) */
 function mod(n: number, m: number): number {
   return ((n % m) + m) % m;
 }
 
-/** Wrap angle difference to [-180, 180] */
 function angleDiff(a: number, b: number): number {
   return mod(a - b + 180, 360) - 180;
 }
 
-/** Deterministic noise — same input always yields the same output */
 function noise(t: number, seed: number): number {
   const a = Math.sin(t * 1.7 + seed * 12.9898) * 43758.5453;
   return (a - Math.floor(a)) * 2 - 1;
 }
 
-function updateEngineTelemetry(state: FlightState, _dt: number): Partial<FlightState> {
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * Math.min(1, Math.max(0, t));
+}
+
+function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightState> {
   const altitudeFactor = Math.exp(-state.altitude / 27000);
   const thr = state.throttle / 100;
   const biomeConfig = BIOME_CONFIG[state.biome];
   const ambientTemp = state.ambientTemp;
   const t = Date.now() / 1000;
 
-  // RPM — scales with throttle and altitude density
+  // Smooth fault intensity lerping (thermal and mechanical inertia)
+  const fs: FaultSmoothState = {
+    c2Overheat: lerp(state.faultSmooth.c2Overheat, state.faults.c2Overheat ? 1 : 0, dt * 2.2),
+    turboFail: lerp(state.faultSmooth.turboFail, state.faults.turboFail ? 1 : 0, dt * 3.0),
+    bearingFail: lerp(state.faultSmooth.bearingFail, state.faults.bearingFail ? 1 : 0, dt * 2.5),
+    injectorClog: lerp(state.faultSmooth.injectorClog, state.faults.injectorClog ? 1 : 0, dt * 2.0),
+  };
+
+  // Atmospheric density & Dynamic pressure q = 0.5 * rho * V^2 (in kPa)
+  const airDensity = 1.225 * altitudeFactor;
+  const speedMs = state.speed * 0.5144;
+  const dynamicPressure = (0.5 * airDensity * (speedMs ** 2)) / 1000.0;
+
+  // Directional load vector (Lx, Ly, Lz) from pitch, bank, and speed
+  const pitchRad = state.pitchAngle || 0;
+  const bankRad = (state.bankAngle || 0) * (Math.PI / 180);
+  const Lx = Math.sin(bankRad) * (speedMs / 50.0);
+  const Ly = Math.sin(pitchRad) + 1.0;
+  const Lz = Math.cos(pitchRad) * (speedMs / 100.0);
+
+  // RPM — scales with throttle and atmospheric altitude density
   let rpm = biomeConfig.baseRPM + thr * 1600 * (0.86 + 0.14 * altitudeFactor);
   rpm += noise(t, 3) * 15;
 
   // MAP — barometric pressure equation, drops with altitude, turbo compensates
   let map = 18 + thr * 14 * altitudeFactor;
-  if (state.faults.turboFail) map *= 0.6;
+  map *= (1 - fs.turboFail * 0.42);
 
-  // CHT per cylinder — rises with throttle, ambient temp, wear; drops with altitude air cooling
+  // CHT per cylinder — rises with throttle, ambient temp; drops with air density cooling at altitude
   const chtBase = 96 + thr * 96 + ambientTemp * 0.72 - altitudeFactor * 12;
   const cht = [
-    chtBase + (state.faults.c2Overheat ? 80 : 0) + noise(t, 1) * 3,
-    chtBase + (state.faults.c2Overheat ? 120 : 0) + noise(t, 2) * 3,
+    chtBase + (fs.c2Overheat * 75) + noise(t, 1) * 3,
+    chtBase + (fs.c2Overheat * 122) + noise(t, 2) * 3,
     chtBase + noise(t, 3) * 3,
     chtBase + noise(t, 4) * 3,
   ];
 
   // EGT — rises with throttle and ambient, imbalanced by injector clog
   let egt = 528 + thr * 236 + ambientTemp * 0.5;
-  if (state.faults.injectorClog) egt += 60 + noise(t, 5) * 20;
-  if (state.faults.turboFail) egt -= 40;
+  egt += fs.injectorClog * 68 + noise(t, 5) * 20;
+  egt -= fs.turboFail * 40;
 
   // Oil — temperature rises with throttle and ambient, pressure inversely proportional
-  const oilTemp = 68 + thr * 34 + ambientTemp * 0.5;
-  const oilPressure = Math.max(1.6, Math.min(6.2, 5.6 - (oilTemp - 90) * 0.012));
+  const oilTemp = 68 + thr * 34 + ambientTemp * 0.5 + fs.c2Overheat * 18;
+  const oilPressure = Math.max(1.6, Math.min(6.2, 5.6 - (oilTemp - 90) * 0.012 - fs.c2Overheat * 0.4));
 
-  // Vibration — rises with throttle, spikes with bearing fault
+  // Vibration — rises with throttle, spikes smoothly with bearing fault
   let vib = 0.42 + thr * 0.36;
-  if (state.faults.bearingFail) vib += 1.8 + Math.abs(noise(t, 6)) * 0.5;
+  vib += fs.bearingFail * 1.88 + Math.abs(noise(t, 6)) * 0.5;
+
+  // Component Stress Indices (0.0 .. 1.0)
+  const normCht = cht.map((c) => Math.max(0, Math.min(1, (c - 110) / 110))) as [number, number, number, number];
+  const exh3Boost = fs.injectorClog * 0.65;
+  const normEgtBase = Math.max(0, Math.min(1, (egt - 550) / 280));
+  const exhaustRunners: [number, number, number, number] = [
+    Math.min(1, normEgtBase + 0.05),
+    Math.min(1, normEgtBase),
+    Math.min(1, normEgtBase + exh3Boost),
+    Math.min(1, normEgtBase + 0.02),
+  ];
+  const rudderLoad = Math.abs(state.rudder) * 0.55;
+  const turboStress = Math.max(0, Math.min(1, thr * 0.6 + (1 - altitudeFactor) * 0.35 + fs.turboFail * 0.85));
+  const crankcaseStress = Math.max(0, Math.min(1, (vib - 0.4) / 1.8 + rudderLoad * 0.45 + fs.bearingFail * 0.75));
+  const oilStress = Math.max(0, Math.min(1, Math.abs(oilPressure - 4.5) / 2.5 + (oilTemp - 80) / 50));
+  const gearboxStress = Math.max(0, Math.min(1, thr * 0.55 + (speedMs / 100) * 0.3 + rudderLoad * 0.85 + fs.bearingFail * 0.3));
+  const overallLoad = Math.max(0, Math.min(1, thr * 0.4 + ((Math.max(...cht) - 130) / 120) * 0.4 + vib * 0.2 + rudderLoad * 0.2));
+
+  const componentStress: ComponentStressState = {
+    cylinders: normCht,
+    exhaustRunners,
+    turbo: turboStress,
+    crankcase: crankcaseStress,
+    oilSystem: oilStress,
+    gearbox: gearboxStress,
+    overallLoad,
+  };
 
   // FFT spectrum (64 frequency bins, 0-630 Hz)
   const fftSpectrum = Array.from({ length: 64 }, (_, i) => {
     let val = 0.1 + Math.exp(-i / 12) * 0.3;
-    if (i >= 7 && i <= 9) val += 0.4 * thr;   // fundamental ~80 Hz
-    if (i >= 15 && i <= 17) val += 0.25 * thr; // 2nd harmonic ~160 Hz
-    if (i >= 23 && i <= 25) val += 0.15 * thr; // 3rd harmonic ~240 Hz
-    if (state.faults.bearingFail && i >= 13 && i <= 15) val += 1.5; // BPFO 140 Hz
+    if (i >= 7 && i <= 9) val += 0.4 * thr;
+    if (i >= 15 && i <= 17) val += 0.25 * thr;
+    if (i >= 23 && i <= 25) val += 0.15 * thr;
+    if (i >= 13 && i <= 15) val += fs.bearingFail * 1.6;
     return Math.max(0, Math.min(2, val + noise(t, i + 7) * 0.05));
   });
 
-  // Composite health
-  const thermalHealth = Math.max(0, 1 - (Math.max(...cht) - 150) / 130);
-  const vibHealth = Math.max(0, 1 - (vib - 0.5) / 1.6);
-  const health = thermalHealth * 0.3 + vibHealth * 0.3 + (1 - state.anomalyScore) * 0.4;
+  const activeFaultFlags: FaultFlags = {
+    c2Overheat: fs.c2Overheat > 0.3,
+    turboFail: fs.turboFail > 0.3,
+    bearingFail: fs.bearingFail > 0.3,
+    injectorClog: fs.injectorClog > 0.3,
+  };
+
+  const engineDecision = runEngineDecisionEngine({
+    altitude: state.altitude,
+    ambientTemp: state.ambientTemp,
+    throttle: state.throttle,
+    rpm,
+    map,
+    cht,
+    egt,
+    oilPressure,
+    oilTemp,
+    vibrationRMS: vib,
+    fftSpectrum,
+    healthIndex: state.healthIndex,
+    rul: state.rul,
+    anomalyScore: state.anomalyScore,
+    faults: activeFaultFlags,
+  });
+
+  const healthIndex = engineDecision.overallHealth / 100;
+
+  const newPoint: TelemetryHistoryPoint = {
+    time: t,
+    chtMax: Math.max(...cht),
+    egt,
+    map,
+    oilTemp,
+    oilPressure,
+    vibrationRMS: vib,
+    health: healthIndex * 100,
+  };
+
+  const prevBuffer = state.historyBuffer || [];
+  const updatedBuffer = [...prevBuffer.slice(-39), newPoint];
+
+  // Logging telemetry if active
+  let updatedLogs = state.recordedLogs;
+  if (state.isRecording) {
+    const activeFaultsStr = Object.entries(activeFaultFlags).filter(([_, v]) => v).map(([k]) => k).join('|') || 'NOMINAL';
+    const logEntry: TelemetryLogEntry = {
+      timestamp: Number(t.toFixed(2)),
+      altitude: Number(state.altitude.toFixed(1)),
+      speed: Number(state.speed.toFixed(1)),
+      verticalSpeed: Number((state.pitchAngle * 1000).toFixed(1)),
+      pitch: Number((state.pitchAngle * 57.3).toFixed(2)),
+      roll: Number(state.bankAngle.toFixed(2)),
+      heading: Number(state.heading.toFixed(1)),
+      throttle: Number(state.throttle.toFixed(1)),
+      engineLoad: Number((overallLoad * 100).toFixed(1)),
+      rpm: Number(rpm.toFixed(0)),
+      map: Number(map.toFixed(1)),
+      boost: Number((map * 0.0338639).toFixed(2)),
+      cht1: Number(cht[0].toFixed(1)),
+      cht2: Number(cht[1].toFixed(1)),
+      cht3: Number(cht[2].toFixed(1)),
+      cht4: Number(cht[3].toFixed(1)),
+      egt1: Number(egt.toFixed(1)),
+      egt2: Number(egt.toFixed(1)),
+      egt3: Number((egt + (fs.injectorClog > 0.3 ? 68 : 0)).toFixed(1)),
+      egt4: Number(egt.toFixed(1)),
+      oilTemp: Number(oilTemp.toFixed(1)),
+      oilPressure: Number(oilPressure.toFixed(2)),
+      vibrationRMS: Number(vib.toFixed(3)),
+      health: Number((healthIndex * 100).toFixed(1)),
+      faultState: activeFaultsStr,
+    };
+    updatedLogs = [...state.recordedLogs, logEntry];
+  }
 
   return {
     rpm, map, cht, egt, oilPressure, oilTemp,
     vibrationRMS: vib, fftSpectrum,
-    healthIndex: Math.max(0, Math.min(1, health)),
+    airDensity, dynamicPressure, loadVector: [Lx, Ly, Lz], componentStress,
+    healthIndex,
+    faultSmooth: fs,
+    engineDecision,
+    historyBuffer: updatedBuffer,
+    recordedLogs: updatedLogs,
   };
 }
 
@@ -196,7 +407,15 @@ const MISSIONS: Record<MissionPreset, {
   },
 };
 
-export const useFlightStore = create<FlightState>((set) => ({
+const INITIAL_FAULTS: FaultFlags = { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false };
+const INITIAL_SMOOTH: FaultSmoothState = { c2Overheat: 0, turboFail: 0, bearingFail: 0, injectorClog: 0 };
+const DEFAULT_STRESS: ComponentStressState = {
+  cylinders: [0.2, 0.2, 0.2, 0.2],
+  exhaustRunners: [0.2, 0.2, 0.2, 0.2],
+  turbo: 0.2, crankcase: 0.2, oilSystem: 0.2, gearbox: 0.2, overallLoad: 0.2,
+};
+
+export const useFlightStore = create<FlightState>((set, get) => ({
   x: 0, z: 0, heading: 0, altitude: 6000, speed: 145,
   targetHeading: 0, targetAltitude: 6000, bankAngle: 0, pitchAngle: 0, cameraMode: 'chase',
   throttle: 65, rudder: 0,
@@ -207,9 +426,21 @@ export const useFlightStore = create<FlightState>((set) => ({
   healthIndex: 0.96, rul: 480, anomalyScore: 0.04,
   missionPreset: 'nominalRoutine', missionActive: false, missionProgress: 0, missionElapsed: 0,
   waypoints: MISSIONS.nominalRoutine.waypoints,
-  faults: { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false },
+  faults: INITIAL_FAULTS,
+  faultSmooth: INITIAL_SMOOTH,
   emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null,
   isDragging: false, dragStartX: 0, dragStartY: 0,
+  airDensity: 0.98, dynamicPressure: 1.42, loadVector: [0, 1.0, 0.2],
+  componentStress: DEFAULT_STRESS,
+  vizMode: 'NORMAL',
+  focusedComponent: null,
+  isRecording: false,
+  recordedLogs: [],
+  isReplaying: false,
+  replayIndex: 0,
+  engineDecision: null,
+  selectedSubsystem: 'CYLINDER HEAD (ROTAX RED)',
+  historyBuffer: [],
 
   setThrottle: (v) => set({ throttle: Math.max(0, Math.min(100, v)) }),
   setRudder: (v) => set({ rudder: Math.max(-1, Math.min(1, v)) }),
@@ -217,11 +448,33 @@ export const useFlightStore = create<FlightState>((set) => ({
   setTargetAltitude: (a) => set({ targetAltitude: Math.max(500, Math.min(30000, a)) }),
   setCameraMode: (mode) => set({ cameraMode: mode }),
   setBiome: (b) => set({ biome: b, ambientTemp: BIOME_CONFIG[b].ambientTemp }),
+  setSelectedSubsystem: (name) => set({ selectedSubsystem: name }),
+  setVizMode: (mode) => set({ vizMode: mode }),
+  setFocusedComponent: (comp) => set({ focusedComponent: comp }),
+  toggleRecording: () => set((s) => ({ isRecording: !s.isRecording })),
+  clearLogs: () => set({ recordedLogs: [] }),
+  exportCSV: () => {
+    const { recordedLogs } = get();
+    if (!recordedLogs || recordedLogs.length === 0) return;
+    const headers = "timestamp,altitude,speed,verticalSpeed,pitch,roll,heading,throttle,engineLoad,rpm,map,boost,cht1,cht2,cht3,cht4,egt1,egt2,egt3,egt4,oilTemp,oilPressure,vibrationRMS,health,faultState\n";
+    const rows = recordedLogs.map((l) =>
+      `${l.timestamp},${l.altitude.toFixed(1)},${l.speed.toFixed(1)},${l.verticalSpeed.toFixed(1)},${l.pitch.toFixed(2)},${l.roll.toFixed(2)},${l.heading.toFixed(1)},${l.throttle.toFixed(1)},${l.engineLoad.toFixed(1)},${l.rpm.toFixed(0)},${l.map.toFixed(1)},${l.boost.toFixed(2)},${l.cht1.toFixed(1)},${l.cht2.toFixed(1)},${l.cht3.toFixed(1)},${l.cht4.toFixed(1)},${l.egt1.toFixed(1)},${l.egt2.toFixed(1)},${l.egt3.toFixed(1)},${l.egt4.toFixed(1)},${l.oilTemp.toFixed(1)},${l.oilPressure.toFixed(2)},${l.vibrationRMS.toFixed(3)},${l.health.toFixed(1)},${l.faultState}`
+    ).join("\n");
+    const blob = new Blob([headers + rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AERIS_TWIN_FlightTelemetry_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  startReplay: () => set({ isReplaying: true, replayIndex: 0 }),
+  stopReplay: () => set({ isReplaying: false }),
   setMissionPreset: (p) => {
     const mission = MISSIONS[p];
     const scenarioFaults: FaultFlags = p === 'highAltitudeFailure'
       ? { c2Overheat: true, turboFail: true, bearingFail: false, injectorClog: false }
-      : { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false };
+      : INITIAL_FAULTS;
     set({
       x: 0, z: 0, heading: 0, targetHeading: 0,
       altitude: mission.altitude, targetAltitude: mission.altitude,
@@ -235,6 +488,7 @@ export const useFlightStore = create<FlightState>((set) => ({
       missionProgress: 0,
       missionElapsed: 0,
       faults: scenarioFaults,
+      faultSmooth: INITIAL_SMOOTH,
       emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null,
     });
   },
@@ -244,7 +498,8 @@ export const useFlightStore = create<FlightState>((set) => ({
     faults: { ...s.faults, [fault]: !s.faults[fault] },
   })),
   resetFaults: () => set({
-    faults: { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false },
+    faults: INITIAL_FAULTS,
+    faultSmooth: INITIAL_SMOOTH,
   }),
   resetSimulation: () => set({
     x: 0, z: 0, heading: 0, targetHeading: 0, altitude: 6000, targetAltitude: 6000,
@@ -252,7 +507,8 @@ export const useFlightStore = create<FlightState>((set) => ({
     missionPreset: 'nominalRoutine', biome: 'himalaya', ambientTemp: -5,
     missionActive: false, missionProgress: 0, missionElapsed: 0,
     waypoints: MISSIONS.nominalRoutine.waypoints,
-    faults: { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false },
+    faults: INITIAL_FAULTS,
+    faultSmooth: INITIAL_SMOOTH,
     emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null,
   }),
 
@@ -263,18 +519,14 @@ export const useFlightStore = create<FlightState>((set) => ({
     const hdgDiff = angleDiff(state.targetHeading, state.heading);
     const turn = Math.sign(hdgDiff) * Math.min(Math.abs(hdgDiff), turnRate * dt);
 
-    // Rudder influence + wrapping
     let hdg = mod(state.heading + turn + state.rudder * 60 * dt, 360);
-
     const bankAngle = Math.max(-35, Math.min(35, hdgDiff * 0.8));
 
-    // Altitude — smooth climb/descent
     const altDiff = state.targetAltitude - state.altitude;
     const climbRate = 800 * dt;
     let alt = state.altitude + Math.sign(altDiff) * Math.min(Math.abs(altDiff), climbRate);
     alt = Math.max(500, Math.min(30000, alt));
 
-    // Speed from throttle and altitude density
     const altitudeFactor = Math.exp(-alt / 27000);
     let speed = 40 + (state.throttle / 100) * 160 * (0.7 + 0.3 * altitudeFactor);
 
@@ -286,7 +538,6 @@ export const useFlightStore = create<FlightState>((set) => ({
     const failureProgress = highAltitudeFailure ? Math.max(0, Math.min(1, (missionElapsed - 5) / 8)) : 0;
     speed *= Math.max(0, 1 - stallProgress * 0.88 - coldProgress * 0.65);
 
-    // Position update
     const speedMs = speed * 0.5144;
     const headingRad = (hdg * Math.PI) / 180;
     const dx = Math.sin(headingRad) * speedMs * dt;
@@ -297,7 +548,6 @@ export const useFlightStore = create<FlightState>((set) => ({
     const terrainAltitude = Math.max(500, ((terrainY + 1 - 2.5) / 0.0015) + 350);
     if (state.emergencyState === 'nominal' && alt < terrainAltitude) alt = terrainAltitude;
 
-    // RUL decay and anomaly accumulation
     const rul = Math.max(0, state.rul - dt * 0.01);
     const anomalyScore = Math.min(1, state.anomalyScore + (state.faults.c2Overheat ? 0.001 : 0) +
       (state.faults.bearingFail ? 0.002 : 0) + (state.faults.turboFail ? 0.0015 : 0) + (coldProgress * 0.003));
@@ -306,7 +556,6 @@ export const useFlightStore = create<FlightState>((set) => ({
     engineUpdates.rpm = (engineUpdates.rpm ?? state.rpm) * (1 - stallProgress * 0.8 - coldProgress * 0.45);
     engineUpdates.healthIndex = Math.max(0, Math.min(1, (engineUpdates.healthIndex ?? state.healthIndex) * (1 - failureProgress)));
 
-    // Mission waypoint tracking — auto-navigate to waypoints
     let missionProgress = state.missionProgress;
     let newTargetHeading = state.targetHeading;
     let newTargetAltitude = state.targetAltitude;
@@ -330,7 +579,6 @@ export const useFlightStore = create<FlightState>((set) => ({
             systemMessage = 'NOMINAL ROUTINE COMPLETE — UAV RETURNED SAFELY TO BASE';
           }
         } else {
-          // Auto-navigate: set heading toward waypoint
           const dx = wp.x - x;
           const dz = wp.z - z;
           newTargetHeading = mod((Math.atan2(dx, -dz) * 180 / Math.PI) + 360, 360);
