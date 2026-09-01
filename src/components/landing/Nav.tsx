@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Plane } from "lucide-react";
 import { StatusDot } from "@/components/hud/primitives";
 
 const ITEMS = [
@@ -41,6 +41,10 @@ export function Nav() {
               {i.label}
             </a>
           ))}
+          <Link to="/sim" className="label-xs flex items-center gap-1.5 border border-cyan/60 px-3 py-1.5 text-cyan transition-colors hover:bg-cyan/10">
+            <Plane className="h-3 w-3" />
+            FLIGHT SIM
+          </Link>
           <Link to="/gcs" className="label-xs border border-cyan/60 px-3 py-1.5 text-cyan transition-colors hover:bg-cyan/10">
             GCS
           </Link>
@@ -61,7 +65,10 @@ export function Nav() {
               {i.label}
             </a>
           ))}
-          <Link to="/gcs" className="mt-2 block py-2 label-xs text-cyan">
+          <Link to="/sim" onClick={() => setOpen(false)} className="mt-2 flex items-center gap-2 py-2 label-xs text-cyan">
+            <Plane className="h-3 w-3" /> FLIGHT SIMULATOR
+          </Link>
+          <Link to="/gcs" onClick={() => setOpen(false)} className="mt-2 block py-2 label-xs text-cyan">
             ENTER GCS
           </Link>
         </div>

@@ -1,16 +1,6 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useState, useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  Activity,
-  ArrowLeft,
-  FileText,
-  FlaskConical,
-  Gauge,
-  History,
-  LayoutGrid,
-  Stethoscope,
-  Wrench,
-} from "lucide-react";
+import { ArrowLeft, LayoutGrid, Activity, Stethoscope, History, FlaskConical, Wrench, FileText, Expand, Shrink } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
 import { Bar, Panel, StatusDot, useClock } from "@/components/hud/primitives";
 import { TelemetryDashboard } from "@/features/telemetry/TelemetryDashboard";
@@ -19,6 +9,8 @@ import { SimulationLab } from "@/features/simulation/SimulationLab";
 import { ReplayConsole } from "@/features/mission-replay/ReplayConsole";
 import { FleetPanel } from "@/features/fleet/FleetPanel";
 import { BASELINE_CONDITIONS, simulate } from "@/lib/domain/engine/model";
+import { EngineAlertsPanel } from "@/features/digital-twin/EngineAlerts";
+import type { PartHighlights } from "@/features/digital-twin/EngineModel";
 
 const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
 
@@ -28,16 +20,8 @@ export const Route = createFileRoute("/gcs")({
       { title: "AERIS-TWIN GCS — Ground Control Station" },
       {
         name: "description",
-        content:
-          "AERIS-TWIN Ground Control Station: live engine twin, predictive diagnostics, RUL, mission replay and what-if simulation for MALE UAV piston engines.",
+        content: "AERIS-TWIN Ground Control Station: live engine twin, predictive diagnostics, RUL, mission replay and what-if simulation for MALE UAV piston engines.",
       },
-      { property: "og:title", content: "AERIS-TWIN GCS — Ground Control Station" },
-      {
-        property: "og:description",
-        content: "Fleet health, live digital twin telemetry, explainable diagnostics and mission-risk decision support.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: GcsPage,
@@ -69,8 +53,34 @@ function Kpi({ label, value, sub, tone = "cyan" }: { label: string; value: strin
 
 function GcsPage() {
   const [tab, setTab] = useState<NavKey>("LIVE TWIN");
+  const [exploded, setExploded] = useState(false);
   const t = useClock();
   const state = simulate(t * 0.4, BASELINE_CONDITIONS, 0.34);
+
+  // Compute part highlights from live telemetry
+  const highlights: PartHighlights = useMemo(() => ({
+    cyl1CHT: state.cht + Math.sin(t * 0.7) * 3,
+    cyl2CHT: state.cht + 14 + Math.sin(t * 0.5) * 4,
+    cyl3CHT: state.cht + 16 + Math.sin(t * 0.6) * 5,
+    cyl4CHT: state.cht - 2 + Math.sin(t * 0.8) * 3,
+    egt: state.egt,
+    rpm: state.rpm,
+    vibration: state.vibrationRms,
+    oilTemp: state.oilTemperature,
+    health: state.health,
+  }), [state.cht, state.egt, state.rpm, state.vibrationRms, state.oilTemperature, state.health, Math.floor(t * 2)]);
+
+  // Telemetry object for alerts panel
+  const telemetry = useMemo(() => ({
+    cht: [highlights.cyl1CHT, highlights.cyl2CHT, highlights.cyl3CHT, highlights.cyl4CHT],
+    egt: highlights.egt,
+    map: state.manifoldPressure,
+    oilPressure: state.oilPressure,
+    oilTemp: highlights.oilTemp,
+    vibrationRMS: highlights.vibration,
+    rpm: highlights.rpm,
+    health: highlights.health,
+  }), [highlights, state.manifoldPressure, state.oilPressure]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -148,27 +158,43 @@ function GcsPage() {
               <div className="grid gap-4 xl:grid-cols-[1fr_420px]">
                 <TelemetryDashboard fault={0.34} />
                 <Panel label="LIVE ENGINE TWIN" corner="AE-P4 / INTERACTIVE">
+                  <button
+                    onClick={() => setExploded(!exploded)}
+                    className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 text-[9px] label-xs border border-border hover:border-cyan/50 bg-panel/80 backdrop-blur-sm transition-colors"
+                  >
+                    {exploded ? <Shrink className="h-3 w-3" /> : <Expand className="h-3 w-3" />}
+                    {exploded ? "ASSEMBLE" : "EXPLODE"}
+                  </button>
                   <div className="h-[320px]">
                     <ClientOnly>
                       <Suspense fallback={null}>
-                        <EngineCanvas interactive spin={false} fault={0.5} cameraZ={8} />
+                        <EngineCanvas
+                          interactive
+                          spin={false}
+                          fault={0.5}
+                          cameraZ={8}
+                          highlights={highlights}
+                          exploded={exploded}
+                        />
                       </Suspense>
                     </ClientOnly>
                   </div>
                   <div className="grid grid-cols-3 gap-px border-t border-border bg-border">
                     {[
-                      { k: "CYL 3 CHT", v: "194°C" },
-                      { k: "CYL 3 EGT", v: "782°C" },
-                      { k: "CYL 3 VIB", v: "1.24 G" },
+                      { k: "CYL 3 CHT", v: `${highlights.cyl3CHT.toFixed(0)}°C`, t: highlights.cyl3CHT > 200 ? 'text-[#e2523f]' : highlights.cyl3CHT > 170 ? 'text-[#f0a63c]' : '' },
+                      { k: "CYL 3 EGT", v: `${highlights.egt.toFixed(0)}°C` },
+                      { k: "CYL 3 VIB", v: `${highlights.vibration.toFixed(2)} G`, t: highlights.vibration > 1.5 ? 'text-[#e2523f]' : '' },
                     ].map((r) => (
                       <div key={r.k} className="bg-panel/90 p-2">
                         <div className="label-xs text-[9px]">{r.k}</div>
-                        <div className="readout text-xs text-amber">{r.v}</div>
+                        <div className={`readout text-xs ${r.t || 'text-amber'}`}>{r.v}</div>
                       </div>
                     ))}
                   </div>
                 </Panel>
               </div>
+              {/* Engine Alerts Panel */}
+              <EngineAlertsPanel telemetry={telemetry} />
             </div>
           )}
 

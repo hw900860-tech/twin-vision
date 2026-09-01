@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as GcsRouteImport } from './routes/gcs'
+import { Route as SimRouteImport } from './routes/sim'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +23,40 @@ const GcsRoute = GcsRouteImport.update({
   path: '/gcs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SimRoute = SimRouteImport.update({
+  id: '/sim',
+  path: '/sim',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/gcs': typeof GcsRoute
+  '/sim': typeof SimRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/gcs': typeof GcsRoute
+  '/sim': typeof SimRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/gcs': typeof GcsRoute
+  '/sim': typeof SimRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/gcs'
+  fullPaths: '/' | '/gcs' | '/sim'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/gcs'
-  id: '__root__' | '/' | '/gcs'
+  to: '/' | '/gcs' | '/sim'
+  id: '__root__' | '/' | '/gcs' | '/sim'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   GcsRoute: typeof GcsRoute
+  SimRoute: typeof SimRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +75,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GcsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sim': {
+      id: '/sim'
+      path: '/sim'
+      fullPath: '/sim'
+      preLoaderRoute: typeof SimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   GcsRoute: GcsRoute,
+  SimRoute: SimRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

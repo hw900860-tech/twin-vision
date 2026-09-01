@@ -1,1724 +1,558 @@
-# Twin Vision
+# AERIS-TWIN — AI-Enabled Digital Engine Intelligence
 
-# AERIS-TWIN — MASTER WEBSITE BUILD PROMPT
-
-Build a premium, cinematic, highly interactive website and web application called **AERIS-TWIN**.
-
-AERIS-TWIN is an AI-enabled real-time Digital Twin platform for health monitoring, fault prediction, Remaining Useful Life estimation, mission-risk assessment, and reliability enhancement of aero piston engines used in MALE UAVs.
-
-This is a serious aerospace/defence engineering product — NOT a generic SaaS website, NOT a generic AI landing page, and NOT a conventional admin dashboard.
-
-The visual quality should feel like a combination of:
-
-* advanced aerospace engineering software
-
-* modern defence technology interface
-
-* digital-twin visualization
-
-* futuristic mission-control system
-
-* premium Apple-style cinematic product storytelling
-
-* Palantir/Anduril-inspired technical sophistication
-
-* scientific instrumentation / flight-deck HUD
-
-* high-end 3D engineering visualization
-
-Use the attached reference image as the primary visual inspiration for the engine visualization, lighting, technical overlays, and overall aerospace atmosphere. Do NOT simply place the reference image on the page. Recreate the visual language as an interactive website.
+A production-ready, interactive WebGL application that merges a **gamified 3D UAV Flight Simulator** with an **Air Traffic Control (ATC) / Ground Control Station (GCS) Aero Engine Digital Twin Command Center** for MALE UAVs equipped with Rotax 914 / Austro AE300 piston engines.
 
 ---
 
-# CORE TECHNOLOGY
+## Table of Contents
 
-Use:
+1. [System Overview](#system-overview)
+2. [Tech Stack](#tech-stack)
+3. [Page Architecture](#page-architecture)
+4. [Module 1 — Landing Page](#module-1--landing-page)
+5. [Module 2 — Flight Simulator (`/sim`)](#module-2--flight-simulator-sim)
+6. [Module 3 — GCS Command Center (`/gcs`)](#module-3--gcs-command-center-gcs)
+7. [Engine Thermodynamic Physics Core](#engine-thermodynamic-physics-core)
+8. [Flight Dynamics Model](#flight-dynamics-model)
+9. [Fault Injection Sandbox](#fault-injection-sandbox)
+10. [Terrain Generation System](#terrain-generation-system)
+11. [3D Engine Digital Twin](#3d-engine-digital-twin)
+12. [Simulation Lab — Value Relationships](#simulation-lab--value-relationships)
+13. [How to Run](#how-to-run)
 
-* Next.js
+---
 
-* React
+## System Overview
 
-* TypeScript
+AERIS-TWIN is a **read-only advisory system** that demonstrates how digital twin technology can provide predictive engine intelligence for MALE (Medium-Altitude Long-Endurance) UAVs. It runs entirely in the browser with no backend server — all physics, telemetry, and diagnostics are computed client-side in real time.
 
-* Tailwind CSS
+The system has three interconnected pages:
 
-* Three.js / React Three Fiber for 3D
+| Route | Purpose |
+|---|---|
+| `/` | Landing page — product overview, architecture, interactive 3D engine model |
+| `/sim` | **Flight Simulator** — fly a TAPAS BH-201 UAV across 3 terrains with live engine telemetry |
+| `/gcs` | **GCS Command Center** — monitor engine health, run diagnostics, replay missions |
 
-* GSAP + ScrollTrigger for cinematic scroll-driven animations
+---
 
-* Motion for smaller UI transitions
+## Tech Stack
 
-* Recharts for telemetry graphs
+| Layer | Technology |
+|---|---|
+| Framework | React 19 + TanStack Start (SSR) |
+| Routing | TanStack Router (file-based) |
+| 3D Rendering | Three.js via `@react-three/fiber` + `@react-three/drei` |
+| Styling | Tailwind CSS v4 (oklch design system) |
+| Charts | Recharts (sparklines, area charts) |
+| Icons | Lucide React |
+| Animation | GSAP, CSS animations |
+| State | Zustand (flight simulator), React state (GCS) |
+| Build | Vite 8, Bun package manager |
+| Fonts | Space Grotesk (display), IBM Plex Mono (readouts) |
 
-* Lucide icons
+---
 
-Structure the project cleanly so the landing page can later transition into a functional Ground Control Station.
+## Page Architecture
 
-Use reusable components and feature-based architecture.
+### Landing Page (`/`)
+A scrollable marketing page with 12 sections explaining the AERIS-TWIN concept:
+- **Hero** — 3D rotating engine model with live telemetry overlays
+- **The Problem** — why conventional threshold monitoring fails
+- **Digital Twin** — interactive 3D engine cutaway (click cylinders to inspect)
+- **Live Twin** — real-time telemetry dashboard with sparklines
+- **Physics vs Reality** — residual charts showing model divergence
+- **Predictive Intelligence** — detection lead time demonstration
+- **Explainable Diagnostics** — contributing factor breakdown
+- **RUL Estimation** — Weibull-based remaining useful life with confidence bands
+- **Mission Intelligence** — mission risk assessment
+- **What-If Simulation** — adjustable scenario controls
+- **Mission Replay** — deterministic 4-hour mission playback
+- **Maintenance Advisory** — predictive maintenance recommendations
 
-Potential structure:
+### Flight Simulator (`/sim`)
+A full-screen 3D flight simulator with:
+- Procedural textured terrain (3 biomes)
+- TAPAS BH-201 UAV with spinning propeller
+- Chase camera following the UAV
+- Military-grade HUD overlay
+- Right-side control panel
 
+### GCS Command Center (`/gcs`)
+A dashboard with 7 tabbed views:
+- Fleet overview, Live Twin, Diagnostics, Mission Replay, Simulation Lab, Maintenance, Reports
+
+---
+
+## Module 1 — Landing Page
+
+### 3D Engine Hero
+The hero section renders a Three.js `Canvas` with an `EngineModel` component — a stylized 4-cylinder piston engine that slowly rotates. Floating telemetry labels (RPM, CHT, EGT, Oil Pressure, Fuel Flow, Vibration) update every frame using a deterministic `simulate()` function.
+
+### Boot Overlay
+On first load, a typewriter-style boot sequence displays:
+```
+SYSTEM GRID .......... OK
+AERIS-TWIN CORE ...... v1.4
+TELEMETRY LINK ....... ESTABLISHED
+SENSOR ARRAY ......... 24 NODES
+PHYSICS MODEL ........ AE-P4 LOADED
+ANOMALY ENGINE ....... ARMED
+TWIN SYNCHRONIZED
+```
+This is purely cosmetic and hides the 3D engine loading time.
+
+---
+
+## Module 2 — Flight Simulator (`/sim`)
+
+### Core Components
+
+| File | Purpose |
+|---|---|
+| `flightStore.ts` | Zustand store — all flight state, physics, engine telemetry |
+| `FlightSimulator.tsx` | Three.js Canvas with lighting, fog, stars, terrain, UAV |
+| `UAVModel.tsx` | TAPAS BH-201 3D model with chase camera + input handling |
+| `Terrain.tsx` | Infinite chunk-based procedural terrain |
+| `FlightHUD.tsx` | Military HUD overlay (airspeed, altitude, heading, engine data) |
+| `ControlPanel.tsx` | Right panel — terrain, missions, throttle, fault injection |
+
+### Flight Controls
+
+**Mouse Drag:**
+- Drag **left/right** → Changes UAV heading (0.5° per pixel)
+- Drag **up/down** → Changes altitude (20 ft per pixel)
+
+**Keyboard:**
+| Key | Action |
+|---|---|
+| W / ↑ | Increase throttle (+2%) |
+| S / ↓ | Decrease throttle (-2%) |
+| Q / ← | Turn left (heading -3°) |
+| E / → | Turn right (heading +3°) |
+| A | Climb (altitude +200 ft) |
+| D | Descend (altitude -200 ft) |
+
+### Chase Camera
+The camera follows behind and above the UAV relative to its heading:
+```
+camX = uavX + sin(heading) × 18
+camZ = uavZ + cos(heading) × 18
+camY = uavAltitude × 0.0015 + 2.5 + 6
+```
+Position is smoothed with lerp damping (`factor = 0.05`) for buttery tracking.
+
+### HUD Overlay
+
+| Indicator | Source | Color Logic |
+|---|---|---|
+| AIRSPEED (KTS) | `40 + (throttle/100) × 160 × densityFactor` | Cyan |
+| ALTITUDE (FT) | Tracked from target with climb rate limit | Cyan |
+| AMBIENT TEMP (°C) | Set by biome selection | Amber |
+| ENGINE RPM | `baseRPM + throttle × 1600 × (0.86 + 0.14 × densityFactor)` | Cyan |
+| HEADING (°) | Smoothly interpolated toward target | Cyan |
+| CHT 1-4 (°C) | Per-cylinder with fault modifiers | Cyan→Amber→Red |
+| EGT / MAP | Combined exhaust/manifold readout | Cyan |
+| OIL PRESS/TEMP | Inverse temperature relationship | Cyan |
+| VIBRATION RMS | Throttle + fault dependent | Cyan→Amber→Red |
+| GPS LAT/LON | Derived from world position | Cyan |
+| ENGINE HEALTH | Composite score 0-100% | Green→Amber→Red |
+| Advisory Banner | Changes based on max CHT | Green/Yellow/Red |
+
+---
+
+## Module 3 — GCS Command Center (`/gcs`)
+
+### Tab Navigation
+
+| Tab | Content |
+|---|---|
+| FLEET | 5-UAV fleet health overview with status indicators |
+| LIVE TWIN | Real-time telemetry dashboard + interactive 3D engine model |
+| DIAGNOSTICS | Explainable fault diagnosis + RUL estimation |
+| MISSION REPLAY | Deterministic 4-hour mission playback with phase markers |
+| SIMULATION LAB | What-if scenario controls (altitude, throttle, wear, duration) |
+| MAINTENANCE | Predictive maintenance advisory + audit history |
+| REPORTS | Mission reports, model cards, audit trail |
+
+### Telemetry Dashboard (LIVE TWIN tab)
+Displays 10 channels with sparkline charts:
+
+| Channel | Unit | What It Shows |
+|---|---|---|
+| RPM | — | Engine revolutions per minute |
+| CHT | °C | Cylinder Head Temperature |
+| EGT | °C | Exhaust Gas Temperature |
+| OIL PRESSURE | BAR | Lubrication system pressure |
+| OIL TEMP | °C | Oil temperature |
+| FUEL FLOW | L/h | Fuel consumption rate |
+| VIBRATION | G | Vibration RMS acceleration |
+| BUS VOLTAGE | V | Alternator output |
+| ALTERNATOR | % | Electrical system health |
+| INJECTION EFF. | % | Fuel injector efficiency |
+
+---
+
+## Engine Thermodynamic Physics Core
+
+The engine simulation runs a deterministic physics model (`simulate()` in `lib/domain/engine/model.ts`) that calculates all telemetry values from first principles. Every value is a function of **throttle**, **altitude**, **ambient temperature**, **engine wear**, and **fault severity**.
+
+### Core Physics Formulas
+
+#### 1. Air Density Ratio
+As altitude increases, air becomes thinner. This is the most important environmental factor:
+
+```
+densityRatio = exp(-altitudeFt / 27000)
+```
+
+| Altitude (ft) | densityRatio | Effect |
+|---|---|---|
+| 0 (sea level) | 1.000 | Maximum air density, best engine performance |
+| 10,000 | 0.690 | ~31% less air, turbo must boost |
+| 18,000 | 0.516 | ~48% less air, significant performance loss |
+| 25,000 | 0.395 | ~60% less air, near maximum turbo boost |
+
+#### 2. RPM (Revolutions Per Minute)
+```
+rpm = baseRPM + throttle × 1600 × (0.86 + 0.14 × densityRatio) + noise
+```
+- `baseRPM`: 2400 (Himalaya), 2500 (Desert), 2450 (Coastal)
+- At 100% throttle and sea level: ~4060 RPM
+- At 100% throttle and 25,000 ft: ~3830 RPM (denser air = more RPM)
+
+#### 3. Manifold Absolute Pressure (MAP)
+```
+MAP = 18 + throttle × 14 × densityRatio
+```
+- Represents the pressure of air entering the cylinders
+- At sea level, 100% throttle: 32 kPa (natural aspiration)
+- At 25,000 ft, 100% throttle: 23.5 kPa (turbo must compensate)
+- **Turbo Failure fault**: MAP × 0.6 → sudden power loss
+
+#### 4. Cylinder Head Temperature (CHT)
+```
+CHT_base = 96 + throttle × 96 + ambientTemp × 0.72 - densityRatio × 12
+CHT = CHT_base + faultModifier + noise
+```
+
+**What affects CHT:**
+| Factor | Effect | Why |
+|---|---|---|
+| ↑ Throttle | ↑ CHT | More combustion = more heat |
+| ↑ Ambient Temp | ↑ CHT | Less cooling margin |
+| ↑ Altitude | ↓ CHT | Thinner air = less combustion heat |
+| ↑ Engine Wear | ↑ CHT | Less efficient combustion |
+| Cylinder 2 Overheat fault | +80°C (Cyl 1), +120°C (Cyl 2) | Blocked cooling airflow |
+
+**CHT thresholds:**
+- < 170°C: **Normal** (cyan)
+- 170-200°C: **Caution** (amber)
+- > 200°C: **Critical** (red)
+- > 220°C: **Advisory banner turns red** — "Initiate immediate descent"
+
+#### 5. Exhaust Gas Temperature (EGT)
+```
+EGT = 528 + throttle × 236 + ambientTemp × 0.5
+```
+- At 100% throttle, sea level: ~764°C
+- At 100% throttle, 48°C ambient (Thar Desert): ~788°C
+- **Injector Clog fault**: EGT + 60°C + noise (imbalance between cylinders)
+- **Turbo Failure**: EGT - 40°C (less fuel burned due to MAP drop)
+
+#### 6. Oil Pressure and Temperature
+```
+oilTemp = 68 + throttle × 34 + ambientTemp × 0.5
+oilPressure = clamp(5.6 - (oilTemp - 90) × 0.012, 1.6, 6.2)
+```
+Oil pressure is **inversely proportional** to oil temperature — as oil gets hotter, it thins and pressure drops. This is why high oil temperature is a warning sign.
+
+#### 7. Vibration RMS
+```
+vibration = 0.42 + throttle × 0.36
+```
+- At idle: 0.42 m/s²
+- At 100% throttle: 0.78 m/s²
+- **Bearing Spall fault**: +1.8 m/s² + random noise → severe vibration spike
+
+#### 8. FFT Frequency Spectrum (64 bins, 0-630 Hz)
+A synthetic vibration spectrum with:
+- **Fundamental frequency** at ~80 Hz (bins 7-9): amplitude scales with throttle
+- **2nd harmonic** at ~160 Hz (bins 15-17): 25% of fundamental
+- **3rd harmonic** at ~240 Hz (bins 23-25): 15% of fundamental
+- **Bearing fault peak** at 140 Hz (bins 13-15): +1.5 amplitude when bearing spall is active
+
+#### 9. Composite Health Index
+```
+health = thermalHealth × 0.3 + vibrationHealth × 0.3 + (1 - anomalyScore) × 0.4
+```
+Where:
+- `thermalHealth = max(0, 1 - (maxCHT - 150) / 130)`
+- `vibrationHealth = max(0, 1 - (vibration - 0.5) / 1.6)`
+
+#### 10. Remaining Useful Life (RUL)
+```
+RUL = 26 × health / stress × (1 - fault × 0.55)
+stress = 1 + (throttle/100) × 0.55 + max(0, ambient - 25) / 45
+```
+RUL decreases over time at a rate of 0.01 hours per simulated second.
+
+---
+
+## Flight Dynamics Model
+
+### Position Update
+```
+speedKnots = 40 + (throttle/100) × 160 × (0.7 + 0.3 × altitudeFactor)
+speedMetersPerSecond = speedKnots × 0.5144
+dx = sin(heading) × speedM/s × dt
+dz = -cos(heading) × speedM/s × dt
+```
+
+### Heading
+- Target heading set by mouse drag or keyboard
+- Actual heading interpolates toward target at max 30°/s
+- Rudder adds direct heading change at 60°/s
+- Bank angle = `clamp(hdgDiff × 0.8, -35°, +35°)`
+
+### Altitude
+- Target altitude set by mouse drag or keyboard
+- Actual altitude climbs/descends at max 800 ft/s
+- Clamped to 500 ft minimum, 30,000 ft maximum
+
+---
+
+## Fault Injection Sandbox
+
+Four toggleable faults that modify engine telemetry in real time:
+
+### 1. 🔴 Cylinder 2 Overheat (`c2Overheat`)
+**What happens:**
+- Cyl 2 CHT spikes by +120°C (from ~140°C to ~260°C)
+- Cyl 1 CHT rises by +80°C (shared cooling system)
+- Cylinders 3-4 remain normal
+- Engine exhaust glow turns red
+- Advisory banner: "CRITICAL: CHT OVERLIMIT — REDUCE THROTTLE IMMEDIATELY"
+
+**Real-world analog:** Blocked oil cooler duct or failed cylinder head gasket causing localized overheating.
+
+### 2. 🔴 Wastegate Turbo Failure (`turboFail`)
+**What happens:**
+- MAP drops to 60% of normal → sudden manifold pressure collapse
+- EGT drops by 40°C (less fuel burned)
+- RPM decreases due to less air
+- Health index drops significantly
+
+**Real-world analog:** Turbocharger wastegate stuck open, bypassing exhaust gas and losing boost pressure. At high altitude this is catastrophic — the engine can't produce enough power.
+
+### 3. 🔴 Bearing Fatigue Spall (`bearingFail`)
+**What happens:**
+- Vibration RMS jumps from ~0.8 to ~2.6 m/s²
+- FFT spectrum shows massive peak at 140 Hz (BPFO — Ball Pass Frequency Outer race)
+- Anomaly score increases rapidly
+
+**Real-world analog:** A spall (surface fatigue crack) on a main bearing race creates periodic impacts at the ball pass frequency, visible as a spectral peak.
+
+### 4. 🔴 Fuel Injector Clog (`injectorClog`)
+**What happens:**
+- EGT rises by 60°C with random noise (imbalance between cylinders)
+- Fuel flow becomes unstable
+- Health index decreases
+
+**Real-world analog:** Partially blocked injector nozzle causes uneven fuel distribution, leading to lean-burn cylinders with higher exhaust temperatures.
+
+---
+
+## Terrain Generation System
+
+### Procedural Heightmap
+Each terrain chunk is a 100×100 vertex `PlaneGeometry` with heights computed using **Fractal Brownian Motion (FBM)** — 5 octaves of coherent noise:
+
+```
+height = 0
+amplitude = 1
+frequency = 1
+for each octave:
+  height += amplitude × noise2D(x × frequency, z × frequency)
+  amplitude ×= 0.5
+  frequency ×= 2.1
+```
+
+### Three Biomes
+
+| Biome | Height Formula | Colors | Lighting |
+|---|---|---|---|
+| **Himalaya** | `(noise × 0.7 + ridge × 0.3) × 26` | Snow (white), rock (gray), forest (green) | Cool blue ambient |
+| **Thar Desert** | `noise × 8 × duneFactor` | Sand (amber), gravel (tan) | Warm gold ambient |
+| **Coastal** | Shore transition + land noise | Water (blue), beach (tan), vegetation (green) | Medium blue ambient |
+
+### Chunk Streaming
+- 5×5 grid of 120-unit chunks centered on UAV
+- Chunks regenerate when UAV crosses chunk boundaries
+- World-space noise coordinates ensure seamless chunk edges
+- Vegetation (trees/cacti/palms) placed using seeded random positions
+
+### Vertex Coloring
+Each vertex gets colored based on its height:
+- **Himalaya:** >20 = snow white, 15-20 = gray rock, 10-15 = dark rock, 5-10 = forest green, <5 = dark green
+- **Thar:** >6 = light sand, 3-6 = medium sand, 1-3 = gravel, <1 = flat desert
+- **Coastal:** <-0.1 = deep water, -0.1 to 0.2 = shallow water, 0.2-1 = beach, 1-4 = vegetation, >4 = dense forest
+
+---
+
+## 3D Engine Digital Twin
+
+The GCS page includes an interactive 3D engine model (`EngineModel.tsx`) that renders:
+
+| Component | Geometry | Material |
+|---|---|---|
+| Crankcase | Box 3.5×0.72×1.15 | Dark steel (#4a5055) |
+| Cylinders ×4 | Cylinder with cooling fins | Gray (#6b7278) |
+| Cylinder Heads | Box 0.7×0.26×0.62 | Steel (#7d848a) |
+| Intake Manifold | Cylinder tubes | Dark gray (#5c6369) |
+| Exhaust Headers | Cylinder tubes | Brown (#6e6259) |
+| Oil Sump | Box 2.1×0.3×0.8 | Dark (#262b2f) |
+| Prop Flange | Cylinder disk | Chrome (#9aa0a5) |
+| Sensor Nodes ×7 | Pulsing spheres | Cyan/Amber/Red by health |
+
+**Interactive features:**
+- Drag to orbit the engine
+- Click a cylinder to inspect its CHT, EGT, vibration, health, and status
+- Engine rotates slowly when `spin` is enabled
+- Cylinder color shifts from dark → cyan (selected) → amber (degraded) → red (critical)
+
+---
+
+## Simulation Lab — Value Relationships
+
+The Simulation Lab allows adjusting 5 input parameters and seeing how they affect engine state:
+
+### Input Controls
+
+| Control | Range | What It Does |
+|---|---|---|
+| ALTITUDE | 10,000 — 25,000 ft | Changes air density, affects MAP, CHT, RPM |
+| AMBIENT TEMP | 20 — 50°C | Changes thermal baseline for CHT, Oil Temp |
+| THROTTLE | 20 — 100% | Primary driver of RPM, CHT, EGT, vibration |
+| ENGINE WEAR | 0 — 100% | Degrades all subsystem health scores |
+| MISSION DURATION | 1 — 12 hours | Affects RUL margin and mission risk |
+
+### Value Relationships Table
+
+| If you increase... | RPM | CHT | EGT | MAP | Oil Press | Vibration | Health |
+|---|---|---|---|---|---|---|---|
+| **Throttle** | ↑↑ | ↑↑ | ↑↑ | ↑↑ | ↓ | ↑↑ | ↓ |
+| **Altitude** | ↓ | ↓ | ↑ | ↓↓ | — | — | ↓ |
+| **Ambient Temp** | — | ↑ | ↑ | — | ↓ | — | ↓ |
+| **Engine Wear** | — | ↑ | ↑ | — | ↓↓ | ↑ | ↓↓↓ |
+| **Fault Severity** | ↓ | ↑↑ | ↑↑ | ↓ | ↓ | ↑↑↑ | ↓↓↓ |
+
+### Why These Relationships Exist
+
+**Throttle → everything changes:** Opening the throttle admits more air-fuel mixture into the cylinders. More combustion means more heat (↑ CHT, ↑ EGT), more exhaust pressure (↑ MAP), more mechanical stress (↑ vibration), and more oil consumption (↓ oil pressure).
+
+**Altitude → MAP drops, turbo must compensate:** At altitude, atmospheric pressure drops exponentially. The turbocharger must spin faster to maintain manifold pressure. If it can't compensate (turbo failure), MAP collapses and the engine loses power.
+
+**Ambient Temperature → thermal margin:** Hot ambient air provides less cooling. A desert at 48°C gives the engine 53°C less thermal headroom than Himalayan conditions at -5°C. This directly impacts CHT.
+
+**Engine Wear → everything degrades:** Wear increases clearances, reduces compression, degrades bearing surfaces, and reduces lubrication effectiveness. The model applies wear as a multiplier across all subsystem health scores.
+
+**Fault Severity → compound degradation:** Faults are modeled as additive modifiers to specific channels. The anomaly score accumulates over time, which progressively reduces the composite health index and accelerates RUL decay.
+
+---
+
+## How to Run
+
+```bash
+# 1. Install Bun (if not installed)
+curl -fsSL https://bun.sh/install | bash
+
+# 2. Install dependencies
+cd twin-vision
+bun install
+
+# 3. Start dev server
+bun run dev
+```
+
+Open `http://localhost:5173` in your browser.
+
+### Available Routes
+- `/` — Landing page
+- `/sim` — Flight Simulator
+- `/gcs` — GCS Command Center
+
+### Production Build
+```bash
+bun run build
+bun run preview
+```
+
+---
+
+## File Structure
+
+```
 src/
-
-app/
-
-components/
-
-features/
-
-digital-twin/
-
-telemetry/
-
-predictive-maintenance/
-
-mission-replay/
-
-simulation/
-
-fleet/
-
-maintenance/
-
-lib/
-
-domain/
-
-engine/
-
-telemetry/
-
-diagnostics/
-
-The visual experience is the priority, but the code must remain maintainable and extensible.
-
----
-
-# BRAND
-
-Product name:
-
-AERIS-TWIN
-
-Tagline:
-
-"Understand the engine before it becomes a failure."
-
-Alternative supporting statement:
-
-"An AI-powered digital twin for predictive engine intelligence and mission reliability."
-
-AERIS-TWIN should feel like an actual aerospace technology platform that could eventually be deployed inside a defence-grade Ground Control Station.
-
-Do not overuse the word "AI".
-
-Do not use cheesy phrases such as:
-
-"Revolutionizing the future"
-
-"Next-generation AI"
-
-"Unlock the power of AI"
-
-"Transform your business"
-
-Keep the copy technical, confident, concise and engineering-focused.
+├── routes/
+│   ├── __root.tsx          # Root layout (html, fonts, meta)
+│   ├── index.tsx           # Landing page
+│   ├── gcs.tsx             # GCS Command Center
+│   └── sim.tsx             # Flight Simulator
+├── components/
+│   ├── landing/
+│   │   ├── Nav.tsx         # Navigation bar
+│   │   ├── Hero.tsx        # Hero section with 3D engine
+│   │   └── sections.tsx    # All 12 landing sections
+│   ├── hud/
+│   │   └── primitives.tsx  # Panel, Bar, Readout, StatusDot, etc.
+│   └── ClientOnly.tsx      # SSR-safe client component wrapper
+├── features/
+│   ├── flight-sim/
+│   │   ├── flightStore.ts      # Zustand store — flight state + physics
+│   │   ├── FlightSimulator.tsx  # Three.js Canvas + lighting
+│   │   ├── Terrain.tsx          # Procedural chunk-based terrain
+│   │   ├── UAVModel.tsx         # TAPAS BH-201 3D model + controls
+│   │   ├── FlightHUD.tsx        # Military HUD overlay
+│   │   └── ControlPanel.tsx     # Right panel — terrain, missions, faults
+│   ├── digital-twin/
+│   │   ├── EngineModel.tsx      # 3D engine cutaway model
+│   │   └── EngineCanvas.tsx     # Three.js Canvas for engine
+│   ├── telemetry/
+│   │   └── TelemetryDashboard.tsx  # Live telemetry with sparklines
+│   ├── simulation/
+│   │   └── SimulationLab.tsx    # What-if scenario controls
+│   ├── mission-replay/
+│   │   └── ReplayConsole.tsx    # 4-hour mission playback
+│   ├── predictive-maintenance/
+│   │   └── Diagnostics.tsx      # Explainable diagnostics + RUL
+│   └── fleet/
+│       └── FleetPanel.tsx       # Multi-UAV fleet overview
+├── lib/
+│   └── domain/engine/
+│       └── model.ts         # Core engine physics model
+├── hooks/
+│   └── use-mobile.tsx       # Mobile detection hook
+├── styles.css               # Tailwind + design system
+├── router.tsx               # TanStack Router config
+└── start.ts                 # TanStack Start entry
+```
 
 ---
 
-# GLOBAL VISUAL LANGUAGE
+## Design System
 
-Dark aerospace interface.
+The site uses a dark military/aviation theme with oklch colors:
 
-Primary background:
-
-deep graphite / near-black.
-
-Use subtle layers of:
-
-* graphite
-
-* charcoal
-
-* dark metallic grey
-
-* muted cyan
-
-* restrained amber
-
-* white/off-white
-
-* red only for critical faults
-
-* green only for healthy states
-
-Avoid excessive neon.
-
-Avoid excessive gradients.
-
-Avoid purple AI aesthetics.
-
-Avoid glassmorphism-heavy SaaS cards.
-
-Avoid giant rounded cards everywhere.
-
-Avoid generic dashboard templates.
-
-Use thin technical borders, subtle grids, engineering markings, telemetry labels, small data annotations and restrained HUD elements.
+| Token | Value | Usage |
+|---|---|---|
+| `--cyan` | `oklch(0.82 0.11 200)` | Primary accent, healthy values |
+| `--amber` | `oklch(0.8 0.13 76)` | Warning, caution values |
+| `--critical` | `oklch(0.63 0.2 25)` | Danger, fault indicators |
+| `--nominal` | `oklch(0.78 0.13 158)` | Good/healthy indicators |
+| `--panel` | `oklch(0.203 0.009 240)` | Panel backgrounds |
+| `--background` | `oklch(0.16 0.008 240)` | Page background |
 
 Typography:
-
-Use a modern geometric display font such as Space Grotesk/Sora for headings.
-
-Use a technical monospace font such as IBM Plex Mono for telemetry, sensor values and system labels.
-
----
-
-# LANDING PAGE EXPERIENCE
-
-The landing page should feel like a cinematic interactive engineering experience.
-
-The user should feel like they are entering the AERIS-TWIN system rather than reading a marketing website.
-
-The page should progressively tell a story:
-
-PROBLEM
-
-→ DIGITAL TWIN
-
-→ LIVE ENGINE STATE
-
-→ PHYSICS VS REALITY
-
-→ AI PREDICTION
-
-→ EXPLAINABLE DIAGNOSTICS
-
-→ RUL
-
-→ MISSION RISK
-
-→ WHAT-IF SIMULATION
-
-→ MISSION REPLAY
-
-→ GROUND CONTROL STATION
-
-Use smooth scrolling.
-
-Use GSAP ScrollTrigger for major cinematic transitions.
-
-Elements should move with purpose.
-
-Do NOT animate everything simultaneously.
-
-Animation should feel engineered, precise and expensive.
-
----
-
-# HERO SECTION
-
-Create a full-screen cinematic hero.
-
-The hero should immediately establish that this is aerospace technology.
-
-Central visual:
-
-A slowly rotating, highly detailed 3D aero piston engine.
-
-Prefer a realistic low-poly/high-quality engineering model with:
-
-* four cylinders
-
-* crankcase
-
-* crankshaft
-
-* exhaust
-
-* intake
-
-* oil system
-
-* sensor locations
-
-* mechanical components
-
-The engine should slowly rotate continuously.
-
-The camera should subtly move around it.
-
-Use dramatic but restrained lighting.
-
-The engine should appear suspended in a dark technical environment.
-
-Add a subtle engineering grid behind it.
-
-Add small floating telemetry labels around the engine.
-
-Example:
-
-RPM
-
-4280
-
-CHT
-
-184°C
-
-EGT
-
-731°C
-
-OIL PRESSURE
-
-4.8 BAR
-
-FUEL FLOW
-
-18.4 L/h
-
-VIBRATION
-
-0.82 G
-
-ENGINE HEALTH
-
-96.4%
-
-Do not clutter the engine.
-
-Telemetry should feel like real instrumentation.
-
-Some sensor points should be connected to the engine with thin animated lines.
-
-The lines should slowly pulse.
-
----
-
-# HERO TEXT
-
-Place a minimal text block on the left or upper-left:
-
-AERIS-TWIN
-
-AI-ENABLED DIGITAL ENGINE INTELLIGENCE
-
-Large heading:
-
-"Know the engine before it knows it's failing."
-
-Supporting text:
-
-"An explainable Digital Twin that combines live telemetry, physics-based engine modelling and AI-driven predictive diagnostics to anticipate degradation before conventional thresholds are crossed."
-
-Primary CTA:
-
-ENTER DIGITAL TWIN
-
-Secondary CTA:
-
-EXPLORE SYSTEM
-
-CTA buttons should look technical and premium, not like generic SaaS buttons.
-
----
-
-# HERO STATUS BAR
-
-Create a small technical status strip:
-
-TWIN STATUS
-
-● SYNCHRONIZED
-
-TELEMETRY
-
-LIVE
-
-MODEL
-
-AE-P4 / v1.4
-
-DATA QUALITY
-
-98.7%
-
-LATENCY
-
-127 ms
-
-This should subtly update over time.
-
----
-
-# HERO ANIMATION
-
-On initial load:
-
-1. Black screen.
-
-2. Tiny system grid appears.
-
-3. AERIS-TWIN identifier fades in.
-
-4. Thin telemetry lines begin appearing.
-
-5. Engine slowly materializes.
-
-6. Sensor points activate.
-
-7. Telemetry values appear one by one.
-
-8. "TWIN SYNCHRONIZED" appears.
-
-9. Main headline fades in.
-
-10. CTA becomes active.
-
-The entire sequence should take approximately 2–4 seconds.
-
-Do not make the intro slow or annoying.
-
-Provide a skip/enter interaction if appropriate.
-
-Respect prefers-reduced-motion.
-
----
-
-# SECTION 01 — THE PROBLEM
-
-Transition from the hero into a dark technical section.
-
-Headline:
-
-"ENGINES DON'T FAIL IN AN INSTANT."
-
-Supporting idea:
-
-"Degradation begins long before a conventional threshold becomes an alarm."
-
-Show a healthy engine telemetry graph.
-
-Initially:
-
-EXPECTED
-
-───────────────
-
-ACTUAL
-
-───────────────
-
-Then progressively introduce a simulated degradation.
-
-The actual signal slowly diverges.
-
-Use scroll position to control the progression.
-
-Show:
-
-NORMAL
-
-→ DEGRADATION
-
-→ ANOMALY
-
-→ PREDICTED FAILURE
-
-At the end of the section display:
-
-"Traditional monitoring reacts to abnormality."
-
-Then:
-
-"AERIS-TWIN detects divergence."
-
----
-
-# SECTION 02 — DIGITAL TWIN
-
-Create an immersive 3D Digital Twin section.
-
-Show the engine in the centre.
-
-As the user scrolls:
-
-* camera moves closer
-
-* engine rotates
-
-* cylinder components highlight
-
-* sensor nodes appear
-
-* data connections appear
-
-* virtual representation builds around the physical engine
-
-Show a visual transformation:
-
-PHYSICAL ENGINE
-
-↓
-
-LIVE TELEMETRY
-
-↓
-
-PHYSICS MODEL
-
-↓
-
-DIGITAL TWIN
-
-Do this visually, not merely with text.
-
-Use thin animated connections.
-
----
-
-# INTERACTIVE ENGINE
-
-The 3D engine should be interactive.
-
-Users can:
-
-* rotate it
-
-* slightly zoom
-
-* click/select cylinders
-
-* inspect subsystems
-
-When cylinder 3 is selected:
-
-Show:
-
-CYLINDER 03
-
-CHT
-
-194°C
-
-EGT
-
-782°C
-
-VIBRATION
-
-1.24 G
-
-HEALTH
-
-68%
-
-STATUS
-
-DEGRADING
-
-LIKELY ISSUE
-
-Injector degradation
-
-Highlight cylinder 3 on the model.
-
-Use a subtle amber/cyan highlight.
-
----
-
-# SECTION 03 — LIVE DIGITAL TWIN
-
-Transition into a live monitoring interface.
-
-Create a sophisticated telemetry dashboard embedded into the landing experience.
-
-Show:
-
-RPM
-
-CHT
-
-EGT
-
-Oil Pressure
-
-Oil Temperature
-
-Fuel Flow
-
-Vibration
-
-Battery Voltage
-
-Alternator Health
-
-Injection Timing
-
-Use animated graphs.
-
-Graphs should move slowly and realistically.
-
-Do not use random chaotic animation.
-
-Simulate deterministic telemetry.
-
-Show a central engine health score:
-
-ENGINE HEALTH
-
-96.4%
-
-Below it:
-
-COMBUSTION
-
-94%
-
-THERMAL
-
-91%
-
-LUBRICATION
-
-97%
-
-VIBRATION
-
-95%
-
-ELECTRICAL
-
-99%
-
----
-
-# SECTION 04 — PHYSICS VS REALITY
-
-This is one of the most important sections.
-
-Create a dramatic split-screen visualization:
-
-EXPECTED ENGINE BEHAVIOR
-
-versus
-
-OBSERVED ENGINE BEHAVIOR
-
-Show multiple synchronized graphs.
-
-Initially they overlap perfectly.
-
-Then gradually introduce injector degradation.
-
-The observed values begin diverging from the physics model.
-
-Visually show:
-
-EXPECTED
-
-───────────────
-
-OBSERVED
-
-───────────╱───
-
-╱
-
-╱
-
-Then display:
-
-PHYSICS RESIDUAL
-
-+18.4%
-
-ANOMALY SCORE
-
-82%
-
-The engine model should simultaneously reflect the degradation.
-
-Headline:
-
-"When reality begins to diverge, the twin notices."
-
----
-
-# SECTION 05 — PREDICTIVE INTELLIGENCE
-
-Create a futuristic predictive analytics section.
-
-Show a timeline:
-
-CURRENT
-
-│
-
-├── Sensor deviation
-
-│
-
-├── Physics residual
-
-│
-
-├── AI anomaly detection
-
-│
-
-├── Degradation trajectory
-
-│
-
-└── Predicted failure
-
-Use animated timeline markers.
-
-Show:
-
-EARLY WARNING
-
-47 MIN
-
-BEFORE CONVENTIONAL THRESHOLD
-
-This number is a DEMONSTRATOR SCENARIO and should not be presented as real-world validated performance.
-
-Also show:
-
-FAULT PROBABILITY
-
-87%
-
-MODEL CONFIDENCE
-
-81%
-
-DATA QUALITY
-
-96%
-
----
-
-# THRESHOLD VS AERIS-TWIN
-
-Create an extremely strong visual comparison.
-
-Left:
-
-CONVENTIONAL MONITORING
-
-Threshold crossed
-
-↓
-
-ALERT
-
-↓
-
-Maintenance
-
-Right:
-
-AERIS-TWIN
-
-Telemetry
-
-↓
-
-Physics residual
-
-↓
-
-Anomaly
-
-↓
-
-Degradation trend
-
-↓
-
-Prediction
-
-↓
-
-Maintenance
-
-Animate both timelines simultaneously.
-
-Make the predictive advantage visually obvious.
-
----
-
-# SECTION 06 — EXPLAINABLE AI
-
-Create a premium diagnostic interface.
-
-Example:
-
-⚠ INJECTOR DEGRADATION
-
-Probability
-
-87%
-
-Detection lead
-
-47 min
-
-Then:
-
-WHY?
-
-Show contributing factors:
-
-EGT CYLINDER SPREAD
-
-██████████
-
-32%
-
-FUEL FLOW INSTABILITY
-
-████████
-
-24%
-
-VIBRATION SIGNATURE
-
-██████
-
-19%
-
-PHYSICS RESIDUAL
-
-████
-
-11%
-
-Then show a natural-language explanation:
-
-"Cylinder 3 EGT is increasingly deviating from its RPM-adjusted baseline while fuel-flow variability and vibration order peaks are rising."
-
-Make the explanation feel like an engineering diagnostic system, not a chatbot.
-
----
-
-# SECTION 07 — RUL
-
-Create a beautiful Remaining Useful Life visualization.
-
-Do NOT show false precision.
-
-Display:
-
-REMAINING USEFUL LIFE
-
-42.3 HOURS
-
-Confidence interval:
-
-34.2 — 51.7 HOURS
-
-Confidence:
-
-78%
-
-Data quality:
-
-94%
-
-Model:
-
-AERIS-RUL-01
-
-Animate the degradation curve.
-
-Show how RUL changes when fault severity increases.
-
----
-
-# SECTION 08 — MISSION INTELLIGENCE
-
-Transition from engine-level monitoring to mission-level decision making.
-
-Show a dark tactical mission map with a UAV flight path.
-
-Do not make it look like a generic Google Maps interface.
-
-Use a schematic mission-planning aesthetic.
-
-Show:
-
-MISSION
-
-MARITIME ISR
-
-ALTITUDE
-
-18,000 FT
-
-AMBIENT
-
-41°C
-
-DURATION
-
-08:00 H
-
-THROTTLE
-
-72%
-
-ENGINE WEAR
-
-31%
-
-Then show:
-
-MISSION READINESS
-
-72%
-
-MEDIUM RISK
-
-Reasons:
-
-LOW THERMAL MARGIN
-
-RISING VIBRATION TREND
-
-RUL MARGIN LIMITED
-
----
-
-# SECTION 09 — WHAT-IF SIMULATION
-
-Make this one of the most interactive sections.
-
-Headline:
-
-"WHAT IF THE MISSION CHANGES?"
-
-Controls:
-
-ALTITUDE
-
-10,000 → 25,000 FT
-
-AMBIENT TEMPERATURE
-
-20 → 50°C
-
-THROTTLE
-
-20 → 100%
-
-ENGINE WEAR
-
-0 → 100%
-
-MISSION DURATION
-
-1 → 12 HOURS
-
-When values change, dynamically update:
-
-Engine state
-
-CHT
-
-EGT
-
-Oil pressure
-
-Fuel flow
-
-Vibration
-
-Health score
-
-RUL
-
-Mission risk
-
-Show:
-
-BASELINE
-
-RUL
-
-12.4 H
-
-RISK
-
-LOW
-
-Then simulated scenario:
-
-RUL
-
-6.8 H
-
-RISK
-
-HIGH
-
-Use smooth animated transitions.
-
-This section must feel like an actual Digital Twin simulation, not just sliders changing numbers.
-
----
-
-# SECTION 10 — MISSION REPLAY
-
-Create a mission replay interface.
-
-Show a horizontal timeline:
-
-00:00
-
-│
-
-CRUISE
-
-│
-
-CLIMB
-
-│
-
-LOITER
-
-│
-
-ANOMALY
-
-│
-
-DEGRADATION
-
-│
-
-ALERT
-
-Add fault markers.
-
-Add a play/pause button.
-
-Add a timeline scrubber.
-
-When the user moves through the timeline, update:
-
-RPM
-
-EGT
-
-CHT
-
-Oil pressure
-
-Fuel flow
-
-Vibration
-
-Health
-
-Anomaly score
-
-Show:
-
-FIRST DETECTED
-
-02:17:31
-
-THRESHOLD CROSSED
-
-03:06:44
-
-DETECTION ADVANTAGE
-
-49 MIN 13 SEC
-
-The replay must be deterministic.
-
----
-
-# SECTION 11 — MAINTENANCE INTELLIGENCE
-
-Show:
-
-PREDICTIVE MAINTENANCE ADVISORY
-
-Fault:
-
-Injector degradation
-
-Severity:
-
-MEDIUM
-
-Recommended action:
-
-Inspect injector system during next maintenance opportunity.
-
-Evidence:
-
-EGT imbalance
-
-Fuel-flow instability
-
-Cylinder imbalance
-
-Vibration trend
-
-Then show a maintenance history timeline.
-
----
-
-# SECTION 12 — FLEET VIEW
-
-Create a sophisticated fleet-level interface.
-
-Example:
-
-AERIS-TWIN / FLEET
-
-UAV-01
-
-94%
-
-READY
-
-UAV-02
-
-89%
-
-READY
-
-UAV-03
-
-76%
-
-ADVISORY
-
-UAV-04
-
-54%
-
-INSPECTION REQUIRED
-
-UAV-05
-
-91%
-
-READY
-
-Use miniature health indicators.
-
-Show fleet-level insights:
-
-3 engines show increasing lubrication degradation.
-
-2 engines show abnormal vibration trends.
-
-UAV-04 requires inspection before the next endurance mission.
-
----
-
-# SECTION 13 — ENTER THE GROUND CONTROL STATION
-
-End the cinematic landing page with a powerful transition.
-
-Headline:
-
-"FROM PREDICTION TO DECISION."
-
-CTA:
-
-ENTER AERIS-TWIN GCS
-
-When clicked, transition into the actual application dashboard.
-
-The GCS should retain exactly the same design language.
-
-GCS navigation:
-
-FLEET
-
-LIVE TWIN
-
-DIAGNOSTICS
-
-MISSION REPLAY
-
-SIMULATION LAB
-
-MAINTENANCE
-
-REPORTS
-
----
-
-# GCS DASHBOARD
-
-Create a functional-looking application shell.
-
-Top bar:
-
-AERIS-TWIN
-
-TWIN STATUS ● LIVE
-
-DATA QUALITY 97%
-
-MODEL v1.4
-
-Left navigation.
-
-Main area:
-
-ENGINE HEALTH
-
-87.4%
-
-RUL
-
-8.7–11.2 H
-
-MISSION RISK
-
-MEDIUM
-
-ACTIVE ADVISORIES
-
-2
-
-Then:
-
-Live engine visualization
-
-Telemetry graphs
-
-Fault predictions
-
-Maintenance recommendations
-
-Mission status
-
----
-
-# MICRO-INTERACTIONS
-
-Use subtle interactions throughout:
-
-* telemetry numbers smoothly interpolate
-
-* status indicators pulse gently
-
-* sensor nodes activate
-
-* graphs animate into view
-
-* engine hotspots react to selected faults
-
-* buttons have subtle hover/press states
-
-* panels slide/fade intelligently
-
-* timeline markers reveal diagnostic information
-
-* section transitions use depth/parallax
-
-* scrolling changes camera position in 3D
-
-* fault severity changes visual emphasis
-
-Do NOT use excessive bounce animations.
-
-Do NOT make every element fly around.
-
-Animations should feel like aerospace instrumentation.
-
----
-
-# 3D ENGINE REQUIREMENTS
-
-The engine is a central visual element.
-
-Use Three.js / React Three Fiber.
-
-If a suitable 3D asset is unavailable, create a convincing stylized technical engine model using procedural/basic geometry as a fallback.
-
-Prefer GLTF/GLB architecture so a higher-quality engine model can be substituted later without changing the UI.
-
-Engine behavior:
-
-* slow idle rotation
-
-* interactive orbit
-
-* scroll-controlled camera
-
-* selectable cylinders
-
-* selectable subsystems
-
-* sensor hotspots
-
-* health-based highlighting
-
-* fault visualization
-
-Potential hotspot systems:
-
-CYLINDER
-
-EXHAUST
-
-INTAKE
-
-OIL SYSTEM
-
-FUEL SYSTEM
-
-VIBRATION
-
-ELECTRICAL
-
-The model should NEVER block the main content.
-
-On lower-powered devices, automatically reduce rendering quality.
-
-Provide a non-WebGL fallback visualization.
-
----
-
-# PERFORMANCE
-
-This must feel extremely smooth.
-
-Target:
-
-60 FPS where possible.
-
-Lazy-load Three.js.
-
-Lazy-load heavy 3D assets.
-
-Use Suspense boundaries.
-
-Do not load enormous assets immediately.
-
-Optimize textures.
-
-Use compressed GLTF where possible.
-
-Reduce particle counts on mobile.
-
-Use CSS/SVG alternatives for decorative effects.
-
-Respect:
-
-prefers-reduced-motion
-
-Provide reduced-motion behavior that keeps the website useful and attractive without continuous animation.
-
----
-
-# RESPONSIVENESS
-
-Desktop is the primary experience.
-
-But also support:
-
-tablet
-
-mobile
-
-On mobile:
-
-* simplify 3D interactions
-
-* reduce telemetry density
-
-* stack panels
-
-* maintain the cinematic story
-
-* avoid horizontal overflow
-
-* keep CTAs accessible
-
----
-
-# DATA MODEL
-
-Create deterministic simulated engine telemetry.
-
-Use a representative four-cylinder engine called:
-
-AE-P4
-
-Do NOT claim this represents a specific OEM engine.
-
-Simulated parameters:
-
-rpm
-
-throttle
-
-manifoldPressure
-
-fuelFlow
-
-cht
-
-egt
-
-oilPressure
-
-oilTemperature
-
-vibrationRms
-
-alternatorVoltage
-
-injectorEfficiency
-
-compressionHealth
-
-lubricationHealth
-
-thermalHealth
-
-Fault scenarios:
-
-* injector degradation
-
-* misfire
-
-* compression degradation
-
-* lubrication issue
-
-* sensor drift
-
-* sensor failure
-
-* combustion instability
-
-* overheating
-
-* abnormal vibration
-
-* alternator weakness
-
-The simulation should produce believable correlated sensor behavior.
-
-Faults should progress gradually rather than appearing instantly.
-
----
-
-# IMPORTANT CREDIBILITY RULES
-
-Do not claim:
-
-"flight certified"
-
-"guaranteed failure prediction"
-
-"100% accurate RUL"
-
-"real-world validated 47-minute prediction"
-
-unless actual validation data is supplied.
-
-Clearly present synthetic/demo data as:
-
-SIMULATION
-
-DEMONSTRATOR
-
-REPRESENTATIVE ENGINE
-
-The website should feel highly credible and technically honest.
-
----
-
-# CYBERSECURITY / SAFETY
-
-Present AERIS-TWIN as advisory and read-only for the prototype.
-
-Do not imply direct engine control.
-
-Include subtle system architecture messaging:
-
-READ-ONLY ECU INTERFACE
-
-SECURE TELEMETRY
-
-MODEL VERSIONING
-
-AUDIT LOGGING
-
-OFFLINE-FIRST OPERATION
-
-STORE-AND-FORWARD TELEMETRY
-
----
-
-# VISUAL DETAILS
-
-Use:
-
-subtle scanlines
-
-engineering grids
-
-small coordinate labels
-
-thin data lines
-
-technical tick marks
-
-sensor markers
-
-small system status labels
-
-animated signal traces
-
-subtle noise/grain
-
-minimal particles
-
-depth-based lighting
-
-soft shadows
-
-metallic engine surfaces
-
-restrained cyan highlights
-
-amber warning states
-
-Do not overdo HUD effects.
-
-The design should remain clean and readable.
-
----
-
-# NAVIGATION
-
-Top navigation:
-
-AERIS-TWIN
-
-SYSTEM
-
-DIGITAL TWIN
-
-PREDICTIVE AI
-
-MISSION
-
-GCS
-
-Right side:
-
-SYSTEM ONLINE ●
-
-Menu should become compact on mobile.
-
-Navigation should smoothly scroll to sections.
-
----
-
-# FOOTER
-
-Minimal technical footer.
-
-AERIS-TWIN
-
-AI-ENABLED DIGITAL ENGINE INTELLIGENCE
-
-Prototype / Research Demonstrator
-
-Include:
-
-Architecture
-
-Technology
-
-Documentation
-
-GitHub
-
-Contact
-
-Do not make the footer look like a typical startup footer.
-
----
-
-# DESIGN PRINCIPLE
-
-The most important principle:
-
-THIS WEBSITE SHOULD DEMONSTRATE THE PRODUCT.
-
-Do not merely explain AERIS-TWIN.
-
-Make the website itself behave like AERIS-TWIN.
-
-The engine should react.
-
-The telemetry should change.
-
-The physics model should diverge.
-
-The AI should detect.
-
-The RUL should update.
-
-The mission risk should change.
-
-The simulation should respond.
-
-The replay should work.
-
-The diagnostics should explain themselves.
-
-The user should feel that they are interacting with a living Digital Twin.
-
----
-
-# FINAL CINEMATIC SEQUENCE
-
-Near the end, create a final visual sequence.
-
-Show the engine.
-
-Show:
-
-HEALTH
-
-87%
-
-RUL
-
-8.7–11.2 H
-
-MISSION RISK
-
-MEDIUM
-
-Then gradually fade the telemetry into the background.
-
-Display:
-
-"THE ENGINE ISN'T A NUMBER."
-
-Then:
-
-"IT'S A SYSTEM."
-
-Then:
-
-"AERIS-TWIN"
-
-"SEE THE DEGRADATION.
-
-UNDERSTAND THE FAILURE.
-
-MAKE THE MISSION DECISION."
-
-CTA:
-
-ENTER DIGITAL TWIN
-
----
-
-# QUALITY BAR
-
-The final result should look like it was designed by a professional aerospace technology product team.
-
-It should NOT look AI-generated.
-
-Avoid:
-
-* generic gradients
-
-* generic SaaS cards
-
-* stock illustrations
-
-* excessive rounded rectangles
-
-* purple AI imagery
-
-* cheesy marketing copy
-
-* excessive glowing text
-
-* unnecessary animations
-
-* generic dashboard layouts
-
-* fake statistics presented as real
-
-Prioritize:
-
-cinematic storytelling
-
-engineering credibility
-
-3D visualization
-
-data visualization
-
-interaction
-
-performance
-
-precision
-
-clarity
-
-technical sophistication
-
-The first 10 seconds of the website must immediately communicate:
-
-"AERIS-TWIN is an aerospace Digital Twin system."
-
-The first 60 seconds should demonstrate:
-
-"Traditional monitoring reacts. AERIS-TWIN predicts."
-
-The complete experience should leave a hackathon judge thinking:
-
-"This looks like an actual aerospace product, not a student project."
-
-Build the website accordingly.
-
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/20afaa53-671a-44ac-83d8-7dde7736d6fb).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
-```
+- **Space Grotesk** — Headings, UI text (clean, technical)
+- **IBM Plex Mono** — Readouts, data values (monospaced, tabular numbers)

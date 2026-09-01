@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import { ArrowRight, ChevronDown, Plane } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
 import { StatusDot, TechButton, useClock, useReducedMotion } from "@/components/hud/primitives";
 import { simulate, BASELINE_CONDITIONS } from "@/lib/domain/engine/model";
@@ -154,6 +154,11 @@ export function Hero() {
             <Link to="/gcs">
               <TechButton>
                 ENTER DIGITAL TWIN <ArrowRight className="h-3.5 w-3.5" />
+              </TechButton>
+            </Link>
+            <Link to="/sim">
+              <TechButton variant="ghost">
+                <Plane className="h-3.5 w-3.5" /> FLIGHT SIMULATOR
               </TechButton>
             </Link>
             <a href="#system">

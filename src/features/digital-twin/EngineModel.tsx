@@ -1,214 +1,314 @@
-import { useMemo, useRef, useState } from "react";
-import { useFrame } from "@react-three/fiber";
-import * as THREE from "three";
+import { useRef, useMemo, useState } from 'react';
+import { useFrame } from '@react-three/fiber';
+import { useGLTF, Html } from '@react-three/drei';
+import * as THREE from 'three';
 
-export type Subsystem = "CYLINDER" | "EXHAUST" | "INTAKE" | "OIL" | "FUEL" | "VIBRATION" | "ELECTRICAL";
+export type Subsystem = 'CYLINDER' | 'EXHAUST' | 'INTAKE' | 'OIL' | 'FUEL' | 'VIBRATION' | 'ELECTRICAL';
 
-const CYAN = "#6fd8e8";
-const AMBER = "#f0a63c";
-const CRITICAL = "#e2523f";
+// ── Rotax 914 real-world colors ──
+const ROTAX = {
+  block: '#8a8e94',        // Cast aluminum — light gray
+  cylinder: '#5a5e64',     // Iron cylinder barrels — darker gray
+  head: '#7a7e84',         // Aluminum heads — medium gray
+  rocker: '#3a3e44',       // Rocker covers — dark gray/black
+  exhaust: '#6e6259',      // Exhaust manifold — heat-brown
+  intake: '#4a4e54',       // Intake runners — dark
+  sump: '#2a2e34',         // Oil sump — very dark
+  flange: '#c0c4ca',       // Prop flange — bright steel
+  turbo: '#4a4e54',        // Turbo housing — dark
+  bolt: '#9aa0a5',         // Steel bolts — silver
+  wire: '#1a1a2a',         // Ignition wires — black
+  hose: '#2a2a2a',         // Rubber hoses — black
+  accent: '#c87020',       // Copper/bronze accents
+};
 
-function metal(color: string, rough = 0.45, metalness = 0.9) {
-  return <meshStandardMaterial color={color} roughness={rough} metalness={metalness} />;
+const CYAN = '#6fd8e8';
+const AMBER = '#f0a63c';
+const CRITICAL = '#e2523f';
+
+export interface PartHighlights {
+  cyl1CHT: number;
+  cyl2CHT: number;
+  cyl3CHT: number;
+  cyl4CHT: number;
+  egt: number;
+  rpm: number;
+  vibration: number;
+  oilTemp: number;
+  health: number;
 }
 
-function Cylinder({
-  index,
-  x,
-  selected,
-  degraded,
-  onSelect,
-}: {
-  index: number;
-  x: number;
-  selected: boolean;
-  degraded: boolean;
-  onSelect: (i: number) => void;
-}) {
-  const [hover, setHover] = useState(false);
-  const emissive = selected ? CYAN : degraded ? AMBER : "#000000";
-  const intensity = selected ? 0.9 : degraded ? 0.45 : 0;
+const EMPTY_HIGHLIGHTS: PartHighlights = {
+  cyl1CHT: 0, cyl2CHT: 0, cyl3CHT: 0, cyl4CHT: 0,
+  egt: 0, rpm: 0, vibration: 0, oilTemp: 0, health: 1,
+};
 
-  return (
-    <group
-      position={[x, 0.62, 0]}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        setHover(true);
-        document.body.style.cursor = "pointer";
-      }}
-      onPointerOut={() => {
-        setHover(false);
-        document.body.style.cursor = "auto";
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        onSelect(index);
-      }}
-    >
-      {/* barrel with cooling fins */}
-      <mesh castShadow>
-        <cylinderGeometry args={[0.29, 0.32, 0.78, 24]} />
-        <meshStandardMaterial
-          color={hover ? "#8a9198" : "#6b7278"}
-          roughness={0.55}
-          metalness={0.85}
-          emissive={emissive}
-          emissiveIntensity={intensity}
-        />
-      </mesh>
-      {Array.from({ length: 7 }).map((_, i) => (
-        <mesh key={i} position={[0, -0.32 + i * 0.1, 0]}>
-          <cylinderGeometry args={[0.4, 0.4, 0.022, 24]} />
-          <meshStandardMaterial
-            color="#565c62"
-            roughness={0.6}
-            metalness={0.8}
-            emissive={emissive}
-            emissiveIntensity={intensity * 0.6}
-          />
-        </mesh>
-      ))}
-      {/* head */}
-      <mesh position={[0, 0.5, 0]} castShadow>
-        <boxGeometry args={[0.7, 0.26, 0.62]} />
-        {metal("#7d848a", 0.4)}
-      </mesh>
-      {/* rocker cover */}
-      <mesh position={[0, 0.68, 0]}>
-        <boxGeometry args={[0.5, 0.12, 0.44]} />
-        <meshStandardMaterial color="#3d4348" roughness={0.35} metalness={0.75} />
-      </mesh>
-      {/* spark plug */}
-      <mesh position={[0.3, 0.5, 0.2]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.045, 0.045, 0.22, 10]} />
-        <meshStandardMaterial color="#c9ccd0" roughness={0.3} metalness={1} />
-      </mesh>
-    </group>
-  );
+function tempToColor(temp: number, warn = 170, crit = 200): string {
+  if (temp > crit) return CRITICAL;
+  if (temp > warn) return AMBER;
+  return CYAN;
 }
 
-function SensorNode({ position, tone = CYAN, active }: { position: [number, number, number]; tone?: string; active?: boolean }) {
-  const ref = useRef<THREE.Mesh>(null);
-  useFrame(({ clock }) => {
-    if (!ref.current) return;
-    const s = 1 + Math.sin(clock.elapsedTime * 2.2 + position[0]) * 0.22;
-    ref.current.scale.setScalar(active ? s : 0.7);
-  });
-  return (
-    <mesh ref={ref} position={position}>
-      <sphereGeometry args={[0.045, 12, 12]} />
-      <meshBasicMaterial color={tone} toneMapped={false} />
-    </mesh>
-  );
+function tempToIntensity(temp: number, warn = 170, crit = 200): number {
+  if (temp > crit) return 1.5;
+  if (temp > warn) return 0.8;
+  return 0;
 }
 
+// ── Exploded view part definitions ──
+// Each part has a rest position, explode offset, and geometry
+const EXPLODE_PARTS = [
+  { name: 'CYL HEAD 1', restY: 0.6, explodeY: 1.8, restX: -1.2, explodeX: -1.8, color: ROTAX.head, geo: 'box' as const, size: [0.5, 0.25, 0.5] as [number, number, number] },
+  { name: 'CYL HEAD 2', restY: 0.6, explodeY: 1.8, restX: -0.4, explodeX: -0.6, color: ROTAX.head, geo: 'box' as const, size: [0.5, 0.25, 0.5] as [number, number, number] },
+  { name: 'CYL HEAD 3', restY: 0.6, explodeY: 1.8, restX: 0.4, explodeX: 0.6, color: ROTAX.head, geo: 'box' as const, size: [0.5, 0.25, 0.5] as [number, number, number] },
+  { name: 'CYL HEAD 4', restY: 0.6, explodeY: 1.8, restX: 1.2, explodeX: 1.8, color: ROTAX.head, geo: 'box' as const, size: [0.5, 0.25, 0.5] as [number, number, number] },
+  { name: 'CYL BARREL 1', restY: 0.25, explodeY: 0.9, restX: -1.2, explodeX: -1.8, color: ROTAX.cylinder, geo: 'cylinder' as const, size: [0.22, 0.22, 0.35] as [number, number, number] },
+  { name: 'CYL BARREL 2', restY: 0.25, explodeY: 0.9, restX: -0.4, explodeX: -0.6, color: ROTAX.cylinder, geo: 'cylinder' as const, size: [0.22, 0.22, 0.35] as [number, number, number] },
+  { name: 'CYL BARREL 3', restY: 0.25, explodeY: 0.9, restX: 0.4, explodeX: 0.6, color: ROTAX.cylinder, geo: 'cylinder' as const, size: [0.22, 0.22, 0.35] as [number, number, number] },
+  { name: 'CYL BARREL 4', restY: 0.25, explodeY: 0.9, restX: 1.2, explodeX: 1.8, color: ROTAX.cylinder, geo: 'cylinder' as const, size: [0.22, 0.22, 0.35] as [number, number, number] },
+  { name: 'CRANKCASE', restY: -0.05, explodeY: -0.05, restX: 0, explodeX: 0, color: ROTAX.block, geo: 'box' as const, size: [3.0, 0.5, 0.8] as [number, number, number] },
+  { name: 'OIL SUMP', restY: -0.55, explodeY: -1.4, restX: 0, explodeX: 0, color: ROTAX.sump, geo: 'box' as const, size: [1.8, 0.25, 0.6] as [number, number, number] },
+  { name: 'INTAKE', restY: 0.7, explodeY: 2.6, restX: 0, explodeX: 0, restZ: -0.5, explodeZ: -1.2, color: ROTAX.intake, geo: 'cylinder' as const, size: [0.08, 0.08, 2.6] as [number, number, number], rotX: Math.PI / 2 },
+  { name: 'EXHAUST', restY: 0.35, explodeY: -1.8, restX: 0, explodeX: 0, restZ: 0.5, explodeZ: 1.2, color: ROTAX.exhaust, geo: 'cylinder' as const, size: [0.1, 0.1, 2.8] as [number, number, number], rotX: Math.PI / 2 },
+  { name: 'PROP FLANGE', restY: 0, explodeY: 0, restX: 2.0, explodeX: 3.2, color: ROTAX.flange, geo: 'cylinder' as const, size: [0.35, 0.35, 0.12] as [number, number, number], rotZ: Math.PI / 2 },
+];
+
+/** GLB Engine with explode animation + Rotax colors + live labels */
 export function EngineModel({
-  selectedCylinder,
-  onSelectCylinder,
-  degradedCylinder = 3,
   spin = true,
   fault = 0,
+  highlights,
+  exploded = false,
+  selectedCylinder,
+  onSelectCylinder,
 }: {
-  selectedCylinder?: number | null | undefined;
-  onSelectCylinder?: ((i: number) => void) | undefined;
-  degradedCylinder?: number | null | undefined;
-  spin?: boolean | undefined;
-  fault?: number | undefined;
+  spin?: boolean;
+  fault?: number;
+  highlights?: PartHighlights;
+  exploded?: boolean;
+  selectedCylinder?: number | null;
+  onSelectCylinder?: (i: number) => void;
 }) {
   const group = useRef<THREE.Group>(null);
+  const { scene } = useGLTF('/engine.glb');
+  const h = highlights ?? EMPTY_HIGHLIGHTS;
+
+  // Clone scene with Rotax-colored materials
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone(true);
+    clone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        // Apply Rotax aluminum color to the single mesh
+        mesh.material = new THREE.MeshStandardMaterial({
+          color: ROTAX.block,
+          roughness: 0.45,
+          metalness: 0.85,
+          emissive: new THREE.Color('#000000'),
+          emissiveIntensity: 0,
+        });
+      }
+    });
+    return clone;
+  }, [scene]);
+
+  // Animate: rotation + GLB emissive highlights
   useFrame((_, delta) => {
-    if (group.current && spin) group.current.rotation.y += delta * 0.14;
+    if (group.current && spin) {
+      group.current.rotation.y += delta * 0.14;
+    }
+
+    // Apply emissive highlights to GLB based on telemetry
+    const cylColors = [tempToColor(h.cyl1CHT), tempToColor(h.cyl2CHT), tempToColor(h.cyl3CHT), tempToColor(h.cyl4CHT)];
+    const cylIntensities = [tempToIntensity(h.cyl1CHT), tempToIntensity(h.cyl2CHT), tempToIntensity(h.cyl3CHT), tempToIntensity(h.cyl4CHT)];
+    const egtColor = tempToColor(h.egt, 700, 780);
+    const egtInt = tempToIntensity(h.egt, 700, 780);
+    const vibColor = h.vibration > 1.5 ? CRITICAL : h.vibration > 0.9 ? AMBER : CYAN;
+    const vibInt = h.vibration > 1.5 ? 1.2 : h.vibration > 0.9 ? 0.6 : 0;
+
+    clonedScene.traverse((child) => {
+      if (!(child as THREE.Mesh).isMesh) return;
+      const mesh = child as THREE.Mesh;
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      if (!mat.emissive) return;
+
+      const pos = mesh.position;
+      // Position-based highlight on the GLB mesh
+      if (pos.x < -0.15 && pos.y > 0.1) {
+        mat.emissive.set(cylColors[0]!);
+        mat.emissiveIntensity = cylIntensities[0]!;
+      } else if (pos.x >= -0.15 && pos.x < 0.05 && pos.y > 0.1) {
+        mat.emissive.set(cylColors[1]!);
+        mat.emissiveIntensity = cylIntensities[1]!;
+      } else if (pos.x >= 0.05 && pos.x < 0.25 && pos.y > 0.1) {
+        mat.emissive.set(cylColors[2]!);
+        mat.emissiveIntensity = cylIntensities[2]!;
+      } else if (pos.x >= 0.25 && pos.y > 0.1) {
+        mat.emissive.set(cylColors[3]!);
+        mat.emissiveIntensity = cylIntensities[3]!;
+      } else if (pos.z > 0.3 && pos.y > 0.1) {
+        mat.emissive.set(egtColor);
+        mat.emissiveIntensity = egtInt;
+      } else if (pos.y < 0) {
+        mat.emissive.set(vibColor);
+        mat.emissiveIntensity = vibInt;
+      } else {
+        mat.emissive.set('#000000');
+        mat.emissiveIntensity = 0;
+      }
+    });
   });
 
-  const xs = useMemo(() => [-1.35, -0.45, 0.45, 1.35], []);
+  // Explode animation factor (smooth lerp)
+  const explodeFactor = exploded ? 1 : 0;
 
   return (
     <group ref={group} position={[0, -0.35, 0]}>
-      {/* crankcase */}
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[3.5, 0.72, 1.15]} />
-        <meshStandardMaterial color="#4a5055" roughness={0.42} metalness={0.92} />
-      </mesh>
-      <mesh position={[0, -0.46, 0]}>
-        <boxGeometry args={[3.2, 0.26, 0.98]} />
-        <meshStandardMaterial color="#2f3438" roughness={0.5} metalness={0.8} />
-      </mesh>
-      {/* oil sump */}
-      <mesh position={[0, -0.72, 0]}>
-        <boxGeometry args={[2.1, 0.3, 0.8]} />
-        <meshStandardMaterial color="#262b2f" roughness={0.6} metalness={0.7} />
-      </mesh>
+      {/* GLB model — fades when exploded */}
+      <group scale={[3, 3, 3]} position={[0, 0.1, 0.5]}>
+        <primitive object={clonedScene} />
+      </group>
 
-      {/* crankshaft / prop flange */}
-      <mesh position={[2.05, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[0.16, 0.16, 0.8, 20]} />
-        {metal("#9aa0a5", 0.25, 1)}
-      </mesh>
-      <mesh position={[2.5, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.42, 0.42, 0.1, 28]} />
-        {metal("#7f868c", 0.3, 1)}
-      </mesh>
+      {/* Exploded view overlay — procedural parts */}
+      {EXPLODE_PARTS.map((part, i) => {
+        const t = explodeFactor;
+        const x = part.restX + (part.explodeX - part.restX) * t;
+        const y = part.restY + (part.explodeY - part.restY) * t;
+        const z = (part.restZ ?? 0) + ((part.explodeZ ?? 0) - (part.restZ ?? 0)) * t;
 
-      {/* accessory / alternator */}
-      <mesh position={[-1.95, -0.05, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.3, 0.3, 0.55, 20]} />
-        {metal("#3a4045", 0.5, 0.85)}
-      </mesh>
+        // Highlight color for this part
+        let emissive = '#000000';
+        let emissiveI = 0;
+        if (part.name.includes('1') && part.name.includes('CYL')) {
+          emissive = tempToColor(h.cyl1CHT);
+          emissiveI = tempToIntensity(h.cyl1CHT);
+        } else if (part.name.includes('2') && part.name.includes('CYL')) {
+          emissive = tempToColor(h.cyl2CHT);
+          emissiveI = tempToIntensity(h.cyl2CHT);
+        } else if (part.name.includes('3') && part.name.includes('CYL')) {
+          emissive = tempToColor(h.cyl3CHT);
+          emissiveI = tempToIntensity(h.cyl3CHT);
+        } else if (part.name.includes('4') && part.name.includes('CYL')) {
+          emissive = tempToColor(h.cyl4CHT);
+          emissiveI = tempToIntensity(h.cyl4CHT);
+        } else if (part.name === 'EXHAUST') {
+          emissive = tempToColor(h.egt, 700, 780);
+          emissiveI = tempToIntensity(h.egt, 700, 780);
+        } else if (part.name === 'OIL SUMP') {
+          emissive = h.oilTemp > 110 ? AMBER : CYAN;
+          emissiveI = h.oilTemp > 110 ? 0.5 : 0;
+        }
 
-      {/* cylinders */}
-      {xs.map((x, i) => (
-        <Cylinder
-          key={i}
-          index={i + 1}
-          x={x}
-          selected={selectedCylinder === i + 1}
-          degraded={degradedCylinder === i + 1 && fault > 0.05}
-          onSelect={(n) => onSelectCylinder?.(n)}
-        />
-      ))}
+        const opacity = 0.15 + explodeFactor * 0.85;
 
-      {/* intake manifold (rear) */}
-      <mesh position={[0, 0.9, -0.55]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.11, 0.11, 3.1, 16]} />
-        {metal("#5c6369", 0.4)}
-      </mesh>
-      {xs.map((x, i) => (
-        <mesh key={`in-${i}`} position={[x, 0.9, -0.36]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.07, 0.07, 0.4, 12]} />
-          {metal("#5c6369", 0.4)}
-        </mesh>
-      ))}
+        return (
+          <group key={part.name} position={[x, y, z]}>
+            {part.geo === 'box' ? (
+              <mesh>
+                <boxGeometry args={part.size} />
+                <meshStandardMaterial
+                  color={part.color}
+                  roughness={0.45}
+                  metalness={0.85}
+                  transparent
+                  opacity={opacity}
+                  emissive={emissive}
+                  emissiveIntensity={emissiveI}
+                />
+              </mesh>
+            ) : (
+              <mesh rotation={[part.rotX ?? 0, 0, part.rotZ ?? 0]}>
+                <cylinderGeometry args={part.size} />
+                <meshStandardMaterial
+                  color={part.color}
+                  roughness={0.45}
+                  metalness={0.85}
+                  transparent
+                  opacity={opacity}
+                  emissive={emissive}
+                  emissiveIntensity={emissiveI}
+                />
+              </mesh>
+            )}
 
-      {/* exhaust (front) */}
-      <mesh position={[0, 0.05, 0.86]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.14, 0.14, 3.2, 18]} />
-        <meshStandardMaterial color="#6e6259" roughness={0.7} metalness={0.85} />
-      </mesh>
-      {xs.map((x, i) => (
-        <mesh key={`ex-${i}`} position={[x, 0.45, 0.6]} rotation={[Math.PI / 3.2, 0, 0]}>
-          <cylinderGeometry args={[0.09, 0.09, 0.85, 14]} />
-          <meshStandardMaterial
-            color={degradedCylinder === i + 1 && fault > 0.3 ? "#8a5a3c" : "#6e6259"}
-            roughness={0.7}
-            metalness={0.85}
-          />
-        </mesh>
-      ))}
+            {/* Part label — only visible when exploded */}
+            {explodeFactor > 0.5 && (
+              <Html position={[0, 0.4, 0]} center distanceFactor={8}>
+                <div style={{
+                  background: 'rgba(11,14,17,0.9)', border: `1px solid ${emissive}`,
+                  borderRadius: '2px', padding: '2px 6px', whiteSpace: 'nowrap',
+                  opacity: Math.min(1, (explodeFactor - 0.5) * 2),
+                }}>
+                  <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '6px', letterSpacing: '0.12em', color: '#8d979e', textTransform: 'uppercase' }}>
+                    {part.name}
+                  </div>
+                  {part.name.includes('CYL') && (
+                    <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '9px', color: emissive, fontWeight: 600 }}>
+                      {part.name.includes('1') ? h.cyl1CHT.toFixed(0) :
+                       part.name.includes('2') ? h.cyl2CHT.toFixed(0) :
+                       part.name.includes('3') ? h.cyl3CHT.toFixed(0) :
+                       h.cyl4CHT.toFixed(0)}°C
+                    </div>
+                  )}
+                  {part.name === 'EXHAUST' && (
+                    <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '9px', color: emissive, fontWeight: 600 }}>
+                      {h.egt.toFixed(0)}°C
+                    </div>
+                  )}
+                  {part.name === 'OIL SUMP' && (
+                    <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '9px', color: emissive, fontWeight: 600 }}>
+                      {h.oilTemp.toFixed(0)}°C
+                    </div>
+                  )}
+                </div>
+              </Html>
+            )}
+          </group>
+        );
+      })}
 
-      {/* oil lines */}
-      <mesh position={[-0.9, -0.5, 0.5]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.035, 0.035, 1.6, 10]} />
-        <meshStandardMaterial color="#2c3134" roughness={0.9} metalness={0.2} />
-      </mesh>
-
-      {/* sensor hotspots */}
-      {xs.map((x, i) => (
-        <SensorNode key={`s-${i}`} position={[x, 1.22, 0]} tone={degradedCylinder === i + 1 && fault > 0.4 ? (fault > 0.75 ? CRITICAL : AMBER) : CYAN} active />
-      ))}
-      <SensorNode position={[-1.95, 0.32, 0.3]} active />
-      <SensorNode position={[0, -0.9, 0.42]} active />
-      <SensorNode position={[1.6, 0.15, 0.86]} active />
+      {/* Live telemetry labels — always visible */}
+      {highlights && !exploded && (
+        <>
+          <PartLabel position={[-1.35, 1.5, 0]} label="CYL 1" value={`${h.cyl1CHT.toFixed(0)}°C`} color={tempToColor(h.cyl1CHT)} type="CHT" />
+          <PartLabel position={[-0.45, 1.5, 0]} label="CYL 2" value={`${h.cyl2CHT.toFixed(0)}°C`} color={tempToColor(h.cyl2CHT)} type="CHT" pulse={h.cyl2CHT > 200} />
+          <PartLabel position={[0.45, 1.5, 0]} label="CYL 3" value={`${h.cyl3CHT.toFixed(0)}°C`} color={tempToColor(h.cyl3CHT)} type="CHT" />
+          <PartLabel position={[1.35, 1.5, 0]} label="CYL 4" value={`${h.cyl4CHT.toFixed(0)}°C`} color={tempToColor(h.cyl4CHT)} type="CHT" />
+          <PartLabel position={[0, 0.9, 0.8]} label="EGT" value={`${h.egt.toFixed(0)}°C`} color={tempToColor(h.egt, 700, 780)} type="EXHAUST" />
+          <PartLabel position={[0, -0.9, 0.3]} label="OIL" value={`${h.oilTemp.toFixed(0)}°C`} color={h.oilTemp > 110 ? AMBER : CYAN} type="OIL" />
+          <PartLabel position={[2.2, 0.2, 0]} label="RPM" value={`${h.rpm.toFixed(0)}`} color={h.rpm > 3500 ? AMBER : CYAN} type="ENGINE" />
+          <PartLabel position={[0, -1.1, 0]} label="VIB" value={`${h.vibration.toFixed(2)} m/s²`} color={h.vibration > 1.5 ? CRITICAL : h.vibration > 0.9 ? AMBER : CYAN} type="VIBRATION" />
+        </>
+      )}
     </group>
   );
 }
+
+function PartLabel({
+  position, label, value, color, type, pulse = false,
+}: {
+  position: [number, number, number]; label: string; value: string; color: string; type: string; pulse?: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Html position={position} center distanceFactor={8} style={{ pointerEvents: 'auto' }}>
+      <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          background: 'rgba(11,14,17,0.85)', border: `1px solid ${color}`, borderRadius: '2px',
+          padding: hovered ? '4px 8px' : '2px 6px', cursor: 'pointer', whiteSpace: 'nowrap',
+          transition: 'all 0.2s', boxShadow: pulse ? `0 0 12px ${color}` : 'none',
+        }}
+      >
+        <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: '7px', letterSpacing: '0.12em', color: '#8d979e', textTransform: 'uppercase' }}>{label}</div>
+        <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: hovered ? '12px' : '10px', color, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+        {hovered && <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: '6px', color: '#64748b', marginTop: '2px' }}>{type} · LIVE</div>}
+      </div>
+    </Html>
+  );
+}
+
+useGLTF.preload('/engine.glb');

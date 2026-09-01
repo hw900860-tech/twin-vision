@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Expand, Shrink } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
 import {
   Bar,
@@ -124,6 +124,7 @@ export function ProblemSection() {
 /* ---------------- 02 DIGITAL TWIN + interactive engine ---------------- */
 export function TwinSection() {
   const [selected, setSelected] = useState<number | null>(3);
+  const [exploded, setExploded] = useState(false);
   const cyl = CYLINDERS.find((c) => c.id === selected) ?? null;
 
   const chain = [
@@ -144,6 +145,13 @@ export function TwinSection() {
 
       <div className="mt-12 grid gap-4 lg:grid-cols-[1fr_360px]">
         <Panel label="INTERACTIVE TWIN" corner="DRAG TO ORBIT · CLICK A CYLINDER">
+          <button
+            onClick={() => setExploded(!exploded)}
+            className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 text-[9px] label-xs border border-border hover:border-cyan/50 bg-panel/80 backdrop-blur-sm transition-colors"
+          >
+            {exploded ? <Shrink className="h-3 w-3" /> : <Expand className="h-3 w-3" />}
+            {exploded ? "ASSEMBLE" : "EXPLODE"}
+          </button>
           <div className="relative h-[420px] sm:h-[520px]">
             <div className="absolute inset-0 grid-bg-fine opacity-40" />
             <ClientOnly
@@ -152,7 +160,7 @@ export function TwinSection() {
               }
             >
               <Suspense fallback={<div className="grid h-full place-items-center label-xs">LOADING TWIN GEOMETRY…</div>}>
-                <EngineCanvas interactive spin={false} fault={0.6} selectedCylinder={selected} onSelectCylinder={setSelected} />
+                <EngineCanvas interactive spin={false} fault={0.6} selectedCylinder={selected} onSelectCylinder={setSelected} exploded={exploded} />
               </Suspense>
             </ClientOnly>
             <div className="pointer-events-none absolute top-3 left-3 label-xs">AE-P4 / TWIN VIEW</div>
