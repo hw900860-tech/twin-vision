@@ -13,23 +13,23 @@ type BiomeConfig = {
 
 const BIOME_LIGHTING: Record<string, BiomeConfig> = {
   himalaya: {
-    ambient: 0.35, ambientColor: '#b0c0d8',
-    sun: [40, 60, 20], sunIntensity: 1.3, sunColor: '#e0e8f0',
-    fog: '#1a2744', fogNear: 30, fogFar: 400, bg: '#0c1425',
+    ambient: 0.42, ambientColor: '#a8bcd4',
+    sun: [80, 120, 60], sunIntensity: 1.4, sunColor: '#edf3fa',
+    fog: '#1e2d42', fogNear: 120, fogFar: 1200, bg: '#0d1726',
   },
   thar: {
-    ambient: 0.6, ambientColor: '#f0d8a0',
-    sun: [30, 50, 20], sunIntensity: 1.5, sunColor: '#ffe8c0',
-    fog: '#2a1a0a', fogNear: 25, fogFar: 350, bg: '#1a1008',
+    ambient: 0.55, ambientColor: '#ebd0a0',
+    sun: [90, 100, 40], sunIntensity: 1.5, sunColor: '#ffebc4',
+    fog: '#302014', fogNear: 90, fogFar: 1000, bg: '#1c120a',
   },
   coastal: {
-    ambient: 0.45, ambientColor: '#a0b8d0',
-    sun: [35, 45, 25], sunIntensity: 1.2, sunColor: '#d0e0f0',
-    fog: '#0a1a2a', fogNear: 30, fogFar: 380, bg: '#081828',
+    ambient: 0.48, ambientColor: '#a4b8cc',
+    sun: [70, 110, 50], sunIntensity: 1.35, sunColor: '#d8e8f8',
+    fog: '#16283a', fogNear: 100, fogFar: 1100, bg: '#0a1828',
   },
 };
 
-const DEFAULT_CONFIG: BiomeConfig = { ambient: 0.35, ambientColor: "#b0c0d8", sun: [40, 60, 20] as [number, number, number], sunIntensity: 1.3, sunColor: "#e0e8f0", fog: "#1a2744", fogNear: 30, fogFar: 400, bg: "#0c1425" };
+const DEFAULT_CONFIG: BiomeConfig = { ambient: 0.42, ambientColor: '#a8bcd4', sun: [80, 120, 60], sunIntensity: 1.4, sunColor: '#edf3fa', fog: '#1e2d42', fogNear: 120, fogFar: 1200, bg: '#0d1726' };
 
 function SceneContent() {
   const biome = useFlightStore((s) => s.biome);
@@ -49,9 +49,9 @@ function SceneContent() {
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
       />
-      <hemisphereLight args={[config.ambientColor, '#1a1a1a', 0.4]} />
+      <hemisphereLight args={[config.ambientColor, '#12161c', 0.45]} />
 
-      <Stars radius={200} depth={100} count={3000} factor={4} saturation={0} />
+      <Stars radius={300} depth={120} count={3500} factor={4} saturation={0} />
 
       <TerrainChunks />
       <UAVModel />
@@ -64,7 +64,7 @@ export function FlightSimulator() {
     <Canvas
       shadows
       dpr={[1, 1.75]}
-      camera={{ position: [0, 24, 28], fov: 52, near: 0.1, far: 1000 }}
+      camera={{ position: [0, 24, 28], fov: 50, near: 0.1, far: 2000 }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       style={{ cursor: 'grab' }}
     >
