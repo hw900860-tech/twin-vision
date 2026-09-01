@@ -309,7 +309,8 @@ export function runGearboxModel(state: EngineStateInputs): PropGearboxMLOutput {
   };
 }
 
-// Decision Engine & Health Fusion
+import { generateAlerts, type EngineAlert } from './EngineAlerts';
+
 export interface EngineDecisionResult {
   overallHealth: number; // 0-100%
   overallStatus: SubsystemStatus;
@@ -318,6 +319,7 @@ export interface EngineDecisionResult {
   confidence: number;
   diagnosisText: string;
   recommendedAction: string;
+  alerts: EngineAlert[];
   modelOutputs: {
     cylhead: CylinderHeadMLOutput;
     exhaust: ExhaustMLOutput;
@@ -358,6 +360,18 @@ export function runEngineDecisionEngine(state: EngineStateInputs): EngineDecisio
 
   const confidence = 94.2 + (state.altitude > 15000 ? 3.5 : 0);
 
+  // Generate live telemetry alerts
+  const alerts = generateAlerts({
+    cht: state.cht,
+    egt: state.egt,
+    map: state.map,
+    oilPressure: state.oilPressure,
+    oilTemp: state.oilTemp,
+    vibrationRMS: state.vibrationRMS,
+    rpm: state.rpm,
+    health: overallHealth / 100,
+  });
+
   // Dynamic Explainable Diagnostics Generation
   let diagnosisText = 'All 6 engine subsystems operating within normal parameters. Telemetry streams balanced.';
   let recommendedAction = 'Maintain current flight profile and monitor flight instrumentation.';
@@ -387,6 +401,7 @@ export function runEngineDecisionEngine(state: EngineStateInputs): EngineDecisio
     confidence,
     diagnosisText,
     recommendedAction,
+    alerts,
     modelOutputs: { cylhead, exhaust, turbo, crankcase, oil, gearbox },
   };
 }

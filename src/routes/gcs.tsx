@@ -299,7 +299,24 @@ function GcsPage() {
             <Kpi label="ENGINE HEALTH" value={`${(healthIndex * 100).toFixed(1)}%`} sub="COMPOSITE / AE-P4" />
             <Kpi label="REMAINING USEFUL LIFE" value={`${(rulHours || 420).toFixed(1)} H`} sub="ML PREDICTED CONFIDENCE 94%" tone="cyan" />
             <Kpi label="MISSION RISK" value={healthIndex < 0.6 ? "HIGH" : healthIndex < 0.8 ? "MEDIUM" : "NOMINAL"} sub={`READINESS ${(healthIndex * 100).toFixed(0)}%`} tone={healthIndex < 0.7 ? "amber" : "cyan"} />
-            <Kpi label="ACTIVE ADVISORIES" value={activeAlerts?.length ? `${activeAlerts.length}` : "0"} sub="0 CRITICAL / NOMINAL" tone={activeAlerts?.length ? "amber" : "nominal"} />
+            <Kpi
+              label="ACTIVE ADVISORIES"
+              value={`${activeAlerts.length}`}
+              sub={
+                activeAlerts.filter((a) => a.severity === 'CRITICAL').length > 0
+                  ? `${activeAlerts.filter((a) => a.severity === 'CRITICAL').length} CRITICAL / ${activeAlerts.filter((a) => a.severity === 'WARNING').length} WARN`
+                  : activeAlerts.length > 0
+                  ? `${activeAlerts.length} WARNINGS`
+                  : "0 CRITICAL / NOMINAL"
+              }
+              tone={
+                activeAlerts.some((a) => a.severity === 'CRITICAL')
+                  ? "amber"
+                  : activeAlerts.length > 0
+                  ? "amber"
+                  : "nominal"
+              }
+            />
           </div>
 
           {tab === "LIVE TWIN" && (
@@ -381,7 +398,7 @@ function GcsPage() {
                 </Panel>
               </div>
               {/* Engine Alerts Panel */}
-              <EngineAlertsPanel telemetry={telemetry} />
+              <EngineAlertsPanel />
             </div>
           )}
 
@@ -405,6 +422,7 @@ function GcsPage() {
           {tab === "FLEET" && <FleetPanel />}
           {tab === "DIAGNOSTICS" && (
             <div className="grid gap-4">
+              <EngineAlertsPanel />
               <ExplainablePanel />
               <RulPanel severity={0.45} />
             </div>
