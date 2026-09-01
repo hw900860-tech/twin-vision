@@ -11,6 +11,8 @@ import { FleetPanel } from "@/features/fleet/FleetPanel";
 import { BASELINE_CONDITIONS, simulate } from "@/lib/domain/engine/model";
 import { EngineAlertsPanel } from "@/features/digital-twin/EngineAlerts";
 import type { PartHighlights } from "@/features/digital-twin/EngineModel";
+import { JARVISPartInspector } from "@/features/digital-twin/JARVISPartInspector";
+import { JARVISExplodeStudio } from "@/features/digital-twin/JARVISExplodeStudio";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 
@@ -57,6 +59,8 @@ function GcsPage() {
   const [tab, setTab] = useState<NavKey>("LIVE TWIN");
   const [exploded, setExploded] = useState(false);
   const [showLabels, setShowLabels] = useState(true);
+  const [selectedZone, setSelectedZone] = useState<string | null>(null);
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
   const t = useClock();
   const state = simulate(t * 0.4, BASELINE_CONDITIONS, 0.34);
 
@@ -185,20 +189,42 @@ function GcsPage() {
               <div className="grid gap-4 xl:grid-cols-[1fr_420px]">
                 <TelemetryDashboard fault={0.34} />
                 <Panel label="LIVE ENGINE TWIN" corner="AE-P4 / INTERACTIVE">
-                  <button
-                    onClick={() => setExploded(!exploded)}
-                    aria-pressed={exploded}
-                    className="absolute top-3 right-3 z-10 flex min-h-10 items-center gap-2 border border-cyan/50 bg-panel/85 px-3 text-[9px] label-xs text-cyan backdrop-blur-sm transition-colors hover:bg-cyan/10"
-                  >
-                    {exploded ? <Shrink className="h-3 w-3" /> : <Expand className="h-3 w-3" />}
-                    {exploded ? "ASSEMBLE" : "EXPLODE"}
-                  </button>
+                  <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsStudioOpen(true);
+                      }}
+                      className="flex min-h-10 items-center gap-1.5 border border-cyan bg-cyan/20 px-2.5 text-[9px] font-mono label-xs text-cyan backdrop-blur-sm transition-colors hover:bg-cyan/30 cursor-pointer pointer-events-auto select-none"
+                    >
+                      <Expand className="h-3 w-3" /> FULL-SCREEN LAB
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setExploded((prev) => !prev);
+                      }}
+                      aria-pressed={exploded}
+                      className="flex min-h-10 items-center gap-2 border border-cyan/50 bg-panel/95 px-3 text-[9px] font-mono label-xs text-cyan backdrop-blur-sm transition-colors hover:bg-cyan/20 cursor-pointer pointer-events-auto select-none"
+                    >
+                      {exploded ? <Shrink className="h-3 w-3" /> : <Expand className="h-3 w-3" />}
+                      {exploded ? "ASSEMBLE" : "JARVIS EXPLODE"}
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setShowLabels((visible) => !visible)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowLabels((visible) => !visible);
+                    }}
                     aria-pressed={showLabels}
                     aria-label={showLabels ? "Hide engine annotations" : "Show engine annotations"}
-                    className="absolute top-3 left-3 z-10 flex min-h-10 items-center gap-2 border border-border bg-panel/85 px-3 text-[9px] label-xs backdrop-blur-sm transition-colors hover:border-cyan/50 hover:text-cyan"
+                    className="absolute top-3 left-3 z-30 flex min-h-10 items-center gap-2 border border-border bg-panel/95 px-3 text-[9px] font-mono label-xs backdrop-blur-sm transition-colors hover:border-cyan/50 hover:text-cyan cursor-pointer pointer-events-auto select-none"
                   >
                     <Tag className="h-3 w-3" /> LABELS {showLabels ? "ON" : "OFF"}
                   </button>
@@ -216,6 +242,8 @@ function GcsPage() {
                            highlights={highlights}
                            exploded={exploded}
                            showLabels={showLabels}
+                           onSelectZone={(zoneName) => setSelectedZone(zoneName)}
+                           selectedZone={selectedZone}
                          />
                       </Suspense>
                     </ClientOnly>
@@ -238,6 +266,23 @@ function GcsPage() {
               <EngineAlertsPanel telemetry={telemetry} />
             </div>
           )}
+
+          {selectedZone && (
+            <JARVISPartInspector
+              zoneName={selectedZone}
+              highlights={highlights}
+              onClose={() => setSelectedZone(null)}
+              onExplodeToggle={() => setExploded(!exploded)}
+              isExploded={exploded}
+            />
+          )}
+
+          <JARVISExplodeStudio
+            isOpen={isStudioOpen}
+            onClose={() => setIsStudioOpen(false)}
+            highlights={highlights}
+          />
+
 
           {tab === "FLEET" && <FleetPanel />}
           {tab === "DIAGNOSTICS" && (

@@ -1,10 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, ChevronDown, Eye, EyeOff, Expand, Plane, RotateCw, Shrink } from "lucide-react";
+import { ArrowRight, ChevronDown, Eye, EyeOff, Expand, Plane, RotateCw, Shrink, Zap } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
 import { TechButton, useClock, useReducedMotion } from "@/components/hud/primitives";
 import { simulate, BASELINE_CONDITIONS } from "@/lib/domain/engine/model";
 import type { PartHighlights } from "@/features/digital-twin/EngineModel";
+import { JARVISPartInspector } from "@/features/digital-twin/JARVISPartInspector";
+import { JARVISExplodeStudio } from "@/features/digital-twin/JARVISExplodeStudio";
 
 const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
 
@@ -31,7 +33,7 @@ function BootOverlay({ onDone }: { onDone: () => void }) {
   ];
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 bg-background transition-opacity duration-700" style={{ opacity: step >= 7 ? 0 : 1 }}>
+    <div className="pointer-events-none absolute inset-0 z-50 bg-background transition-opacity duration-700" style={{ opacity: step >= 7 ? 0 : 1 }}>
       <div className="absolute inset-0 grid-bg-fine opacity-60" style={{ opacity: step >= 1 ? 0.6 : 0, transition: "opacity .5s" }} />
       <div className="absolute top-1/2 left-1/2 w-[min(90vw,420px)] -translate-x-1/2 -translate-y-1/2">
         <div className="mb-6 font-display text-sm tracking-[0.42em]" style={{ opacity: step >= 2 ? 1 : 0, transition: "opacity .6s" }}>
@@ -56,6 +58,8 @@ export function Hero() {
   const [booted, setBooted] = useState(false);
   const [exploded, setExploded] = useState(false);
   const [showLabels, setShowLabels] = useState(true);
+  const [selectedZone, setSelectedZone] = useState<string | null>(null);
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
   const onBooted = useCallback(() => setBooted(true), []);
   const t = useClock();
 
@@ -78,19 +82,19 @@ export function Hero() {
       <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 62% 48%, oklch(0.28 0.03 205 / 45%), transparent 62%)" }} />
 
       {/* 3D Model area — right side */}
-      <div className="absolute inset-y-12 right-0 z-10 hidden w-[55%] lg:block">
+      <div className="absolute inset-y-12 right-0 z-20 hidden w-[55%] lg:block">
         <div className="absolute inset-6 border-l border-border/60">
           <div className="absolute inset-0 grid-bg-fine opacity-30" />
-          <div className="absolute inset-6 rounded-full border border-cyan/10" />
-          <div className="absolute inset-[16%] rounded-full border border-amber/10" />
+          <div className="absolute inset-6 rounded-full border border-cyan/10 pointer-events-none" />
+          <div className="absolute inset-[16%] rounded-full border border-amber/10 pointer-events-none" />
 
-          {/* Canvas layer — z-0 */}
+          {/* Canvas layer */}
           <div className="absolute inset-0 z-0">
             <ClientOnly fallback={<div className="grid h-full place-items-center label-xs">LOADING ROTAX MODEL</div>}>
               <Suspense fallback={<div className="grid h-full place-items-center label-xs">LOADING ROTAX MODEL</div>}>
                 <EngineCanvas
                   interactive
-                  autoRotate
+                  autoRotate={!exploded}
                   spin={false}
                   cameraView="overview"
                   showLabels={showLabels}
@@ -100,43 +104,65 @@ export function Hero() {
                   modelScale={1.15}
                   modelPosition={[0, -0.25, 0]}
                   cameraZ={7}
+                  onSelectZone={(zoneName) => setSelectedZone(zoneName)}
+                  selectedZone={selectedZone}
                 />
               </Suspense>
             </ClientOnly>
           </div>
 
-          {/* Controls layer — z-20, ABOVE canvas */}
-          <div className="absolute inset-0 z-20 pointer-events-none">
+          {/* Controls layer */}
+          <div className="absolute inset-0 z-30 pointer-events-none">
             {/* Top-left controls */}
-            <div className="absolute top-4 left-4 pointer-events-auto">
-              <div className="label-xs text-cyan/70 mb-2">ROTAX 914 / AE-P4</div>
-              <div className="flex gap-1.5">
+            <div className="absolute top-4 left-4 pointer-events-auto z-40">
+              <div className="label-xs text-cyan/90 mb-2 flex items-center gap-1.5 font-bold">
+                <Zap className="h-3 w-3 text-cyan" /> ROTAX 914 / IRON MAN JARVIS HUD
+              </div>
+              <div className="flex gap-2">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setExploded(prev => !prev); }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="flex min-h-9 items-center gap-1.5 border px-2.5 py-1.5 text-[9px] label-xs tracking-wider transition-all cursor-pointer"
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsStudioOpen(true);
+                  }}
+                  className="flex min-h-10 items-center gap-2 border border-cyan bg-cyan/20 px-3 py-1.5 text-[10px] font-mono tracking-wider text-cyan transition-all cursor-pointer pointer-events-auto select-none hover:bg-cyan/30 shadow-[0_0_16px_rgba(111,216,232,0.35)]"
+                >
+                  <Expand className="h-3.5 w-3.5" />
+                  FULL-SCREEN DISMANTLE LAB
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setExploded((prev) => !prev);
+                  }}
+                  className="flex min-h-10 items-center gap-2 border px-3 py-1.5 text-[10px] font-mono tracking-wider transition-all cursor-pointer pointer-events-auto select-none"
                   style={{
-                    borderColor: exploded ? '#6fd8e8' : 'rgba(255,255,255,0.15)',
-                    background: exploded ? 'rgba(111,216,232,0.15)' : 'rgba(20,22,28,0.85)',
-                    color: exploded ? '#6fd8e8' : '#8d979e',
-                    boxShadow: exploded ? '0 0 12px rgba(111,216,232,0.2)' : 'none',
+                    borderColor: exploded ? '#6fd8e8' : 'rgba(255,255,255,0.25)',
+                    background: exploded ? 'rgba(111,216,232,0.25)' : 'rgba(20,22,28,0.92)',
+                    color: exploded ? '#6fd8e8' : '#ffffff',
                   }}
                 >
-                  {exploded ? <Shrink className="h-3 w-3" /> : <Expand className="h-3 w-3" />}
+                  {exploded ? <Shrink className="h-3.5 w-3.5" /> : <Expand className="h-3.5 w-3.5" />}
                   {exploded ? "ASSEMBLE" : "EXPLODE"}
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowLabels(prev => !prev); }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="flex min-h-9 items-center gap-1.5 border px-2.5 py-1.5 text-[9px] label-xs tracking-wider transition-all cursor-pointer"
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowLabels((prev) => !prev);
+                  }}
+                  className="flex min-h-10 items-center gap-2 border px-3 py-1.5 text-[10px] font-mono tracking-wider transition-all cursor-pointer pointer-events-auto select-none"
                   style={{
-                    borderColor: showLabels ? '#f0a63c' : 'rgba(255,255,255,0.15)',
-                    background: showLabels ? 'rgba(240,166,60,0.15)' : 'rgba(20,22,28,0.85)',
-                    color: showLabels ? '#f0a63c' : '#8d979e',
-                    boxShadow: showLabels ? '0 0 12px rgba(240,166,60,0.2)' : 'none',
+                    borderColor: showLabels ? '#f0a63c' : 'rgba(255,255,255,0.25)',
+                    background: showLabels ? 'rgba(240,166,60,0.25)' : 'rgba(20,22,28,0.92)',
+                    color: showLabels ? '#f0a63c' : '#ffffff',
                   }}
                 >
-                  {showLabels ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                  {showLabels ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                   {showLabels ? "LABELS ON" : "LABELS OFF"}
                 </button>
               </div>
@@ -144,19 +170,19 @@ export function Hero() {
 
             {/* Bottom-right info */}
             <div className="absolute right-5 bottom-5 text-right pointer-events-none">
-              <div className="flex items-center gap-2 justify-end label-xs text-muted-foreground/70">
+              <div className="flex items-center gap-2 justify-end label-xs text-cyan">
                 <RotateCw className="h-3 w-3 animate-[spin_4s_linear_infinite]" />
-                <span>AE-P4 · AUTO-ROTATE</span>
+                <span>INTERACTIVE 3D · HOLD & DRAG TO ROTATE</span>
               </div>
-              <div className="mt-1 readout text-[10px] tracking-[0.22em] text-muted-foreground/50">DRAG TO INSPECT · SCROLL TO ZOOM</div>
+              <div className="mt-1 readout text-[10px] tracking-[0.22em] text-muted-foreground">SCROLL TO ZOOM · CLICK ANY PART TO STUDY</div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Text block — left side */}
-      <div className="relative z-10 mx-auto flex min-h-[100svh] max-w-[1600px] items-center px-5 pt-20 pb-28 lg:px-10">
-        <div className="max-w-xl" style={{ opacity: booted ? 1 : 0, transform: booted ? "none" : "translateY(20px)", transition: "opacity .9s, transform .9s" }}>
+      <div className="relative z-10 mx-auto flex min-h-[100svh] max-w-[1600px] items-center px-5 pt-20 pb-28 lg:px-10 pointer-events-none">
+        <div className="max-w-xl pointer-events-auto" style={{ opacity: booted ? 1 : 0, transform: booted ? "none" : "translateY(20px)", transition: "opacity .9s, transform .9s" }}>
           <div className="mb-6 flex items-center gap-3">
             <span className="h-px w-8 bg-cyan" />
             <span className="label-xs text-cyan">AI-ENABLED DIGITAL ENGINE INTELLIGENCE</span>
@@ -169,15 +195,19 @@ export function Hero() {
             to anticipate degradation before conventional thresholds are crossed.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => setIsStudioOpen(true)}
+              className="group relative inline-flex items-center gap-3 border border-cyan/70 bg-cyan/15 px-6 py-3 font-mono text-[11px] tracking-[0.2em] uppercase text-cyan transition-colors hover:bg-cyan/25 cursor-pointer shadow-[0_0_20px_rgba(111,216,232,0.3)]"
+            >
+              <Zap className="h-4 w-4" /> DISMANTLE 3D STUDIO <ArrowRight className="h-3.5 w-3.5" />
+            </button>
             <Link to="/gcs">
-              <TechButton>ENTER DIGITAL TWIN <ArrowRight className="h-3.5 w-3.5" /></TechButton>
+              <TechButton variant="ghost">GROUND CONTROL</TechButton>
             </Link>
             <Link to="/sim">
               <TechButton variant="ghost"><Plane className="h-3.5 w-3.5" /> FLIGHT SIMULATOR</TechButton>
             </Link>
-            <a href="#system">
-              <TechButton variant="ghost">EXPLORE SYSTEM</TechButton>
-            </a>
           </div>
           <div className="mt-8 flex items-center gap-2 label-xs">
             <span className="border border-amber/40 bg-amber/10 px-2 py-1 text-amber">PROTOTYPE / RESEARCH DEMONSTRATOR</span>
@@ -191,6 +221,24 @@ export function Hero() {
       </a>
 
       {!booted && <BootOverlay onDone={onBooted} />}
+
+      {/* JARVIS Part Inspector Modal */}
+      {selectedZone && (
+        <JARVISPartInspector
+          zoneName={selectedZone}
+          highlights={highlights}
+          onClose={() => setSelectedZone(null)}
+          onExplodeToggle={() => setExploded(!exploded)}
+          isExploded={exploded}
+        />
+      )}
+
+      {/* Full-Screen JARVIS Explode Studio */}
+      <JARVISExplodeStudio
+        isOpen={isStudioOpen}
+        onClose={() => setIsStudioOpen(false)}
+        highlights={highlights}
+      />
     </section>
   );
 }
