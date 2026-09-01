@@ -30,7 +30,7 @@ export type EngineCanvasProps = {
   autoRotate?: boolean;
 };
 
-function CameraRig({ view, cameraZ }: { view: EngineCameraView; cameraZ: number }) {
+function CameraRig({ view, cameraZ, disabled }: { view: EngineCameraView; cameraZ: number; disabled: boolean }) {
   const { camera } = useThree();
   const target = useMemo(() => new THREE.Vector3(), []);
   const lastView = useRef(view);
@@ -42,6 +42,7 @@ function CameraRig({ view, cameraZ }: { view: EngineCameraView; cameraZ: number 
   }
 
   useFrame((_, delta) => {
+    if (disabled) return; // Don't fight with OrbitControls
     if (transition.current >= 1) return;
     const [x, y, z] = CAMERA_POSITIONS[view];
     target.set(x, y, view === 'overview' ? cameraZ : z);
@@ -74,7 +75,7 @@ export default function EngineCanvas({
       gl={{ antialias: true, powerPreference: 'high-performance' }}
     >
       <fog attach="fog" args={['#0b0e11', 9, 20]} />
-      <CameraRig view={cameraView} cameraZ={cameraZ} />
+      <CameraRig view={cameraView} cameraZ={cameraZ} disabled={interactive} />
       <ambientLight intensity={0.35} />
       <directionalLight position={[5, 8, 6]} intensity={1.5} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
       <directionalLight position={[-6, 2, -4]} intensity={0.5} color="#6fd8e8" />

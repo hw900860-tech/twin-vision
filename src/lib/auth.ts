@@ -11,5 +11,5 @@ export const auth = betterAuth({
     disableSignUp: true,
   },
   plugins: [admin()],
-  trustedOrigins: ["http://localhost:5173", "*.e2b.app"],
+  trustedOrigins: ["http://localhost:5173", "*.e2b.app", "*.daytonaproxy01.net"],
 });
