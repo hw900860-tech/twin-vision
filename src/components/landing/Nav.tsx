@@ -5,7 +5,7 @@ import { StatusDot } from "@/components/hud/primitives";
 
 const ITEMS = [
   { label: "SYSTEM", href: "#system" },
-  { label: "DIGITAL TWIN", href: "#twin" },
+  { label: "LIVE ENGINE", href: "#live" },
   { label: "PREDICTIVE", href: "#predictive" },
   { label: "MISSION", href: "#mission" },
 ];
@@ -20,6 +20,15 @@ export function Nav() {
     window.addEventListener("scroll", h, { passive: true });
     return () => window.removeEventListener("scroll", h);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
 
   return (
     <header
@@ -45,31 +54,37 @@ export function Nav() {
             <Plane className="h-3 w-3" />
             FLIGHT SIM
           </Link>
-          <Link to="/gcs" className="label-xs border border-cyan/60 px-3 py-1.5 text-cyan transition-colors hover:bg-cyan/10">
-            GCS
+          <Link to="/admin/login" className="label-xs border border-cyan/60 px-3 py-1.5 text-cyan transition-colors hover:bg-cyan/10">
+            ADMIN ACCESS
           </Link>
           <span className="flex items-center gap-2 label-xs">
             SYSTEM ONLINE <StatusDot />
           </span>
         </nav>
 
-        <button className="md:hidden" onClick={() => setOpen((o) => !o)} aria-label="Menu">
+        <button
+          className="min-h-11 min-w-11 md:hidden"
+          onClick={() => setOpen((o) => !o)}
+          aria-label={open ? "Close navigation" : "Open navigation"}
+          aria-expanded={open}
+          aria-controls="mobile-navigation"
+        >
           {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
         </button>
       </div>
 
       {open && (
-        <div className="border-t border-border bg-background/95 px-5 py-4 md:hidden">
+        <div id="mobile-navigation" className="border-t border-border bg-background/95 px-5 py-4 md:hidden">
           {ITEMS.map((i) => (
-            <a key={i.href} href={i.href} onClick={() => setOpen(false)} className="block py-2 label-xs">
+            <a key={i.href} href={i.href} onClick={() => setOpen(false)} className="flex min-h-11 items-center label-xs">
               {i.label}
             </a>
           ))}
-          <Link to="/sim" onClick={() => setOpen(false)} className="mt-2 flex items-center gap-2 py-2 label-xs text-cyan">
+          <Link to="/sim" onClick={() => setOpen(false)} className="mt-2 flex min-h-11 items-center gap-2 label-xs text-cyan">
             <Plane className="h-3 w-3" /> FLIGHT SIMULATOR
           </Link>
-          <Link to="/gcs" onClick={() => setOpen(false)} className="mt-2 block py-2 label-xs text-cyan">
-            ENTER GCS
+          <Link to="/admin/login" onClick={() => setOpen(false)} className="mt-2 flex min-h-11 items-center label-xs text-cyan">
+            ADMIN ACCESS
           </Link>
         </div>
       )}

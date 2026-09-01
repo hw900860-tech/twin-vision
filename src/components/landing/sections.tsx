@@ -1,7 +1,6 @@
-import { lazy, Suspense, useState } from "react";
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Expand, Shrink } from "lucide-react";
-import { ClientOnly } from "@/components/ClientOnly";
+import { ArrowRight } from "lucide-react";
 import {
   Bar,
   DataRow,
@@ -19,9 +18,7 @@ import { ExplainablePanel, MaintenanceAdvisory, RulPanel } from "@/features/pred
 import { SimulationLab } from "@/features/simulation/SimulationLab";
 import { ReplayConsole } from "@/features/mission-replay/ReplayConsole";
 import { FleetPanel } from "@/features/fleet/FleetPanel";
-import { CYLINDERS, simulate, BASELINE_CONDITIONS } from "@/lib/domain/engine/model";
-
-const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
+import { simulate, BASELINE_CONDITIONS } from "@/lib/domain/engine/model";
 
 function Section({
   id,
@@ -121,94 +118,10 @@ export function ProblemSection() {
   );
 }
 
-/* ---------------- 02 DIGITAL TWIN + interactive engine ---------------- */
-export function TwinSection() {
-  const [selected, setSelected] = useState<number | null>(3);
-  const [exploded, setExploded] = useState(false);
-  const cyl = CYLINDERS.find((c) => c.id === selected) ?? null;
-
-  const chain = [
-    { k: "PHYSICAL ENGINE", d: "AE-P4 four-cylinder, read-only ECU interface" },
-    { k: "LIVE TELEMETRY", d: "24 sensor channels, store-and-forward" },
-    { k: "PHYSICS MODEL", d: "Thermodynamic + mechanical expectation model" },
-    { k: "DIGITAL TWIN", d: "Synchronized state, residuals and diagnostics" },
-  ];
-
-  return (
-    <Section id="twin">
-      <SectionHeading
-        index="02"
-        kicker="DIGITAL TWIN"
-        title={<>A synchronized model of the engine, not a dashboard of it.</>}
-        sub="Telemetry is fused with a physics expectation model to build a continuously corrected virtual engine. Select a cylinder to inspect its subsystem state."
-      />
-
-      <div className="mt-12 grid gap-4 lg:grid-cols-[1fr_360px]">
-        <Panel label="INTERACTIVE TWIN" corner="DRAG TO ORBIT · CLICK A CYLINDER">
-          <button
-            onClick={() => setExploded(!exploded)}
-            className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 text-[9px] label-xs border border-border hover:border-cyan/50 bg-panel/80 backdrop-blur-sm transition-colors"
-          >
-            {exploded ? <Shrink className="h-3 w-3" /> : <Expand className="h-3 w-3" />}
-            {exploded ? "ASSEMBLE" : "EXPLODE"}
-          </button>
-          <div className="relative h-[420px] sm:h-[520px]">
-            <div className="absolute inset-0 grid-bg-fine opacity-40" />
-            <ClientOnly
-              fallback={
-                <div className="grid h-full place-items-center label-xs">3D VIEW INITIALIZING — NON-WEBGL FALLBACK AVAILABLE</div>
-              }
-            >
-              <Suspense fallback={<div className="grid h-full place-items-center label-xs">LOADING TWIN GEOMETRY…</div>}>
-                <EngineCanvas interactive spin={false} fault={0.6} selectedCylinder={selected} onSelectCylinder={setSelected} exploded={exploded} />
-              </Suspense>
-            </ClientOnly>
-            <div className="pointer-events-none absolute top-3 left-3 label-xs">AE-P4 / TWIN VIEW</div>
-            <div className="pointer-events-none absolute right-3 bottom-3 label-xs">SENSOR NODES 24 · LINK LIVE</div>
-          </div>
-        </Panel>
-
-        <div className="grid gap-4">
-          <Panel label={cyl ? `CYLINDER 0${cyl.id}` : "SELECT A CYLINDER"} corner={cyl?.status ?? "—"}>
-            <div className="p-4">
-              {cyl ? (
-                <>
-                  <DataRow k="CHT" v={`${cyl.cht}°C`} tone={cyl.health < 0.8 ? "text-amber" : ""} />
-                  <DataRow k="EGT" v={`${cyl.egt}°C`} tone={cyl.health < 0.8 ? "text-amber" : ""} />
-                  <DataRow k="VIBRATION" v={`${cyl.vib} G`} />
-                  <DataRow k="HEALTH" v={`${(cyl.health * 100).toFixed(0)}%`} />
-                  <DataRow k="STATUS" v={cyl.status} tone={cyl.health < 0.8 ? "text-amber" : "text-nominal"} />
-                  <DataRow k="LIKELY ISSUE" v={cyl.issue} />
-                  <Bar className="mt-4" value={cyl.health * 100} tone={cyl.health > 0.85 ? "nominal" : "amber"} />
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">Click a cylinder in the twin view to inspect its state.</p>
-              )}
-            </div>
-          </Panel>
-
-          <Panel label="TWIN CONSTRUCTION">
-            <div className="p-4">
-              {chain.map((c, i) => (
-                <div key={c.k} className="relative pb-5 pl-6 last:pb-0">
-                  <span className="absolute top-1 left-0 h-1.5 w-1.5 bg-cyan" />
-                  {i < chain.length - 1 && <span className="absolute top-3 left-[3px] h-full w-px bg-hairline" />}
-                  <div className="label-xs text-foreground">{c.k}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{c.d}</div>
-                </div>
-              ))}
-            </div>
-          </Panel>
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-/* ---------------- 03 LIVE TWIN ---------------- */
+/* ---------------- 02 LIVE TWIN ---------------- */
 export function LiveSection() {
   return (
-    <Section>
+    <Section id="live">
       <div className="flex flex-wrap items-end justify-between gap-6">
         <SectionHeading index="03" kicker="LIVE DIGITAL TWIN" title={<>Live engine state, continuously reconciled.</>} />
         <SimBadge />
@@ -581,12 +494,9 @@ export function FinaleSection() {
     <div ref={ref} id="gcs" className="relative h-[280vh] border-t border-border/60">
       <div className="sticky top-0 h-screen overflow-hidden">
         <div className="absolute inset-0 grid-bg opacity-50" />
-        <div className="absolute inset-0" style={{ opacity: fade }}>
-          <ClientOnly>
-            <Suspense fallback={null}>
-              <EngineCanvas spin fault={0.5} cameraZ={7.6} />
-            </Suspense>
-          </ClientOnly>
+        <div className="pointer-events-none absolute inset-0" style={{ opacity: fade }}>
+          <div className="absolute top-1/2 left-1/2 h-[min(70vw,620px)] w-[min(70vw,620px)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan/10" />
+          <div className="absolute top-1/2 left-1/2 h-[min(48vw,420px)] w-[min(48vw,420px)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber/10" />
         </div>
 
         <div className="absolute inset-x-0 top-24 mx-auto flex max-w-[1100px] justify-between px-6" style={{ opacity: fade }}>

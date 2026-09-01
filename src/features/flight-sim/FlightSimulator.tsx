@@ -64,7 +64,7 @@ export function FlightSimulator() {
     <Canvas
       shadows
       dpr={[1, 1.75]}
-      camera={{ position: [0, 12, 18], fov: 55, near: 0.1, far: 800 }}
+      camera={{ position: [0, 24, 28], fov: 52, near: 0.1, far: 1000 }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       style={{ cursor: 'grab' }}
     >

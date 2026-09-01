@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState } from 'react';
+import { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -55,41 +55,125 @@ function tempToIntensity(temp: number, warn = 170, crit = 200): number {
   return 0;
 }
 
-// ── Exploded view part definitions ──
-// Each part has a rest position, explode offset, and geometry
-const EXPLODE_PARTS = [
-  { name: 'CYL HEAD 1', restY: 0.6, explodeY: 1.8, restX: -1.2, explodeX: -1.8, color: ROTAX.head, geo: 'box' as const, size: [0.5, 0.25, 0.5] as [number, number, number] },
-  { name: 'CYL HEAD 2', restY: 0.6, explodeY: 1.8, restX: -0.4, explodeX: -0.6, color: ROTAX.head, geo: 'box' as const, size: [0.5, 0.25, 0.5] as [number, number, number] },
-  { name: 'CYL HEAD 3', restY: 0.6, explodeY: 1.8, restX: 0.4, explodeX: 0.6, color: ROTAX.head, geo: 'box' as const, size: [0.5, 0.25, 0.5] as [number, number, number] },
-  { name: 'CYL HEAD 4', restY: 0.6, explodeY: 1.8, restX: 1.2, explodeX: 1.8, color: ROTAX.head, geo: 'box' as const, size: [0.5, 0.25, 0.5] as [number, number, number] },
-  { name: 'CYL BARREL 1', restY: 0.25, explodeY: 0.9, restX: -1.2, explodeX: -1.8, color: ROTAX.cylinder, geo: 'cylinder' as const, size: [0.22, 0.22, 0.35] as [number, number, number] },
-  { name: 'CYL BARREL 2', restY: 0.25, explodeY: 0.9, restX: -0.4, explodeX: -0.6, color: ROTAX.cylinder, geo: 'cylinder' as const, size: [0.22, 0.22, 0.35] as [number, number, number] },
-  { name: 'CYL BARREL 3', restY: 0.25, explodeY: 0.9, restX: 0.4, explodeX: 0.6, color: ROTAX.cylinder, geo: 'cylinder' as const, size: [0.22, 0.22, 0.35] as [number, number, number] },
-  { name: 'CYL BARREL 4', restY: 0.25, explodeY: 0.9, restX: 1.2, explodeX: 1.8, color: ROTAX.cylinder, geo: 'cylinder' as const, size: [0.22, 0.22, 0.35] as [number, number, number] },
-  { name: 'CRANKCASE', restY: -0.05, explodeY: -0.05, restX: 0, explodeX: 0, color: ROTAX.block, geo: 'box' as const, size: [3.0, 0.5, 0.8] as [number, number, number] },
-  { name: 'OIL SUMP', restY: -0.55, explodeY: -1.4, restX: 0, explodeX: 0, color: ROTAX.sump, geo: 'box' as const, size: [1.8, 0.25, 0.6] as [number, number, number] },
-  { name: 'INTAKE', restY: 0.7, explodeY: 2.6, restX: 0, explodeX: 0, restZ: -0.5, explodeZ: -1.2, color: ROTAX.intake, geo: 'cylinder' as const, size: [0.08, 0.08, 2.6] as [number, number, number], rotX: Math.PI / 2 },
-  { name: 'EXHAUST', restY: 0.35, explodeY: -1.8, restX: 0, explodeX: 0, restZ: 0.5, explodeZ: 1.2, color: ROTAX.exhaust, geo: 'cylinder' as const, size: [0.1, 0.1, 2.8] as [number, number, number], rotX: Math.PI / 2 },
-  { name: 'PROP FLANGE', restY: 0, explodeY: 0, restX: 2.0, explodeX: 3.2, color: ROTAX.flange, geo: 'cylinder' as const, size: [0.35, 0.35, 0.12] as [number, number, number], rotZ: Math.PI / 2 },
-];
+function applyRotaxSurfaceColors(geometry: THREE.BufferGeometry) {
+  const position = geometry.getAttribute('position');
+  if (!position) return;
+  const bounds = new THREE.Box3().setFromBufferAttribute(position as THREE.BufferAttribute);
+  const size = bounds.getSize(new THREE.Vector3());
+  const color = new THREE.Color();
+  const colors = new Float32Array(position.count * 3);
 
-/** GLB Engine with explode animation + Rotax colors + live labels */
+  for (let i = 0; i < position.count; i += 1) {
+    const x = (position.getX(i) - bounds.min.x) / Math.max(size.x, 0.001);
+    const y = (position.getY(i) - bounds.min.y) / Math.max(size.y, 0.001);
+    const z = (position.getZ(i) - bounds.min.z) / Math.max(size.z, 0.001);
+
+    if (z > 0.86) color.set(ROTAX.flange);
+    else if (x > 0.68 && y < 0.62) color.set(ROTAX.accent);
+    else if (y > 0.72) color.set(ROTAX.head);
+    else if (y < 0.18) color.set(ROTAX.sump);
+    else if (z < 0.28) color.set(ROTAX.exhaust);
+    else if (y < 0.45) color.set(ROTAX.cylinder);
+    else color.set(ROTAX.block);
+
+    color.multiplyScalar(0.88 + y * 0.18);
+    colors[i * 3] = color.r;
+    colors[i * 3 + 1] = color.g;
+    colors[i * 3 + 2] = color.b;
+  }
+
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+}
+
+type ExplodedFragment = {
+  geometry: THREE.BufferGeometry;
+  material: THREE.MeshStandardMaterial;
+  direction: THREE.Vector3;
+};
+
+function buildExplodedFragments(scene: THREE.Group): ExplodedFragment[] {
+  const meshes: THREE.Mesh[] = [];
+  scene.traverse((child) => {
+    if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh);
+  });
+  const sourceMesh = meshes[0];
+  if (!sourceMesh) return [];
+
+  const sourceGeometry = sourceMesh.geometry.index ? sourceMesh.geometry.toNonIndexed() : sourceMesh.geometry;
+  const position = sourceGeometry.getAttribute('position');
+  const sourceColors = sourceGeometry.getAttribute('color');
+  if (!position) return [];
+
+  const bounds = new THREE.Box3().setFromBufferAttribute(position as THREE.BufferAttribute);
+  const size = bounds.getSize(new THREE.Vector3());
+  const center = bounds.getCenter(new THREE.Vector3());
+  const buckets: { vertices: number[]; colors: number[] }[] = Array.from({ length: 6 }, () => ({ vertices: [], colors: [] }));
+  const centroid = new THREE.Vector3();
+
+  for (let i = 0; i < position.count; i += 3) {
+    centroid.set(0, 0, 0);
+    for (let vertex = 0; vertex < 3; vertex += 1) {
+      centroid.x += position.getX(i + vertex);
+      centroid.y += position.getY(i + vertex);
+      centroid.z += position.getZ(i + vertex);
+    }
+    centroid.multiplyScalar(1 / 3);
+    const verticalBand = Math.min(2, Math.max(0, Math.floor(((centroid.y - bounds.min.y) / size.y) * 3)));
+    const side = centroid.x >= center.x ? 1 : 0;
+    const bucket = verticalBand * 2 + side;
+    for (let vertex = 0; vertex < 3; vertex += 1) {
+      const index = i + vertex;
+      buckets[bucket]!.vertices.push(position.getX(index), position.getY(index), position.getZ(index));
+      if (sourceColors) {
+        buckets[bucket]!.colors.push(sourceColors.getX(index), sourceColors.getY(index), sourceColors.getZ(index));
+      }
+    }
+  }
+
+  const sourceMaterial = Array.isArray(sourceMesh.material) ? sourceMesh.material[0] : sourceMesh.material;
+  if (!(sourceMaterial instanceof THREE.MeshStandardMaterial)) return [];
+
+  return buckets.flatMap((bucket, index) => {
+    if (bucket.vertices.length === 0) return [];
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(bucket.vertices, 3));
+    if (sourceColors) geometry.setAttribute('color', new THREE.Float32BufferAttribute(bucket.colors, 3));
+    geometry.computeVertexNormals();
+    const material = sourceMaterial.clone();
+    material.transparent = true;
+    material.opacity = 0;
+    material.depthWrite = false;
+    const direction = new THREE.Vector3(
+      index % 2 === 0 ? -1 : 1,
+      Math.floor(index / 2) - 1,
+      index > 3 ? 0.8 : -0.8,
+    ).normalize();
+    return [{ geometry, material, direction }];
+  });
+}
+
+/** The ROTAX engine model with inspection animation and live labels. */
 export function EngineModel({
   spin = true,
   fault = 0,
   highlights,
   exploded = false,
-  selectedCylinder,
-  onSelectCylinder,
+  showLabels = true,
+  modelScale = 1,
+  modelPosition = [0, -0.35, 0],
 }: {
   spin?: boolean;
   fault?: number;
   highlights?: PartHighlights;
   exploded?: boolean;
-  selectedCylinder?: number | null;
-  onSelectCylinder?: (i: number) => void;
+  showLabels?: boolean;
+  modelScale?: number;
+  modelPosition?: [number, number, number];
 }) {
   const group = useRef<THREE.Group>(null);
+  const motor = useRef<THREE.Group>(null);
+  const fragmentNodes = useRef<Array<THREE.Group | null>>([]);
+  const explodeProgress = useRef(0);
   const { scene } = useGLTF('/engine.glb');
   const h = highlights ?? EMPTY_HIGHLIGHTS;
 
@@ -101,11 +185,14 @@ export function EngineModel({
         const mesh = child as THREE.Mesh;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        mesh.geometry = mesh.geometry.clone();
+        applyRotaxSurfaceColors(mesh.geometry);
         // Apply Rotax aluminum color to the single mesh
         mesh.material = new THREE.MeshStandardMaterial({
-          color: ROTAX.block,
-          roughness: 0.45,
-          metalness: 0.85,
+          color: '#ffffff',
+          roughness: 0.34,
+          metalness: 0.78,
+          vertexColors: true,
           emissive: new THREE.Color('#000000'),
           emissiveIntensity: 0,
         });
@@ -113,9 +200,20 @@ export function EngineModel({
     });
     return clone;
   }, [scene]);
+  const fragments = useMemo(() => buildExplodedFragments(clonedScene), [clonedScene]);
+
+  useEffect(() => () => {
+    fragments.forEach((fragment) => {
+      fragment.geometry.dispose();
+      fragment.material.dispose();
+    });
+  }, [fragments]);
 
   // Animate: rotation + GLB emissive highlights
   useFrame((_, delta) => {
+    explodeProgress.current = THREE.MathUtils.damp(explodeProgress.current, exploded ? 1 : 0, 5, delta);
+    const progress = explodeProgress.current;
+
     if (group.current && spin) {
       group.current.rotation.y += delta * 0.14;
     }
@@ -131,8 +229,11 @@ export function EngineModel({
     clonedScene.traverse((child) => {
       if (!(child as THREE.Mesh).isMesh) return;
       const mesh = child as THREE.Mesh;
-      const mat = mesh.material as THREE.MeshStandardMaterial;
-      if (!mat.emissive) return;
+       const mat = mesh.material as THREE.MeshStandardMaterial;
+       if (!mat.emissive) return;
+       mat.transparent = true;
+       mat.opacity = 1 - progress;
+       mat.depthWrite = progress < 0.95;
 
       const pos = mesh.position;
       // Position-based highlight on the GLB mesh
@@ -159,118 +260,43 @@ export function EngineModel({
         mat.emissiveIntensity = 0;
       }
     });
+
+    if (motor.current) {
+      motor.current.position.set(0, 0.1 + progress * 0.22, 0.5);
+      motor.current.scale.set(3 + progress * 0.42, 3 + progress * 0.28, 3 + progress * 0.42);
+      motor.current.rotation.z = progress * 0.08;
+      motor.current.rotation.y = progress * 0.18;
+    }
+    fragments.forEach((fragment, index) => {
+      const node = fragmentNodes.current[index];
+      if (!node) return;
+      node.position.copy(fragment.direction).multiplyScalar(progress * 0.72);
+      node.rotation.set(progress * fragment.direction.y * 0.2, progress * fragment.direction.x * 0.25, progress * 0.1);
+      fragment.material.opacity = progress;
+      fragment.material.emissive.set(progress > 0.6 ? CYAN : '#000000');
+      fragment.material.emissiveIntensity = progress > 0.6 ? 0.08 : 0;
+    });
   });
 
-  // Explode animation factor (smooth lerp)
-  const explodeFactor = exploded ? 1 : 0;
-
   return (
-    <group ref={group} position={[0, -0.35, 0]}>
-      {/* GLB model — fades when exploded */}
-      <group scale={[3, 3, 3]} position={[0, 0.1, 0.5]}>
+    <group ref={group} position={modelPosition} scale={modelScale}>
+      {/* The ROTAX GLB is the only rendered engine model. */}
+      <group ref={motor} scale={[3, 3, 3]} position={[0, 0.1, 0.5]}>
         <primitive object={clonedScene} />
+        <group>
+          {fragments.map((fragment, index) => (
+            <group
+              key={index}
+              ref={(node) => { fragmentNodes.current[index] = node; }}
+            >
+              <mesh geometry={fragment.geometry} material={fragment.material} />
+            </group>
+          ))}
+        </group>
       </group>
 
-      {/* Exploded view overlay — procedural parts */}
-      {EXPLODE_PARTS.map((part, i) => {
-        const t = explodeFactor;
-        const x = part.restX + (part.explodeX - part.restX) * t;
-        const y = part.restY + (part.explodeY - part.restY) * t;
-        const z = (part.restZ ?? 0) + ((part.explodeZ ?? 0) - (part.restZ ?? 0)) * t;
-
-        // Highlight color for this part
-        let emissive = '#000000';
-        let emissiveI = 0;
-        if (part.name.includes('1') && part.name.includes('CYL')) {
-          emissive = tempToColor(h.cyl1CHT);
-          emissiveI = tempToIntensity(h.cyl1CHT);
-        } else if (part.name.includes('2') && part.name.includes('CYL')) {
-          emissive = tempToColor(h.cyl2CHT);
-          emissiveI = tempToIntensity(h.cyl2CHT);
-        } else if (part.name.includes('3') && part.name.includes('CYL')) {
-          emissive = tempToColor(h.cyl3CHT);
-          emissiveI = tempToIntensity(h.cyl3CHT);
-        } else if (part.name.includes('4') && part.name.includes('CYL')) {
-          emissive = tempToColor(h.cyl4CHT);
-          emissiveI = tempToIntensity(h.cyl4CHT);
-        } else if (part.name === 'EXHAUST') {
-          emissive = tempToColor(h.egt, 700, 780);
-          emissiveI = tempToIntensity(h.egt, 700, 780);
-        } else if (part.name === 'OIL SUMP') {
-          emissive = h.oilTemp > 110 ? AMBER : CYAN;
-          emissiveI = h.oilTemp > 110 ? 0.5 : 0;
-        }
-
-        const opacity = 0.15 + explodeFactor * 0.85;
-
-        return (
-          <group key={part.name} position={[x, y, z]}>
-            {part.geo === 'box' ? (
-              <mesh>
-                <boxGeometry args={part.size} />
-                <meshStandardMaterial
-                  color={part.color}
-                  roughness={0.45}
-                  metalness={0.85}
-                  transparent
-                  opacity={opacity}
-                  emissive={emissive}
-                  emissiveIntensity={emissiveI}
-                />
-              </mesh>
-            ) : (
-              <mesh rotation={[part.rotX ?? 0, 0, part.rotZ ?? 0]}>
-                <cylinderGeometry args={part.size} />
-                <meshStandardMaterial
-                  color={part.color}
-                  roughness={0.45}
-                  metalness={0.85}
-                  transparent
-                  opacity={opacity}
-                  emissive={emissive}
-                  emissiveIntensity={emissiveI}
-                />
-              </mesh>
-            )}
-
-            {/* Part label — only visible when exploded */}
-            {explodeFactor > 0.5 && (
-              <Html position={[0, 0.4, 0]} center distanceFactor={8}>
-                <div style={{
-                  background: 'rgba(11,14,17,0.9)', border: `1px solid ${emissive}`,
-                  borderRadius: '2px', padding: '2px 6px', whiteSpace: 'nowrap',
-                  opacity: Math.min(1, (explodeFactor - 0.5) * 2),
-                }}>
-                  <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '6px', letterSpacing: '0.12em', color: '#8d979e', textTransform: 'uppercase' }}>
-                    {part.name}
-                  </div>
-                  {part.name.includes('CYL') && (
-                    <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '9px', color: emissive, fontWeight: 600 }}>
-                      {part.name.includes('1') ? h.cyl1CHT.toFixed(0) :
-                       part.name.includes('2') ? h.cyl2CHT.toFixed(0) :
-                       part.name.includes('3') ? h.cyl3CHT.toFixed(0) :
-                       h.cyl4CHT.toFixed(0)}°C
-                    </div>
-                  )}
-                  {part.name === 'EXHAUST' && (
-                    <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '9px', color: emissive, fontWeight: 600 }}>
-                      {h.egt.toFixed(0)}°C
-                    </div>
-                  )}
-                  {part.name === 'OIL SUMP' && (
-                    <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '9px', color: emissive, fontWeight: 600 }}>
-                      {h.oilTemp.toFixed(0)}°C
-                    </div>
-                  )}
-                </div>
-              </Html>
-            )}
-          </group>
-        );
-      })}
-
       {/* Live telemetry labels — always visible */}
-      {highlights && !exploded && (
+      {showLabels && highlights && (
         <>
           <PartLabel position={[-1.35, 1.5, 0]} label="CYL 1" value={`${h.cyl1CHT.toFixed(0)}°C`} color={tempToColor(h.cyl1CHT)} type="CHT" />
           <PartLabel position={[-0.45, 1.5, 0]} label="CYL 2" value={`${h.cyl2CHT.toFixed(0)}°C`} color={tempToColor(h.cyl2CHT)} type="CHT" pulse={h.cyl2CHT > 200} />
@@ -303,9 +329,10 @@ function PartLabel({
           transition: 'all 0.2s', boxShadow: pulse ? `0 0 12px ${color}` : 'none',
         }}
       >
+        <div style={{ width: '1px', height: '10px', margin: '0 auto -2px', background: color, opacity: 0.8 }} />
         <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: '7px', letterSpacing: '0.12em', color: '#8d979e', textTransform: 'uppercase' }}>{label}</div>
         <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: hovered ? '12px' : '10px', color, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-        {hovered && <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: '6px', color: '#64748b', marginTop: '2px' }}>{type} · LIVE</div>}
+        {hovered && <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: '6px', color: '#64748b', marginTop: '2px' }}>{type} · SYNTHETIC</div>}
       </div>
     </Html>
   );

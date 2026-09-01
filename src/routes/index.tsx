@@ -16,7 +16,6 @@ import {
   ReplaySection,
   RulSection,
   SimulationSection,
-  TwinSection,
 } from "@/components/landing/sections";
 
 export const Route = createFileRoute("/")({
@@ -47,7 +46,6 @@ function Landing() {
       <main>
         <Hero />
         <ProblemSection />
-        <TwinSection />
         <LiveSection />
         <PhysicsSection />
         <PredictiveSection />

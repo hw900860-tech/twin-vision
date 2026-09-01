@@ -1,8 +1,60 @@
 import { useRef, useEffect, useCallback, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useGLTF } from '@react-three/drei';
+import { Html, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { useFlightStore } from './flightStore';
+
+function dampAngle(current: number, target: number, lambda: number, delta: number) {
+  const difference = Math.atan2(Math.sin(target - current), Math.cos(target - current));
+  return current + difference * (1 - Math.exp(-lambda * delta));
+}
+
+function FaultHighlight({
+  active,
+  position,
+  label,
+  detail,
+  color,
+}: {
+  active: boolean;
+  position: [number, number, number];
+  label: string;
+  detail: string;
+  color: string;
+}) {
+  const markerRef = useRef<THREE.Mesh>(null);
+  const elapsed = useRef(0);
+
+  useFrame((_, delta) => {
+    elapsed.current += delta;
+    if (markerRef.current) {
+      const pulse = 1 + Math.sin(elapsed.current * 7) * 0.12;
+      markerRef.current.scale.setScalar(pulse);
+    }
+  });
+
+  if (!active) return null;
+
+  return (
+    <group position={position}>
+      <mesh ref={markerRef}>
+        <sphereGeometry args={[0.22, 12, 12]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={2.5} transparent opacity={0.9} />
+      </mesh>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.42, 0.035, 8, 32]} />
+        <meshBasicMaterial color={color} transparent opacity={0.85} />
+      </mesh>
+      <pointLight color={color} intensity={2.5} distance={5} decay={2} />
+      <Html position={[0, 0.5, 0]} center distanceFactor={9}>
+        <div className="border border-current bg-[#0b0e11]/95 px-2 py-1 text-center font-mono text-[8px] tracking-[0.12em] whitespace-nowrap" style={{ color }}>
+          <div>{label}</div>
+          <div className="mt-0.5 text-[7px] text-slate-300">{detail}</div>
+        </div>
+      </Html>
+    </group>
+  );
+}
 
 /**
  * GLB UAV model — TAPAS BH-201 with correct orientation and military colors.
@@ -24,7 +76,9 @@ function UAVGLB() {
   const exhaustRef = useRef<THREE.PointLight>(null);
   const rpm = useFlightStore((s) => s.rpm);
   const cht = useFlightStore((s) => s.cht);
+  const vibrationRMS = useFlightStore((s) => s.vibrationRMS);
   const faults = useFlightStore((s) => s.faults);
+  const emergencyState = useFlightStore((s) => s.emergencyState);
   const { scene } = useGLTF('/uav.glb');
 
   // Clone scene with military TAPAS BH-201 colors
@@ -184,6 +238,48 @@ function UAVGLB() {
         <cylinderGeometry args={[0.04, 0.04, 1.0, 6]} />
         <meshStandardMaterial color="#404852" roughness={0.6} metalness={0.5} />
       </mesh>
+
+      <FaultHighlight
+        active={faults.c2Overheat}
+        position={[-0.85, 0.35, 3.8]}
+        label="CYLINDER 2 / CHT"
+        detail={`${cht[1]?.toFixed(0) ?? '—'}°C · OVERHEAT`}
+        color="#ff4d35"
+      />
+      <FaultHighlight
+        active={faults.turboFail}
+        position={[0, 0.2, 3.35]}
+        label="TURBO / MAP"
+        detail="BOOST COLLAPSE · THRUST REDUCED"
+        color="#f0a63c"
+      />
+      {emergencyState === 'crashed' && (
+        <group position={[0, -2, 0]}>
+          <pointLight color="#ff3d1f" intensity={5} distance={8} />
+          <mesh>
+            <sphereGeometry args={[0.5, 12, 12]} />
+            <meshStandardMaterial color="#ff3d1f" emissive="#ff3d1f" emissiveIntensity={3} />
+          </mesh>
+          <mesh position={[0, 0.9, 0]}>
+            <sphereGeometry args={[0.28, 10, 10]} />
+            <meshStandardMaterial color="#343434" emissive="#171717" transparent opacity={0.75} />
+          </mesh>
+        </group>
+      )}
+      <FaultHighlight
+        active={faults.bearingFail}
+        position={[0, -0.35, 4.55]}
+        label="REAR BEARING"
+        detail={`${vibrationRMS.toFixed(2)} m/s² · BPFO PEAK`}
+        color="#e2523f"
+      />
+      <FaultHighlight
+        active={faults.injectorClog}
+        position={[0.75, 0.25, 3.9]}
+        label="INJECTOR BANK"
+        detail="EGT IMBALANCE · CHECK FLOW"
+        color="#f0a63c"
+      />
     </group>
   );
 }
@@ -194,6 +290,11 @@ export function UAVModel() {
   const groupRef = useRef<THREE.Group>(null);
   const { camera, gl } = useThree();
   const store = useFlightStore;
+  const cameraGoal = useRef(new THREE.Vector3());
+  const cameraLookAt = useRef(new THREE.Vector3());
+  const targetLookAt = useRef(new THREE.Vector3());
+  const viewAzimuth = useRef(0);
+  const viewElevation = useRef(0.95);
 
   // Mouse drag controls
   const handlePointerDown = useCallback((e: THREE.Event) => {
@@ -207,14 +308,32 @@ export function UAVModel() {
     (gl.domElement as HTMLElement).style.cursor = 'grab';
   }, []);
 
+  useEffect(() => {
+    const releaseDrag = () => {
+      store.getState().setDragging(false);
+      (gl.domElement as HTMLElement).style.cursor = 'grab';
+    };
+    window.addEventListener('pointerup', releaseDrag);
+    window.addEventListener('pointercancel', releaseDrag);
+    return () => {
+      window.removeEventListener('pointerup', releaseDrag);
+      window.removeEventListener('pointercancel', releaseDrag);
+    };
+  }, [gl]);
+
   const handlePointerMove = useCallback((e: THREE.Event) => {
     const state = store.getState();
     if (!state.isDragging) return;
     const me = e as unknown as PointerEvent;
     const dx = me.clientX - state.dragStartX;
     const dy = me.clientY - state.dragStartY;
-    state.setTargetHeading(state.targetHeading + dx * 0.5);
-    state.setTargetAltitude(state.targetAltitude - dy * 20);
+    if (state.cameraMode === 'birdseye') {
+      viewAzimuth.current -= dx * 0.008;
+      viewElevation.current = Math.max(0.45, Math.min(1.4, viewElevation.current + dy * 0.006));
+    } else {
+      state.setTargetHeading(state.targetHeading + dx * 0.5);
+      state.setTargetAltitude(state.targetAltitude - dy * 20);
+    }
     state.setDragging(true, me.clientX, me.clientY);
   }, []);
 
@@ -247,35 +366,41 @@ export function UAVModel() {
   useFrame((_, delta) => {
     const s = store.getState();
     s.tick(delta);
+    const smoothing = 1 - Math.exp(-delta * 5);
 
     if (groupRef.current) {
-      groupRef.current.position.x = s.x;
-      groupRef.current.position.z = s.z;
-      groupRef.current.position.y = s.altitude * 0.0015 + 2.5;
-      groupRef.current.rotation.y = -(s.heading * Math.PI) / 180;
-      groupRef.current.rotation.z = (s.bankAngle * Math.PI) / 180;
-      groupRef.current.rotation.x = s.pitchAngle * 0.3;
+      groupRef.current.position.x = THREE.MathUtils.damp(groupRef.current.position.x, s.x, 5, delta);
+      groupRef.current.position.z = THREE.MathUtils.damp(groupRef.current.position.z, s.z, 5, delta);
+      groupRef.current.position.y = THREE.MathUtils.damp(groupRef.current.position.y, s.altitude * 0.0015 + 2.5, 5, delta);
+      groupRef.current.rotation.y = dampAngle(groupRef.current.rotation.y, -(s.heading * Math.PI) / 180, 5, delta);
+      groupRef.current.rotation.z = THREE.MathUtils.damp(groupRef.current.rotation.z, (s.bankAngle * Math.PI) / 180, 5, delta);
+      // The model nose points toward -Z, so positive X rotation climbs.
+      groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, s.pitchAngle, 5, delta);
     }
 
     // Chase camera — follows behind/above UAV
     const headingRad = (s.heading * Math.PI) / 180;
-    const camDist = 20;
-    const camHeight = 7;
-    const targetCamX = s.x + Math.sin(headingRad) * camDist;
-    const targetCamZ = s.z + Math.cos(headingRad) * camDist;
-    const targetCamY = s.altitude * 0.0015 + 2.5 + camHeight;
+    const camDist = s.cameraMode === 'birdseye' ? 30 : 24;
+    const horizontalDistance = s.cameraMode === 'birdseye' ? Math.cos(viewElevation.current) * camDist : camDist;
+    const targetCamX = s.x + (s.cameraMode === 'birdseye' ? Math.sin(viewAzimuth.current) * horizontalDistance : Math.sin(headingRad) * camDist);
+    const targetCamZ = s.z + (s.cameraMode === 'birdseye' ? Math.cos(viewAzimuth.current) * horizontalDistance : Math.cos(headingRad) * camDist);
+    const targetCamY = s.altitude * 0.0015 + 2.5 + (s.cameraMode === 'birdseye' ? Math.sin(viewElevation.current) * camDist : 11);
 
-    camera.position.x += (targetCamX - camera.position.x) * 0.05;
-    camera.position.y += (targetCamY - camera.position.y) * 0.05;
-    camera.position.z += (targetCamZ - camera.position.z) * 0.05;
-    camera.lookAt(s.x, s.altitude * 0.0015 + 2.5, s.z);
+    cameraGoal.current.set(targetCamX, targetCamY, targetCamZ);
+    camera.position.lerp(cameraGoal.current, smoothing);
+    targetLookAt.current.set(s.x, s.altitude * 0.0015 + 2.5, s.z);
+    cameraLookAt.current.lerp(targetLookAt.current, smoothing);
+    camera.lookAt(cameraLookAt.current);
   });
 
   return (
     <group
       ref={groupRef}
+      position={[0, 11.5, 0]}
+      rotation={[0, 0, 0]}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onPointerMove={handlePointerMove}
     >
       <UAVGLB />

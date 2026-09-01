@@ -5,6 +5,8 @@ import { StatusDot } from "@/components/hud/primitives";
 import { FlightSimulator } from "@/features/flight-sim/FlightSimulator";
 import { FlightHUD } from "@/features/flight-sim/FlightHUD";
 import { ControlPanel } from "@/features/flight-sim/ControlPanel";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { SignOutButton } from "@/components/auth/SignOutButton";
 
 export const Route = createFileRoute("/sim")({
   head: () => ({
@@ -22,11 +24,12 @@ export const Route = createFileRoute("/sim")({
 
 function SimPage() {
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-background">
+    <ProtectedRoute>
+      <div className="relative h-screen w-screen overflow-hidden bg-background">
       {/* Top bar — highest z-index */}
       <header className="absolute inset-x-0 top-0 z-50 flex h-10 items-center justify-between border-b border-border bg-panel/70 px-4 backdrop-blur-sm">
         <div className="flex items-center gap-4">
-          <Link to="/" className="flex items-center gap-2 label-xs hover:text-cyan transition-colors">
+          <Link to="/" aria-label="Return to AERIS-TWIN landing page" className="flex min-h-10 items-center gap-2 label-xs hover:text-cyan transition-colors">
             <ArrowLeft className="h-3 w-3" />
             <span className="hidden sm:inline">AERIS-TWIN</span>
           </Link>
@@ -35,12 +38,13 @@ function SimPage() {
             FLIGHT SIMULATOR
           </span>
           <span className="hidden items-center gap-2 label-xs sm:flex">
-            <StatusDot /> LIVE
+            <StatusDot /> SIMULATION
           </span>
         </div>
         <div className="flex items-center gap-4">
           <span className="hidden label-xs sm:inline">TAPAS BH-201 / ROTAX 914</span>
           <span className="label-xs border border-amber/40 bg-amber/10 px-2 py-0.5 text-amber">SIM</span>
+          <SignOutButton />
         </div>
       </header>
 
@@ -59,11 +63,12 @@ function SimPage() {
       </div>
 
       {/* Right control panel — interactive, above HUD */}
-      <div className="absolute inset-y-10 right-0 z-40">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 top-10 z-40 lg:inset-y-10 lg:left-auto">
         <ClientOnly>
           <ControlPanel />
         </ClientOnly>
       </div>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

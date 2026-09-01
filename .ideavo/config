@@ -1,0 +1,57 @@
+{
+  "systemSetup": [],
+  "templateName": "custom",
+  "projectDependencies": [
+    {
+      "name": "Install Dependencies",
+      "command": "bun install --frozen-lockfile"
+    }
+  ],
+  "codeChecks": [
+    {
+      "name": "Run Lint",
+      "command": "bun run lint"
+    }
+  ],
+  "buildSteps": [
+    {
+      "name": "Build Project",
+      "command": "bun run build"
+    }
+  ],
+  "runStep": [
+    {
+      "name": "Run Dev Server",
+      "command": "bun run dev --host 0.0.0.0 --port 5173",
+      "port": "5173"
+    }
+  ],
+  "deploySteps": [
+    {
+      "name": "Deploy Nitro Build",
+      "command": "bunx nitro deploy --prebuilt"
+    }
+  ],
+  "cleanupFiles": [
+    "dist",
+    "dist-ssr",
+    ".output",
+    ".output/public",
+    ".output/server",
+    ".wrangler",
+    ".wrangler/deploy",
+    "node_modules/.nitro",
+    "node_modules/.nitro/vite",
+    ".tanstack",
+    ".nitro",
+    ".vinxi",
+    ".ideavo/project"
+  ],
+  "packageManager": "bun",
+  "envPaths": [
+    {
+      "name": "default",
+      "path": ".env"
+    }
+  ]
+}

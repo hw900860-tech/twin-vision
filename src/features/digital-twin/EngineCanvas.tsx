@@ -1,8 +1,20 @@
-import { Suspense, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Suspense, useMemo, useRef } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Environment, Lightformer, OrbitControls } from '@react-three/drei';
+import * as THREE from 'three';
 import { EngineModel, type PartHighlights } from './EngineModel';
-import { Expand, Shrink } from 'lucide-react';
+
+export type EngineCameraView = 'overview' | 'intake' | 'exhaust' | 'thermal' | 'core' | 'oil' | 'gcs';
+
+const CAMERA_POSITIONS: Record<EngineCameraView, [number, number, number]> = {
+  overview: [1.6, 1.5, 7.2],
+  intake: [-4.4, 1.8, 3.8],
+  exhaust: [3.9, 0.8, 3.9],
+  thermal: [0, 4.2, 4.5],
+  core: [0, -1.1, 3.8],
+  oil: [-2.3, -2.4, 4.1],
+  gcs: [0, 0.75, 8.3],
+};
 
 export type EngineCanvasProps = {
   interactive?: boolean;
@@ -10,10 +22,36 @@ export type EngineCanvasProps = {
   fault?: number;
   highlights?: PartHighlights;
   exploded?: boolean;
-  selectedCylinder?: number | null;
-  onSelectCylinder?: (i: number) => void;
   cameraZ?: number;
+  cameraView?: EngineCameraView;
+  showLabels?: boolean;
+  modelScale?: number;
+  modelPosition?: [number, number, number];
+  autoRotate?: boolean;
 };
+
+function CameraRig({ view, cameraZ }: { view: EngineCameraView; cameraZ: number }) {
+  const { camera } = useThree();
+  const target = useMemo(() => new THREE.Vector3(), []);
+  const lastView = useRef(view);
+  const transition = useRef(0);
+
+  if (lastView.current !== view) {
+    lastView.current = view;
+    transition.current = 0;
+  }
+
+  useFrame((_, delta) => {
+    if (transition.current >= 1) return;
+    const [x, y, z] = CAMERA_POSITIONS[view];
+    target.set(x, y, view === 'overview' ? cameraZ : z);
+    camera.position.lerp(target, 1 - Math.exp(-delta * 4));
+    camera.lookAt(0, 0.1, 0);
+    transition.current = Math.min(1, transition.current + delta / 0.8);
+  });
+
+  return null;
+}
 
 export default function EngineCanvas({
   interactive = false,
@@ -21,9 +59,12 @@ export default function EngineCanvas({
   fault = 0,
   highlights,
   exploded = false,
-  selectedCylinder = null,
-  onSelectCylinder,
   cameraZ = 7.2,
+  cameraView = 'overview',
+  showLabels = true,
+  modelScale = 1,
+  modelPosition = [0, -0.35, 0],
+  autoRotate = false,
 }: EngineCanvasProps) {
   return (
     <Canvas
@@ -33,6 +74,7 @@ export default function EngineCanvas({
       gl={{ antialias: true, powerPreference: 'high-performance' }}
     >
       <fog attach="fog" args={['#0b0e11', 9, 20]} />
+      <CameraRig view={cameraView} cameraZ={cameraZ} />
       <ambientLight intensity={0.35} />
       <directionalLight position={[5, 8, 6]} intensity={1.5} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
       <directionalLight position={[-6, 2, -4]} intensity={0.5} color="#6fd8e8" />
@@ -48,12 +90,15 @@ export default function EngineCanvas({
           fault={fault}
           {...(highlights !== undefined ? { highlights } : {})}
           exploded={exploded}
-          {...(selectedCylinder !== null ? { selectedCylinder } : {})}
-          {...(onSelectCylinder !== undefined ? { onSelectCylinder } : {})}
+          showLabels={showLabels}
+          modelScale={modelScale}
+          modelPosition={modelPosition}
         />
       </Suspense>
       {interactive && (
         <OrbitControls
+          autoRotate={autoRotate}
+          autoRotateSpeed={0.7}
           enablePan={false}
           minDistance={5}
           maxDistance={10}

@@ -1,7 +1,18 @@
 import { create } from 'zustand';
+import { terrainHeightAt } from './terrainMath';
 
 export type Biome = 'himalaya' | 'thar' | 'coastal';
-export type MissionPreset = 'freeFlight' | 'highAltScan' | 'desertPatrol' | 'coastalRecon';
+export type MissionPreset = 'nominalRoutine' | 'highAltitudeFailure' | 'coastalRecovery';
+export type EmergencyState = 'nominal' | 'forcedLanding' | 'crashed' | 'recovery';
+export type CameraMode = 'chase' | 'birdseye';
+
+export interface CrashCoordinates {
+  lat: number;
+  lon: number;
+  x: number;
+  z: number;
+  altitude: number;
+}
 
 export interface FaultFlags {
   c2Overheat: boolean;
@@ -20,6 +31,7 @@ export interface FlightState {
   targetAltitude: number;
   bankAngle: number;
   pitchAngle: number;
+  cameraMode: CameraMode;
   throttle: number;
   rudder: number;
   biome: Biome;
@@ -38,8 +50,13 @@ export interface FlightState {
   missionPreset: MissionPreset;
   missionActive: boolean;
   missionProgress: number;
+  missionElapsed: number;
   waypoints: { x: number; z: number; label: string }[];
   faults: FaultFlags;
+  emergencyState: EmergencyState;
+  emergencyTimer: number;
+  crashCoordinates: CrashCoordinates | null;
+  systemMessage: string | null;
   isDragging: boolean;
   dragStartX: number;
   dragStartY: number;
@@ -47,12 +64,14 @@ export interface FlightState {
   setRudder: (v: number) => void;
   setTargetHeading: (h: number) => void;
   setTargetAltitude: (a: number) => void;
+  setCameraMode: (mode: CameraMode) => void;
   setBiome: (b: Biome) => void;
   setMissionPreset: (p: MissionPreset) => void;
   startMission: () => void;
   setDragging: (d: boolean, startX?: number, startY?: number) => void;
   toggleFault: (fault: keyof FaultFlags) => void;
   resetFaults: () => void;
+  resetSimulation: () => void;
   tick: (dt: number) => void;
 }
 
@@ -82,6 +101,7 @@ function updateEngineTelemetry(state: FlightState, _dt: number): Partial<FlightS
   const altitudeFactor = Math.exp(-state.altitude / 27000);
   const thr = state.throttle / 100;
   const biomeConfig = BIOME_CONFIG[state.biome];
+  const ambientTemp = state.ambientTemp;
   const t = Date.now() / 1000;
 
   // RPM — scales with throttle and altitude density
@@ -93,7 +113,7 @@ function updateEngineTelemetry(state: FlightState, _dt: number): Partial<FlightS
   if (state.faults.turboFail) map *= 0.6;
 
   // CHT per cylinder — rises with throttle, ambient temp, wear; drops with altitude air cooling
-  const chtBase = 96 + thr * 96 + biomeConfig.ambientTemp * 0.72 - altitudeFactor * 12;
+  const chtBase = 96 + thr * 96 + ambientTemp * 0.72 - altitudeFactor * 12;
   const cht = [
     chtBase + (state.faults.c2Overheat ? 80 : 0) + noise(t, 1) * 3,
     chtBase + (state.faults.c2Overheat ? 120 : 0) + noise(t, 2) * 3,
@@ -102,12 +122,12 @@ function updateEngineTelemetry(state: FlightState, _dt: number): Partial<FlightS
   ];
 
   // EGT — rises with throttle and ambient, imbalanced by injector clog
-  let egt = 528 + thr * 236 + biomeConfig.ambientTemp * 0.5;
+  let egt = 528 + thr * 236 + ambientTemp * 0.5;
   if (state.faults.injectorClog) egt += 60 + noise(t, 5) * 20;
   if (state.faults.turboFail) egt -= 40;
 
   // Oil — temperature rises with throttle and ambient, pressure inversely proportional
-  const oilTemp = 68 + thr * 34 + biomeConfig.ambientTemp * 0.5;
+  const oilTemp = 68 + thr * 34 + ambientTemp * 0.5;
   const oilPressure = Math.max(1.6, Math.min(6.2, 5.6 - (oilTemp - 90) * 0.012));
 
   // Vibration — rises with throttle, spikes with bearing fault
@@ -143,13 +163,18 @@ const MISSIONS: Record<MissionPreset, {
   label: string;
   waypoints: { x: number; z: number; label: string }[];
 }> = {
-  freeFlight: {
+  nominalRoutine: {
     biome: 'himalaya', altitude: 6000, throttle: 65,
-    label: 'FREE FLIGHT', waypoints: [],
+    label: 'NOMINAL ROUTINE', waypoints: [
+      { x: 0, z: 0, label: 'BASE / DEPARTURE' },
+      { x: 220, z: -80, label: 'WP-01 SCAN' },
+      { x: 420, z: 80, label: 'WP-02 SCAN' },
+      { x: 0, z: 0, label: 'BASE / RECOVERY' },
+    ],
   },
-  highAltScan: {
-    biome: 'himalaya', altitude: 18000, throttle: 80,
-    label: 'HIGH-ALT SCANNING',
+  highAltitudeFailure: {
+    biome: 'himalaya', altitude: 18000, throttle: 88,
+    label: 'HIGH ALTITUDE / HIGH TEMP FAILURE',
     waypoints: [
       { x: 0, z: 0, label: 'STAGING' },
       { x: 200, z: 100, label: 'WP-01 SCAN START' },
@@ -158,19 +183,9 @@ const MISSIONS: Record<MissionPreset, {
       { x: 100, z: -150, label: 'WP-04 RTB' },
     ],
   },
-  desertPatrol: {
-    biome: 'thar', altitude: 12000, throttle: 72,
-    label: 'DESERT PATROL',
-    waypoints: [
-      { x: 0, z: 0, label: 'AIRFIELD' },
-      { x: 300, z: 0, label: 'WP-01 BORDER' },
-      { x: 300, z: 200, label: 'WP-02 PATROL LINE' },
-      { x: 0, z: 200, label: 'WP-03 RETURN' },
-    ],
-  },
-  coastalRecon: {
-    biome: 'coastal', altitude: 8000, throttle: 68,
-    label: 'COASTAL RECON',
+  coastalRecovery: {
+    biome: 'coastal', altitude: 8000, throttle: 70,
+    label: 'COASTAL / EXTREME COLD RECOVERY',
     waypoints: [
       { x: 0, z: 0, label: 'NAVAL BASE' },
       { x: 250, z: -150, label: 'WP-01 MARITIME ZONE' },
@@ -183,37 +198,47 @@ const MISSIONS: Record<MissionPreset, {
 
 export const useFlightStore = create<FlightState>((set) => ({
   x: 0, z: 0, heading: 0, altitude: 6000, speed: 145,
-  targetHeading: 0, targetAltitude: 6000, bankAngle: 0, pitchAngle: 0,
+  targetHeading: 0, targetAltitude: 6000, bankAngle: 0, pitchAngle: 0, cameraMode: 'chase',
   throttle: 65, rudder: 0,
   biome: 'himalaya', ambientTemp: -5,
   rpm: 2400, cht: [140, 140, 140, 140], egt: 680, map: 93,
   oilPressure: 5.2, oilTemp: 95, vibrationRMS: 0.8,
   fftSpectrum: Array(64).fill(0.2),
   healthIndex: 0.96, rul: 480, anomalyScore: 0.04,
-  missionPreset: 'freeFlight', missionActive: false, missionProgress: 0,
-  waypoints: [],
+  missionPreset: 'nominalRoutine', missionActive: false, missionProgress: 0, missionElapsed: 0,
+  waypoints: MISSIONS.nominalRoutine.waypoints,
   faults: { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false },
+  emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null,
   isDragging: false, dragStartX: 0, dragStartY: 0,
 
   setThrottle: (v) => set({ throttle: Math.max(0, Math.min(100, v)) }),
   setRudder: (v) => set({ rudder: Math.max(-1, Math.min(1, v)) }),
   setTargetHeading: (h) => set({ targetHeading: mod(h, 360) }),
   setTargetAltitude: (a) => set({ targetAltitude: Math.max(500, Math.min(30000, a)) }),
+  setCameraMode: (mode) => set({ cameraMode: mode }),
   setBiome: (b) => set({ biome: b, ambientTemp: BIOME_CONFIG[b].ambientTemp }),
   setMissionPreset: (p) => {
     const mission = MISSIONS[p];
+    const scenarioFaults: FaultFlags = p === 'highAltitudeFailure'
+      ? { c2Overheat: true, turboFail: true, bearingFail: false, injectorClog: false }
+      : { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false };
     set({
+      x: 0, z: 0, heading: 0, targetHeading: 0,
+      altitude: mission.altitude, targetAltitude: mission.altitude,
+      speed: 145, bankAngle: 0, pitchAngle: 0, cameraMode: 'chase',
       missionPreset: p,
       biome: mission.biome,
-      ambientTemp: BIOME_CONFIG[mission.biome].ambientTemp,
-      targetAltitude: mission.altitude,
+      ambientTemp: p === 'highAltitudeFailure' ? 42 : p === 'coastalRecovery' ? -25 : BIOME_CONFIG[mission.biome].ambientTemp,
       throttle: mission.throttle,
       waypoints: mission.waypoints,
       missionActive: false,
       missionProgress: 0,
+      missionElapsed: 0,
+      faults: scenarioFaults,
+      emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null,
     });
   },
-  startMission: () => set({ missionActive: true, missionProgress: 0 }),
+  startMission: () => set({ missionActive: true, missionProgress: 0, missionElapsed: 0, emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null }),
   setDragging: (d, sx, sy) => set({ isDragging: d, dragStartX: sx ?? 0, dragStartY: sy ?? 0 }),
   toggleFault: (fault) => set((s) => ({
     faults: { ...s.faults, [fault]: !s.faults[fault] },
@@ -221,8 +246,19 @@ export const useFlightStore = create<FlightState>((set) => ({
   resetFaults: () => set({
     faults: { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false },
   }),
+  resetSimulation: () => set({
+    x: 0, z: 0, heading: 0, targetHeading: 0, altitude: 6000, targetAltitude: 6000,
+    speed: 145, bankAngle: 0, pitchAngle: 0, cameraMode: 'chase', throttle: 65, rudder: 0,
+    missionPreset: 'nominalRoutine', biome: 'himalaya', ambientTemp: -5,
+    missionActive: false, missionProgress: 0, missionElapsed: 0,
+    waypoints: MISSIONS.nominalRoutine.waypoints,
+    faults: { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false },
+    emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null,
+  }),
 
   tick: (dt) => set((state) => {
+    if (state.emergencyState === 'crashed') return state;
+
     const turnRate = 30; // deg/s max
     const hdgDiff = angleDiff(state.targetHeading, state.heading);
     const turn = Math.sign(hdgDiff) * Math.min(Math.abs(hdgDiff), turnRate * dt);
@@ -240,7 +276,15 @@ export const useFlightStore = create<FlightState>((set) => ({
 
     // Speed from throttle and altitude density
     const altitudeFactor = Math.exp(-alt / 27000);
-    const speed = 40 + (state.throttle / 100) * 160 * (0.7 + 0.3 * altitudeFactor);
+    let speed = 40 + (state.throttle / 100) * 160 * (0.7 + 0.3 * altitudeFactor);
+
+    const missionElapsed = state.missionElapsed + (state.missionActive ? dt : 0);
+    const highAltitudeFailure = state.missionPreset === 'highAltitudeFailure' && state.missionActive;
+    const coastalRecovery = state.missionPreset === 'coastalRecovery' && state.missionActive;
+    const stallProgress = highAltitudeFailure ? Math.max(0, Math.min(1, (missionElapsed - 3) / 5)) : 0;
+    const coldProgress = coastalRecovery ? Math.max(0, Math.min(1, (missionElapsed - 2) / 5)) : 0;
+    const failureProgress = highAltitudeFailure ? Math.max(0, Math.min(1, (missionElapsed - 5) / 8)) : 0;
+    speed *= Math.max(0, 1 - stallProgress * 0.88 - coldProgress * 0.65);
 
     // Position update
     const speedMs = speed * 0.5144;
@@ -249,25 +293,42 @@ export const useFlightStore = create<FlightState>((set) => ({
     const dz = -Math.cos(headingRad) * speedMs * dt;
     const x = state.x + dx;
     const z = state.z + dz;
+    const terrainY = terrainHeightAt(x, z, state.biome);
+    const terrainAltitude = Math.max(500, ((terrainY + 1 - 2.5) / 0.0015) + 350);
+    if (state.emergencyState === 'nominal' && alt < terrainAltitude) alt = terrainAltitude;
 
     // RUL decay and anomaly accumulation
     const rul = Math.max(0, state.rul - dt * 0.01);
-    const anomalyScore = state.anomalyScore + (state.faults.c2Overheat ? 0.001 : 0) +
-      (state.faults.bearingFail ? 0.002 : 0) + (state.faults.turboFail ? 0.0015 : 0);
+    const anomalyScore = Math.min(1, state.anomalyScore + (state.faults.c2Overheat ? 0.001 : 0) +
+      (state.faults.bearingFail ? 0.002 : 0) + (state.faults.turboFail ? 0.0015 : 0) + (coldProgress * 0.003));
 
-    const engineUpdates = updateEngineTelemetry({ ...state, x, z, heading: hdg, altitude: alt, speed }, dt);
+    const engineUpdates = updateEngineTelemetry({ ...state, x, z, heading: hdg, altitude: alt, speed, anomalyScore }, dt);
+    engineUpdates.rpm = (engineUpdates.rpm ?? state.rpm) * (1 - stallProgress * 0.8 - coldProgress * 0.45);
+    engineUpdates.healthIndex = Math.max(0, Math.min(1, (engineUpdates.healthIndex ?? state.healthIndex) * (1 - failureProgress)));
 
     // Mission waypoint tracking — auto-navigate to waypoints
     let missionProgress = state.missionProgress;
     let newTargetHeading = state.targetHeading;
     let newTargetAltitude = state.targetAltitude;
-    if (state.missionActive && state.waypoints.length > 0) {
+    let missionActive = state.missionActive;
+    let systemMessage = state.systemMessage;
+    let emergencyState: EmergencyState = state.emergencyState;
+    let emergencyTimer = state.emergencyTimer;
+    let crashCoordinates = state.crashCoordinates;
+    if (state.emergencyState === 'nominal' && alt > state.targetAltitude) {
+      newTargetAltitude = Math.max(newTargetAltitude, alt);
+    }
+    if (state.missionActive && state.waypoints.length > 0 && state.emergencyState === 'nominal') {
       const wpIdx = Math.min(Math.floor(missionProgress), state.waypoints.length - 1);
       const wp = state.waypoints[wpIdx];
       if (wp) {
         const dist = Math.sqrt((x - wp.x) ** 2 + (z - wp.z) ** 2);
         if (dist < 30) {
           missionProgress = Math.min(state.waypoints.length, missionProgress + 1);
+          if (missionProgress >= state.waypoints.length && state.missionPreset === 'nominalRoutine') {
+            missionActive = false;
+            systemMessage = 'NOMINAL ROUTINE COMPLETE — UAV RETURNED SAFELY TO BASE';
+          }
         } else {
           // Auto-navigate: set heading toward waypoint
           const dx = wp.x - x;
@@ -277,12 +338,57 @@ export const useFlightStore = create<FlightState>((set) => ({
       }
     }
 
+    const healthIndex = engineUpdates.healthIndex ?? state.healthIndex;
+    const coordinates = {
+      lat: 28.6139 + x * 0.00001,
+      lon: 77.209 + z * 0.00001,
+      x,
+      z,
+      altitude: alt,
+    };
+
+    if (healthIndex <= 0 && emergencyState === 'nominal') {
+      emergencyState = 'forcedLanding';
+      emergencyTimer = 0;
+      missionActive = false;
+      newTargetAltitude = 500;
+      systemMessage = `ENGINE HEALTH 0% — EMERGENCY LANDING INITIATED AT ${coordinates.lat.toFixed(5)}°N, ${coordinates.lon.toFixed(5)}°E`;
+    }
+
+    let finalAltitude = alt;
+    let finalSpeed = speed;
+    if (emergencyState === 'forcedLanding') {
+      emergencyTimer += dt;
+      finalAltitude = Math.max(500, alt - 2200 * dt);
+      finalSpeed = Math.max(0, speed * Math.max(0, 1 - emergencyTimer / 10));
+      newTargetAltitude = 500;
+      const impactAltitude = Math.max(500, terrainAltitude);
+      if (finalAltitude <= impactAltitude || emergencyTimer > 12) {
+        emergencyState = 'crashed';
+        finalAltitude = impactAltitude;
+        finalSpeed = 0;
+        crashCoordinates = { ...coordinates, altitude: finalAltitude };
+        systemMessage = `CRASH CONFIRMED — MAINTENANCE TEAM ALERTED · ${coordinates.lat.toFixed(5)}°N, ${coordinates.lon.toFixed(5)}°E`;
+      }
+    } else if (coastalRecovery && missionElapsed >= 5 && emergencyState === 'nominal') {
+      emergencyState = 'recovery';
+      missionActive = false;
+      emergencyTimer = 0;
+      newTargetAltitude = 1800;
+      systemMessage = `PREDICTIVE ABORT — TURBINE ICE DETECTED AT ${coordinates.lat.toFixed(5)}°N, ${coordinates.lon.toFixed(5)}°E · RECOVERY ROUTE ACTIVE`;
+    } else if (emergencyState === 'recovery') {
+      finalAltitude = Math.max(1800, alt - 700 * dt);
+      finalSpeed = Math.max(35, speed);
+      newTargetAltitude = 1800;
+    }
+
     return {
-      x, z, heading: hdg, altitude: alt, speed,
+      x, z, heading: hdg, altitude: finalAltitude, speed: finalSpeed,
       targetHeading: newTargetHeading,
       targetAltitude: newTargetAltitude,
-      bankAngle, pitchAngle: altDiff * 0.001,
-      rul, anomalyScore, missionProgress,
+      bankAngle, pitchAngle: Math.max(-0.35, Math.min(0.35, altDiff * 0.00012)),
+      rul, anomalyScore, missionProgress, missionActive, missionElapsed,
+      emergencyState, emergencyTimer, crashCoordinates, systemMessage,
       ...engineUpdates,
     };
   }),

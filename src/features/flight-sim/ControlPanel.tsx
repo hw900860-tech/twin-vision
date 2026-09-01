@@ -1,6 +1,6 @@
 import { useFlightStore, type Biome, type MissionPreset, type FaultFlags } from './flightStore';
 import { Panel } from '@/components/hud/primitives';
-import { Radio, Mountain, Waves, CloudSun, Play, Square, AlertTriangle, RotateCcw } from 'lucide-react';
+import { Mountain, Waves, CloudSun, Play, Square, AlertTriangle, RotateCcw, Eye, Navigation } from 'lucide-react';
 
 const BIOMES: { key: Biome; label: string; icon: typeof Mountain }[] = [
   { key: 'himalaya', label: 'HIMALAYA', icon: Mountain },
@@ -9,10 +9,9 @@ const BIOMES: { key: Biome; label: string; icon: typeof Mountain }[] = [
 ];
 
 const MISSIONS: { key: MissionPreset; label: string; desc: string }[] = [
-  { key: 'freeFlight', label: 'FREE FLIGHT', desc: 'Manual control, any biome' },
-  { key: 'highAltScan', label: 'HIGH-ALT SCAN', desc: '18,000ft mountain surveillance' },
-  { key: 'desertPatrol', label: 'DESERT PATROL', desc: '12,000ft border patrol' },
-  { key: 'coastalRecon', label: 'COASTAL RECON', desc: '8,000ft maritime reconnaissance' },
+  { key: 'nominalRoutine', label: 'NOMINAL ROUTINE', desc: 'Scan waypoints and return safely' },
+  { key: 'highAltitudeFailure', label: 'HIGH ALT / HIGH TEMP', desc: 'Engine stall, failure, and crash protocol' },
+  { key: 'coastalRecovery', label: 'COASTAL COLD / RECOVERY', desc: 'Turbine ice, predictive abort, retrieval' },
 ];
 
 const FAULTS: { key: keyof FaultFlags; label: string; desc: string }[] = [
@@ -26,7 +25,7 @@ export function ControlPanel() {
   const s = useFlightStore();
 
   return (
-    <div className="pointer-events-auto absolute right-0 top-0 bottom-0 w-[300px] overflow-y-auto bg-[var(--panel)]/95 backdrop-blur-md border-l border-[var(--border)] z-10">
+    <div className="pointer-events-auto absolute bottom-0 left-0 right-0 max-h-[52svh] overflow-y-auto border-t border-[var(--border)] bg-[var(--panel)]/95 backdrop-blur-md z-10 lg:top-0 lg:right-0 lg:left-auto lg:max-h-none lg:w-[300px] lg:border-t-0 lg:border-l">
       {/* Terrain Selector */}
       <div className="border-b border-[var(--border)] p-3">
         <div className="label-xs mb-2 text-[var(--cyan)]">TERRAIN</div>
@@ -37,6 +36,7 @@ export function ControlPanel() {
               <button
                 key={b.key}
                 onClick={() => s.setBiome(b.key)}
+                aria-pressed={s.biome === b.key}
                 className={`flex flex-col items-center gap-1 p-2 text-[9px] tracking-wider transition-colors ${
                   s.biome === b.key
                     ? 'border border-[var(--cyan)] bg-[var(--cyan)]/10 text-[var(--cyan)]'
@@ -51,15 +51,40 @@ export function ControlPanel() {
         </div>
       </div>
 
+      <div className="border-b border-[var(--border)] p-3">
+        <div className="label-xs mb-2 text-[var(--cyan)]">CAMERA VIEW</div>
+        <div className="grid grid-cols-2 gap-1">
+          <button
+            type="button"
+            onClick={() => s.setCameraMode('chase')}
+            aria-pressed={s.cameraMode === 'chase'}
+            className={`flex min-h-11 items-center justify-center gap-1 p-2 text-[9px] tracking-wider transition-colors ${s.cameraMode === 'chase' ? 'border border-[var(--cyan)] bg-[var(--cyan)]/10 text-[var(--cyan)]' : 'border border-[var(--border)] hover:border-[var(--cyan)]/50'}`}
+          >
+            <Navigation className="h-3.5 w-3.5" /> CHASE
+          </button>
+          <button
+            type="button"
+            onClick={() => s.setCameraMode('birdseye')}
+            aria-pressed={s.cameraMode === 'birdseye'}
+            className={`flex min-h-11 items-center justify-center gap-1 p-2 text-[9px] tracking-wider transition-colors ${s.cameraMode === 'birdseye' ? 'border border-[var(--cyan)] bg-[var(--cyan)]/10 text-[var(--cyan)]' : 'border border-[var(--border)] hover:border-[var(--cyan)]/50'}`}
+          >
+            <Eye className="h-3.5 w-3.5" /> BIRD&apos;S-EYE
+          </button>
+        </div>
+        <div className="mt-2 text-[8px] text-[var(--muted-foreground)]">
+          {s.cameraMode === 'birdseye' ? 'DRAG TO ORBIT THE SURROUNDINGS' : 'DRAG THE UAV TO STEER'}
+        </div>
+      </div>
+
       {/* Mission Presets */}
       <div className="border-b border-[var(--border)] p-3">
-        <div className="label-xs mb-2 text-[var(--cyan)]">MISSION PRESETS</div>
+        <div className="label-xs mb-2 text-[var(--cyan)]">MISSION SCENARIOS</div>
         <div className="space-y-1.5">
           {MISSIONS.map((m) => (
             <button
               key={m.key}
               onClick={() => s.setMissionPreset(m.key)}
-              className={`w-full text-left p-2 text-[9px] tracking-wider transition-colors ${
+              className={`min-h-14 w-full text-left p-2 text-[9px] tracking-wider transition-colors ${
                 s.missionPreset === m.key
                   ? 'border border-[var(--cyan)] bg-[var(--cyan)]/10 text-[var(--cyan)]'
                   : 'border border-[var(--border)] hover:border-[var(--cyan)]/50'
@@ -79,11 +104,16 @@ export function ControlPanel() {
               <Play className="h-2.5 w-2.5" /> START
             </button>
             <button
-              onClick={() => s.setMissionPreset('freeFlight')}
+               onClick={() => s.resetSimulation()}
               className="flex items-center justify-center p-1.5 text-[9px] border border-[var(--border)] hover:border-[var(--amber)]/50"
             >
               <Square className="h-2.5 w-2.5" />
             </button>
+          </div>
+        )}
+        {s.systemMessage && (
+          <div role="alert" className={`mt-3 border px-2 py-2 text-[8px] leading-relaxed tracking-wider ${s.emergencyState === 'crashed' ? 'border-[var(--critical)] bg-[var(--critical)]/10 text-[var(--critical)]' : 'border-[var(--amber)]/50 bg-[var(--amber)]/10 text-[var(--amber)]'}`}>
+            {s.systemMessage}
           </div>
         )}
         {s.missionActive && s.waypoints.length > 0 && (
@@ -120,6 +150,7 @@ export function ControlPanel() {
               <span className="readout text-xs text-[var(--cyan)]">{s.throttle.toFixed(0)}%</span>
             </div>
             <input
+              aria-label="Throttle"
               type="range" min={0} max={100} value={s.throttle}
               onChange={(e) => s.setThrottle(Number(e.target.value))}
               className="h-1 w-full cursor-pointer appearance-none bg-[var(--panel-2)] accent-[var(--cyan)]"
@@ -131,6 +162,7 @@ export function ControlPanel() {
               <span className="readout text-xs text-[var(--cyan)]">{s.rudder.toFixed(2)}</span>
             </div>
             <input
+              aria-label="Rudder"
               type="range" min={-100} max={100} value={s.rudder * 100}
               onChange={(e) => s.setRudder(Number(e.target.value) / 100)}
               className="h-1 w-full cursor-pointer appearance-none bg-[var(--panel-2)] accent-[var(--amber)]"
@@ -143,7 +175,7 @@ export function ControlPanel() {
       <div className="border-b border-[var(--border)] p-3">
         <div className="flex items-center justify-between mb-2">
           <div className="label-xs text-[var(--critical)]">FAULT INJECTION</div>
-          <button onClick={s.resetFaults} className="text-[8px] text-[var(--muted-foreground)] hover:text-[var(--cyan)] flex items-center gap-0.5">
+             <button aria-label="Reset all injected faults" onClick={s.resetFaults} className="min-h-10 text-[8px] text-[var(--muted-foreground)] hover:text-[var(--cyan)] flex items-center gap-0.5">
             <RotateCcw className="h-2.5 w-2.5" /> RESET
           </button>
         </div>
@@ -152,6 +184,7 @@ export function ControlPanel() {
             <button
               key={f.key}
               onClick={() => s.toggleFault(f.key)}
+              aria-pressed={s.faults[f.key]}
               className={`w-full flex items-center gap-2 p-2 text-[9px] tracking-wider transition-colors ${
                 s.faults[f.key]
                   ? 'border border-[var(--critical)] bg-[var(--critical)]/10 text-[var(--critical)]'

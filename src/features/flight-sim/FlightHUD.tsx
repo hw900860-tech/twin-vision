@@ -7,11 +7,12 @@ export function FlightHUD() {
   const maxCht = Math.max(...s.cht);
 
   const advisoryColor = maxCht > 220 ? 'text-[#e2523f]' : maxCht > 180 ? 'text-[#f0a63c]' : 'text-[#4fd6a6]';
-  const advisoryText = maxCht > 220
+  const advisoryText = s.systemMessage ?? (maxCht > 220
     ? 'CRITICAL: CHT OVERLIMIT — REDUCE THROTTLE IMMEDIATELY'
     : maxCht > 180
       ? 'CAUTION: THERMAL ELEVATION — MONITOR ENGINE'
-      : 'PROPULSION NOMINAL — MISSION CLEARED';
+      : 'PROPULSION NOMINAL — MISSION CLEARED');
+  const emergency = s.emergencyState !== 'nominal';
 
   return (
     <div className="pointer-events-none absolute inset-0">
@@ -44,7 +45,7 @@ export function FlightHUD() {
       </div>
 
       {/* Right panel - Engine data */}
-      <div className="absolute top-20 right-4 space-y-2">
+      <div className="absolute top-20 right-4 hidden space-y-2 sm:block lg:right-[324px]">
         <div className="border border-[var(--border)] bg-[var(--panel)]/80 backdrop-blur-sm px-4 py-2 min-w-[160px]">
           <div className="label-xs">CHT (1-4)</div>
           <div className="flex gap-2 mt-1">
@@ -88,7 +89,7 @@ export function FlightHUD() {
       </div>
 
       {/* Bottom - Health bar */}
-      <div className="absolute bottom-4 left-4 right-4">
+      <div className="absolute bottom-[54vh] left-4 right-4 sm:bottom-4 lg:right-[324px]">
         <div className="border border-[var(--border)] bg-[var(--panel)]/80 backdrop-blur-sm px-4 py-2">
           <div className="flex items-center justify-between mb-1">
             <span className="label-xs">ENGINE HEALTH</span>
@@ -109,11 +110,18 @@ export function FlightHUD() {
       </div>
 
       {/* Advisory banner */}
-      <div className="absolute top-4 left-20 right-20 text-center">
-        <div className={`label-xs ${advisoryColor} tracking-wider`}>
+      <div className="absolute top-14 left-4 right-4 text-center sm:left-20 sm:right-20">
+        <div role={emergency ? 'alert' : 'status'} aria-live={emergency ? 'assertive' : 'polite'} className={`label-xs ${emergency ? (s.emergencyState === 'crashed' ? 'animate-pulse text-[#e2523f]' : 'text-[#f0a63c]') : advisoryColor} tracking-wider`}>
           {advisoryText}
         </div>
       </div>
+      {s.crashCoordinates && (
+        <div role="alert" className="absolute top-20 left-1/2 w-[min(92vw,420px)] -translate-x-1/2 border border-[#e2523f] bg-[#230f0d]/95 px-4 py-3 text-center backdrop-blur-sm">
+          <div className="label-xs text-[#e2523f]">MAINTENANCE TEAM · CRASH COORDINATES</div>
+          <div className="readout mt-1 text-sm text-white">{s.crashCoordinates.lat.toFixed(5)}°N · {s.crashCoordinates.lon.toFixed(5)}°E</div>
+          <div className="label-xs mt-1 text-slate-300">IMPACT ALT {s.crashCoordinates.altitude.toFixed(0)} FT · UPLINK BROADCAST</div>
+        </div>
+      )}
     </div>
   );
 }

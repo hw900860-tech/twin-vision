@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, LayoutGrid, Activity, Stethoscope, History, FlaskConical, Wrench, FileText, Expand, Shrink } from "lucide-react";
+import { ArrowLeft, LayoutGrid, Activity, Stethoscope, History, FlaskConical, Wrench, FileText, Expand, Shrink, Tag, Plane } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
 import { Bar, Panel, StatusDot, useClock } from "@/components/hud/primitives";
 import { TelemetryDashboard } from "@/features/telemetry/TelemetryDashboard";
@@ -11,6 +11,8 @@ import { FleetPanel } from "@/features/fleet/FleetPanel";
 import { BASELINE_CONDITIONS, simulate } from "@/lib/domain/engine/model";
 import { EngineAlertsPanel } from "@/features/digital-twin/EngineAlerts";
 import type { PartHighlights } from "@/features/digital-twin/EngineModel";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { SignOutButton } from "@/components/auth/SignOutButton";
 
 const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
 
@@ -54,6 +56,7 @@ function Kpi({ label, value, sub, tone = "cyan" }: { label: string; value: strin
 function GcsPage() {
   const [tab, setTab] = useState<NavKey>("LIVE TWIN");
   const [exploded, setExploded] = useState(false);
+  const [showLabels, setShowLabels] = useState(true);
   const t = useClock();
   const state = simulate(t * 0.4, BASELINE_CONDITIONS, 0.34);
 
@@ -83,30 +86,32 @@ function GcsPage() {
   }), [highlights, state.manifoldPressure, state.oilPressure]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <ProtectedRoute>
+      <div className="min-h-screen bg-background">
       <div className="pointer-events-none fixed inset-0 grid-bg opacity-40" />
 
       {/* top bar */}
       <header className="relative z-20 flex h-12 items-center justify-between border-b border-border bg-panel/70 px-4 backdrop-blur">
         <div className="flex items-center gap-6">
-          <Link to="/" className="flex items-center gap-2 label-xs hover:text-cyan">
+          <Link to="/" aria-label="Return to AERIS-TWIN landing page" className="flex min-h-11 items-center gap-2 label-xs hover:text-cyan">
             <ArrowLeft className="h-3 w-3" />
           </Link>
           <span className="font-display text-sm tracking-[0.3em]">AERIS-TWIN</span>
           <span className="hidden items-center gap-2 label-xs sm:flex">
-            TWIN STATUS <StatusDot /> LIVE
+            SIMULATION <StatusDot /> READ-ONLY
           </span>
         </div>
         <div className="flex items-center gap-5">
           <span className="hidden label-xs sm:inline">DATA QUALITY 97%</span>
           <span className="hidden label-xs md:inline">MODEL v1.4</span>
           <span className="label-xs border border-amber/40 bg-amber/10 px-2 py-0.5 text-amber">DEMONSTRATOR</span>
+          <SignOutButton />
         </div>
       </header>
 
       <div className="relative z-10 flex">
         {/* left nav */}
-        <nav className="sticky top-12 hidden h-[calc(100vh-3rem)] w-56 shrink-0 border-r border-border bg-panel/50 p-3 lg:block">
+        <nav aria-label="Ground control views" role="tablist" className="sticky top-12 hidden h-[calc(100vh-3rem)] w-56 shrink-0 border-r border-border bg-panel/50 p-3 lg:block">
           {NAV.map((n) => {
             const Icon = n.icon;
             const active = tab === n.key;
@@ -114,6 +119,8 @@ function GcsPage() {
               <button
                 key={n.key}
                 onClick={() => setTab(n.key)}
+                role="tab"
+                aria-selected={active}
                 className={`flex w-full items-center gap-3 border-l-2 px-3 py-2.5 text-left label-xs transition-colors ${
                   active ? "border-cyan bg-cyan/10 text-cyan" : "border-transparent hover:bg-panel-2/60 hover:text-foreground"
                 }`}
@@ -123,6 +130,14 @@ function GcsPage() {
               </button>
             );
           })}
+          <Link
+            to="/sim"
+            aria-label="Open flight simulator"
+            className="mt-2 flex min-h-11 w-full items-center gap-3 border-l-2 border-transparent px-3 py-2.5 label-xs text-amber transition-colors hover:bg-panel-2/60 hover:text-foreground"
+          >
+            <Plane className="h-3.5 w-3.5" />
+            FLIGHT SIMULATOR
+          </Link>
           <div className="mt-8 space-y-2 border-t border-border pt-4">
             {["READ-ONLY ECU INTERFACE", "SECURE TELEMETRY", "AUDIT LOGGING", "STORE-AND-FORWARD"].map((s) => (
               <div key={s} className="label-xs text-[9px] opacity-70">
@@ -134,16 +149,28 @@ function GcsPage() {
 
         <main className="min-w-0 flex-1 p-4 lg:p-6">
           {/* mobile tabs */}
-          <div className="mb-4 flex gap-2 overflow-x-auto lg:hidden">
+          <div role="tablist" aria-label="Ground control views" className="mb-4 flex gap-2 overflow-x-auto lg:hidden">
             {NAV.map((n) => (
               <button
                 key={n.key}
                 onClick={() => setTab(n.key)}
-                className={`shrink-0 border px-3 py-1.5 label-xs ${tab === n.key ? "border-cyan text-cyan" : "border-border"}`}
+                role="tab"
+                aria-selected={tab === n.key}
+                className={`min-h-11 shrink-0 border px-3 py-1.5 label-xs ${tab === n.key ? "border-cyan text-cyan" : "border-border"}`}
               >
                 {n.key}
               </button>
             ))}
+            <Link
+              to="/sim"
+              className="flex min-h-11 shrink-0 items-center gap-2 border border-amber/50 px-3 py-1.5 label-xs text-amber"
+            >
+              <Plane className="h-3 w-3" /> SIMULATOR
+            </Link>
+          </div>
+
+          <div className="mb-4 border border-amber/30 bg-amber/5 px-3 py-2 label-xs text-amber" role="status">
+            SYNTHETIC TELEMETRY · DETERMINISTIC MODEL · NO FLIGHT COMMANDS
           </div>
 
           <div className="mb-4 grid gap-px bg-border sm:grid-cols-2 xl:grid-cols-4">
@@ -154,28 +181,42 @@ function GcsPage() {
           </div>
 
           {tab === "LIVE TWIN" && (
-            <div className="grid gap-4">
+            <div id="gcs-panel-live-twin" role="tabpanel" aria-label="Live engine twin" className="grid gap-4">
               <div className="grid gap-4 xl:grid-cols-[1fr_420px]">
                 <TelemetryDashboard fault={0.34} />
                 <Panel label="LIVE ENGINE TWIN" corner="AE-P4 / INTERACTIVE">
                   <button
                     onClick={() => setExploded(!exploded)}
-                    className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 text-[9px] label-xs border border-border hover:border-cyan/50 bg-panel/80 backdrop-blur-sm transition-colors"
+                    aria-pressed={exploded}
+                    className="absolute top-3 right-3 z-10 flex min-h-10 items-center gap-2 border border-cyan/50 bg-panel/85 px-3 text-[9px] label-xs text-cyan backdrop-blur-sm transition-colors hover:bg-cyan/10"
                   >
                     {exploded ? <Shrink className="h-3 w-3" /> : <Expand className="h-3 w-3" />}
                     {exploded ? "ASSEMBLE" : "EXPLODE"}
                   </button>
-                  <div className="h-[320px]">
+                  <button
+                    type="button"
+                    onClick={() => setShowLabels((visible) => !visible)}
+                    aria-pressed={showLabels}
+                    aria-label={showLabels ? "Hide engine annotations" : "Show engine annotations"}
+                    className="absolute top-3 left-3 z-10 flex min-h-10 items-center gap-2 border border-border bg-panel/85 px-3 text-[9px] label-xs backdrop-blur-sm transition-colors hover:border-cyan/50 hover:text-cyan"
+                  >
+                    <Tag className="h-3 w-3" /> LABELS {showLabels ? "ON" : "OFF"}
+                  </button>
+                  <div className="h-[360px]">
                     <ClientOnly>
                       <Suspense fallback={null}>
-                        <EngineCanvas
-                          interactive
-                          spin={false}
-                          fault={0.5}
-                          cameraZ={8}
-                          highlights={highlights}
-                          exploded={exploded}
-                        />
+                         <EngineCanvas
+                           interactive
+                           spin={false}
+                           fault={0.5}
+                           cameraZ={8.3}
+                           cameraView="gcs"
+                           modelScale={0.82}
+                           modelPosition={[0, -0.05, 0]}
+                           highlights={highlights}
+                           exploded={exploded}
+                           showLabels={showLabels}
+                         />
                       </Suspense>
                     </ClientOnly>
                   </div>
@@ -235,6 +276,7 @@ function GcsPage() {
           </p>
         </main>
       </div>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

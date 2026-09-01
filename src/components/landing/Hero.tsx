@@ -2,19 +2,9 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, ChevronDown, Plane } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
-import { StatusDot, TechButton, useClock, useReducedMotion } from "@/components/hud/primitives";
-import { simulate, BASELINE_CONDITIONS } from "@/lib/domain/engine/model";
+import { TechButton, useReducedMotion } from "@/components/hud/primitives";
 
 const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
-
-const TELEMETRY = [
-  { k: "RPM", pos: "top-[16%] left-[46%]", get: (s: ReturnType<typeof simulate>) => s.rpm.toFixed(0), u: "" },
-  { k: "CHT", pos: "top-[28%] right-[6%]", get: (s: ReturnType<typeof simulate>) => s.cht.toFixed(0), u: "°C" },
-  { k: "EGT", pos: "top-[50%] right-[4%]", get: (s: ReturnType<typeof simulate>) => s.egt.toFixed(0), u: "°C" },
-  { k: "OIL PRESSURE", pos: "bottom-[22%] left-[44%]", get: (s: ReturnType<typeof simulate>) => s.oilPressure.toFixed(1), u: "BAR" },
-  { k: "FUEL FLOW", pos: "bottom-[12%] right-[10%]", get: (s: ReturnType<typeof simulate>) => s.fuelFlow.toFixed(1), u: "L/h" },
-  { k: "VIBRATION", pos: "top-[68%] left-[52%]", get: (s: ReturnType<typeof simulate>) => s.vibrationRms.toFixed(2), u: "G" },
-];
 
 function BootOverlay({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState(0);
@@ -62,32 +52,13 @@ function BootOverlay({ onDone }: { onDone: () => void }) {
             </div>
           ))}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function StatusStrip() {
-  const t = useClock();
-  const q = 98.7 + Math.sin(t * 0.4) * 0.4;
-  const lat = 127 + Math.round(Math.sin(t * 0.7) * 9);
-  const items = [
-    { k: "TWIN STATUS", v: "SYNCHRONIZED", dot: true },
-    { k: "TELEMETRY", v: "LIVE" },
-    { k: "MODEL", v: "AE-P4 / v1.4" },
-    { k: "DATA QUALITY", v: `${q.toFixed(1)}%` },
-    { k: "LATENCY", v: `${lat} ms` },
-  ];
-  return (
-    <div className="absolute inset-x-0 bottom-0 z-20 border-t border-border bg-background/70 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-10 gap-y-2 px-5 py-3 lg:px-10">
-        {items.map((i) => (
-          <div key={i.k} className="flex items-center gap-2">
-            <span className="label-xs">{i.k}</span>
-            {i.dot && <StatusDot />}
-            <span className="readout text-[11px] tracking-[0.1em] text-foreground">{i.v}</span>
-          </div>
-        ))}
+        <button
+          type="button"
+          onClick={onDone}
+          className="pointer-events-auto mt-8 min-h-11 border border-border px-3 text-[10px] tracking-[0.16em] text-muted-foreground transition-colors hover:border-cyan/60 hover:text-cyan"
+        >
+          SKIP BOOT SEQUENCE
+        </button>
       </div>
     </div>
   );
@@ -96,9 +67,6 @@ function StatusStrip() {
 export function Hero() {
   const [booted, setBooted] = useState(false);
   const onBooted = useCallback(() => setBooted(true), []);
-  const t = useClock();
-  const s = simulate(t * 0.35, BASELINE_CONDITIONS, 0.12);
-
   return (
     <section id="top" className="relative min-h-[100svh] overflow-hidden">
       <div className="absolute inset-0 grid-bg opacity-70" />
@@ -108,31 +76,23 @@ export function Hero() {
         style={{ background: "radial-gradient(ellipse at 62% 48%, oklch(0.28 0.03 205 / 45%), transparent 62%)" }}
       />
 
-      {/* 3D engine */}
-      <div className="absolute inset-0 lg:left-[26%]">
-        <ClientOnly>
-          <Suspense fallback={null}>
-            <EngineCanvas spin fault={0.25} />
-          </Suspense>
-        </ClientOnly>
-      </div>
-
-      {/* floating telemetry */}
-      <div className="pointer-events-none absolute inset-0 hidden lg:block" style={{ opacity: booted ? 1 : 0, transition: "opacity 1s .2s" }}>
-        {TELEMETRY.map((tl, i) => (
-          <div key={tl.k} className={`absolute ${tl.pos}`} style={{ animation: `aeris-rise .6s ${i * 120}ms both` }}>
-            <div className="border-l border-cyan/50 pl-3">
-              <div className="label-xs">{tl.k}</div>
-              <div className="readout text-lg text-foreground">
-                {tl.get(s)}
-                <span className="ml-1 text-[10px] tracking-widest text-muted-foreground">{tl.u}</span>
+      <div className="pointer-events-none absolute inset-y-16 right-0 z-10 hidden w-[48%] lg:block">
+        <div className="pointer-events-auto absolute inset-8 border-l border-border/60">
+          <div className="absolute inset-0 grid-bg-fine opacity-30" />
+          <div className="absolute inset-8 rounded-full border border-cyan/10" />
+          <div className="absolute inset-[18%] rounded-full border border-amber/10" />
+          <ClientOnly fallback={<div className="grid h-full place-items-center label-xs">LOADING ROTAX MODEL</div>}>
+            <Suspense fallback={<div className="grid h-full place-items-center label-xs">LOADING ROTAX MODEL</div>}>
+              <div className="absolute inset-0 cursor-grab active:cursor-grabbing">
+                <EngineCanvas interactive autoRotate spin={false} cameraView="overview" showLabels={false} fault={0.12} />
               </div>
-            </div>
+            </Suspense>
+          </ClientOnly>
+          <div className="pointer-events-none absolute top-5 left-5 label-xs text-cyan/70">ROTAX / SHOW MODEL</div>
+          <div className="pointer-events-none absolute right-5 bottom-5 text-right">
+            <div className="label-xs">AE-P4 · ROTATION ACTIVE</div>
+            <div className="mt-1 readout text-[10px] tracking-[0.22em] text-muted-foreground/70">DRAG TO INSPECT</div>
           </div>
-        ))}
-        <div className="absolute top-[8%] right-[7%] border border-cyan/30 bg-panel/60 px-4 py-3">
-          <div className="label-xs">ENGINE HEALTH</div>
-          <div className="readout text-2xl text-cyan">{(s.health * 100).toFixed(1)}%</div>
         </div>
       </div>
 
@@ -176,7 +136,6 @@ export function Hero() {
         <ChevronDown className="h-4 w-4 animate-bounce text-cyan/70" />
       </a>
 
-      <StatusStrip />
       {!booted && <BootOverlay onDone={onBooted} />}
     </section>
   );
