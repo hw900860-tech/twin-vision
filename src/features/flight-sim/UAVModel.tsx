@@ -4,14 +4,20 @@ import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { useFlightStore } from './flightStore';
 
-/** GLB UAV model with engine glow + nav lights */
+/** GLB UAV model — TAPAS BH-201 with proper orientation, colors, and lighting */
 function UAVGLB() {
-  const propRef = useRef<THREE.Group>(null);
+  const propRef = useRef<THREE.Mesh>(null);
+  const exhaustRef = useRef<THREE.PointLight>(null);
   const rpm = useFlightStore((s) => s.rpm);
+  const cht = useFlightStore((s) => s.cht);
   const faults = useFlightStore((s) => s.faults);
   const { scene } = useGLTF('/uav.glb');
 
   // Clone scene so each instance has independent materials
+  // Apply military TAPAS BH-201 colors:
+  // - Upper fuselage: military gray (#7b8794)
+  // - Lower fuselage: lighter gray (#a8b4bf)
+  // - Wings: darker gray (#5a6570)
   const clonedScene = useMemo(() => {
     const clone = scene.clone(true);
     clone.traverse((child) => {
@@ -19,85 +25,179 @@ function UAVGLB() {
         const mesh = child as THREE.Mesh;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        // Keep original material but ensure it's a MeshStandardMaterial
-        if (mesh.material) {
-          const old = mesh.material as THREE.Material;
-          mesh.material = new THREE.MeshStandardMaterial({
-            color: (old as any).color ?? '#c0c8d0',
-            roughness: 0.4,
-            metalness: 0.6,
-            emissive: new THREE.Color('#000000'),
-            emissiveIntensity: 0,
-          });
-        }
+
+        // Apply military gray material with proper shading
+        const mat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color('#8090a0'),    // Military airframe gray
+          roughness: 0.55,
+          metalness: 0.35,
+          emissive: new THREE.Color('#000000'),
+          emissiveIntensity: 0,
+          envMapIntensity: 0.8,
+        });
+        mesh.material = mat;
       }
     });
     return clone;
   }, [scene]);
 
-  // Engine glow based on CHT
-  const chtMax = Math.max(...useFlightStore((s) => s.cht));
-  const engineGlow = chtMax > 200 ? '#ff3300' : chtMax > 160 ? '#ff8800' : '#3366ff';
+  // Engine glow color based on max CHT
+  const chtMax = Math.max(...cht);
+  const engineGlowColor = useMemo(() => {
+    if (chtMax > 220) return new THREE.Color('#ff2200');
+    if (chtMax > 180) return new THREE.Color('#ff6600');
+    if (chtMax > 150) return new THREE.Color('#ffaa00');
+    return new THREE.Color('#4488ff');
+  }, [chtMax]);
+
+  const exhaustIntensity = faults.c2Overheat ? 3.0 : chtMax > 180 ? 1.5 : 0.6;
 
   // Spin propeller
   useFrame((_, delta) => {
     if (propRef.current) {
+      // Propeller disc spin rate proportional to RPM
       propRef.current.rotation.z += (rpm / 60) * Math.PI * 2 * delta;
+    }
+    // Pulse exhaust glow
+    if (exhaustRef.current) {
+      exhaustRef.current.intensity = exhaustIntensity + Math.sin(Date.now() * 0.008) * 0.3;
     }
   });
 
   return (
     <group>
-      {/* GLB model — scaled 5x for visibility, rotated to face -Z (forward) */}
-      <primitive object={clonedScene} scale={[5, 5, 5]} rotation={[0, Math.PI, 0]} />
+      {/* 
+        GLB model analysis:
+        - BBox: X [-0.58, 0.56] (wingspan 1.14), Y [-0.18, 0.17] (height 0.35), Z [-1.00, 0.99] (fuselage 1.99)
+        - The model's Z-axis is the fuselage. We need to determine which end is nose.
+        - Typically GLB exports have +Z as front. After rotation [0, PI, 0], +Z faces -Z (forward flight direction).
+        - Scale: 8x for clear visibility on the 120-unit terrain.
+      */}
+      <primitive
+        object={clonedScene}
+        scale={[8, 8, 8]}
+        rotation={[0, Math.PI, 0]}
+      />
 
-      {/* Propeller disc — visible spinning effect */}
-      <group ref={propRef} position={[0, 0, -5.2]}>
+      {/* === PROPELLER DISC (TAPAS BH-201 is pusher-config, prop at rear) === */}
+      <group ref={propRef} position={[0, 0, -7.2]}>
+        {/* Disc blur effect — opacity scales with RPM */}
         <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0, 1.2, 16]} />
+          <ringGeometry args={[0.3, 1.6, 24]} />
           <meshStandardMaterial
-            color="#3a3a4a"
+            color="#c0c8d4"
             transparent
-            opacity={0.15 + (rpm / 4000) * 0.3}
+            opacity={0.08 + (rpm / 4000) * 0.25}
             side={THREE.DoubleSide}
+            depthWrite={false}
           />
         </mesh>
+        {/* Blade 1 */}
         <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <boxGeometry args={[2.4, 0.04, 0.08]} />
-          <meshStandardMaterial color="#3a3a4a" roughness={0.6} metalness={0.7} />
+          <boxGeometry args={[3.2, 0.06, 0.1]} />
+          <meshStandardMaterial color="#b0b8c4" roughness={0.5} metalness={0.6} />
         </mesh>
-        <mesh rotation={[0, 0, Math.PI / 2]} position={[0, 0, 0]}>
-          <boxGeometry args={[2.4, 0.04, 0.08]} />
-          <meshStandardMaterial color="#3a3a4a" roughness={0.6} metalness={0.7} />
+        {/* Blade 2 (perpendicular) */}
+        <mesh rotation={[0, 0, Math.PI / 2]}>
+          <boxGeometry args={[3.2, 0.06, 0.1]} />
+          <meshStandardMaterial color="#b0b8c4" roughness={0.5} metalness={0.6} />
+        </mesh>
+        {/* Hub */}
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.18, 0.18, 0.12, 12]} />
+          <meshStandardMaterial color="#505862" roughness={0.4} metalness={0.7} />
         </mesh>
       </group>
 
-      {/* Engine exhaust glow — at nose (GLB nose is at +Z after rotation) */}
-      <mesh position={[0, 0, 5.0]}>
-        <sphereGeometry args={[0.12, 8, 8]} />
+      {/* === ENGINE EXHAUST GLOW (at rear, near propeller) === */}
+      <group position={[0, -0.3, -7.0]}>
+        <mesh>
+          <sphereGeometry args={[0.2, 8, 8]} />
+          <meshStandardMaterial
+            color={engineGlowColor}
+            emissive={engineGlowColor}
+            emissiveIntensity={exhaustIntensity}
+            transparent
+            opacity={0.9}
+          />
+        </mesh>
+        <pointLight
+          ref={exhaustRef}
+          color={engineGlowColor}
+          intensity={exhaustIntensity}
+          distance={8}
+          decay={2}
+        />
+      </group>
+
+      {/* === NAVIGATION LIGHTS === */}
+      {/* Green — right wingtip (+X side) */}
+      <group position={[5.0, 0.0, 0.8]}>
+        <mesh>
+          <sphereGeometry args={[0.1, 8, 8]} />
+          <meshStandardMaterial
+            color="#00ff44"
+            emissive="#00ff44"
+            emissiveIntensity={4}
+          />
+        </mesh>
+        <pointLight color="#00ff44" intensity={2} distance={6} decay={2} />
+      </group>
+
+      {/* Red — left wingtip (-X side) */}
+      <group position={[-5.0, 0.0, 0.8]}>
+        <mesh>
+          <sphereGeometry args={[0.1, 8, 8]} />
+          <meshStandardMaterial
+            color="#ff0033"
+            emissive="#ff0033"
+            emissiveIntensity={4}
+          />
+        </mesh>
+        <pointLight color="#ff0033" intensity={2} distance={6} decay={2} />
+      </group>
+
+      {/* === TAIL STROBE (white, pulsing) === */}
+      <mesh position={[0, 0.5, -6.8]}>
+        <sphereGeometry args={[0.08, 8, 8]} />
         <meshStandardMaterial
-          color={engineGlow}
-          emissive={engineGlow}
-          emissiveIntensity={faults.c2Overheat ? 2.5 : 0.8}
+          color="#ffffff"
+          emissive="#ffffff"
+          emissiveIntensity={3}
+        />
+      </mesh>
+      <pointLight
+        color="#ffffff"
+        intensity={1.5}
+        distance={10}
+        decay={2}
+      />
+
+      {/* === SENSOR TURRET (nose-mounted EO/IR ball, TAPAS BH-201 signature) === */}
+      <mesh position={[0, -0.5, 7.5]}>
+        <sphereGeometry args={[0.35, 12, 12]} />
+        <meshStandardMaterial
+          color="#2a3040"
+          roughness={0.3}
+          metalness={0.6}
         />
       </mesh>
 
-      {/* Navigation lights — green (right wingtip) */}
-      <mesh position={[5.5, 0.1, 0.5]}>
-        <sphereGeometry args={[0.08, 6, 6]} />
-        <meshStandardMaterial color="#00ff44" emissive="#00ff44" emissiveIntensity={3} />
+      {/* === LANDING GEAR (retracted in flight, shown as subtle lines) === */}
+      {/* Nose gear */}
+      <mesh position={[0, -1.2, 5.5]}>
+        <cylinderGeometry args={[0.04, 0.04, 1.0, 6]} />
+        <meshStandardMaterial color="#404852" roughness={0.6} metalness={0.5} />
       </mesh>
-
-      {/* Navigation lights — red (left wingtip) */}
-      <mesh position={[-5.5, 0.1, 0.5]}>
-        <sphereGeometry args={[0.08, 6, 6]} />
-        <meshStandardMaterial color="#ff0044" emissive="#ff0044" emissiveIntensity={3} />
+      {/* Main gear left */}
+      <mesh position={[-1.5, -1.2, -1.0]}>
+        <cylinderGeometry args={[0.04, 0.04, 1.0, 6]} />
+        <meshStandardMaterial color="#404852" roughness={0.6} metalness={0.5} />
       </mesh>
-
-      {/* Tail strobe */}
-      <mesh position={[0, 0.3, -4.5]}>
-        <sphereGeometry args={[0.06, 6, 6]} />
-        <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={2} />
+      {/* Main gear right */}
+      <mesh position={[1.5, -1.2, -1.0]}>
+        <cylinderGeometry args={[0.04, 0.04, 1.0, 6]} />
+        <meshStandardMaterial color="#404852" roughness={0.6} metalness={0.5} />
       </mesh>
     </group>
   );
@@ -110,7 +210,7 @@ export function UAVModel() {
   const { camera, gl } = useThree();
   const store = useFlightStore;
 
-  // Mouse drag controls
+  // Mouse drag controls — drag to steer heading and altitude
   const handlePointerDown = useCallback((e: THREE.Event) => {
     const me = e as unknown as PointerEvent;
     store.getState().setDragging(true, me.clientX, me.clientY);
@@ -120,7 +220,7 @@ export function UAVModel() {
   const handlePointerUp = useCallback(() => {
     store.getState().setDragging(false);
     (gl.domElement as HTMLElement).style.cursor = 'grab';
-  }, [gl]);
+  }, []);
 
   const handlePointerMove = useCallback((e: THREE.Event) => {
     const state = store.getState();
@@ -172,10 +272,10 @@ export function UAVModel() {
       groupRef.current.rotation.x = s.pitchAngle * 0.3;
     }
 
-    // Chase camera
+    // Chase camera — follows behind/above UAV relative to heading
     const headingRad = (s.heading * Math.PI) / 180;
-    const camDist = 18;
-    const camHeight = 6;
+    const camDist = 20;
+    const camHeight = 7;
     const targetCamX = s.x + Math.sin(headingRad) * camDist;
     const targetCamZ = s.z + Math.cos(headingRad) * camDist;
     const targetCamY = s.altitude * 0.0015 + 2.5 + camHeight;
