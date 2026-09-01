@@ -1,6 +1,6 @@
 import { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
-import { useGLTF, Html, Line } from '@react-three/drei';
+import { useGLTF, Html } from '@react-three/drei';
 import * as THREE from 'three';
 
 const CYAN = '#06b6d4';
@@ -36,7 +36,7 @@ export const ZONES = [
     name: 'CYLINDER HEAD (ROTAX RED)',
     sub: 'Iconic Red Rotax Valve Covers',
     center: [-0.25, 0.35, 0.1] as [number, number, number],
-    dir: [-1.2, 1.8, 0.4] as [number, number, number],
+    dir: [-0.6, 0.9, 0.2] as [number, number, number], // Tightly spaced dismantle vector
     glow: '#ef4444',
     val: (h: PartHighlights) => `${Math.max(h.cyl1CHT, h.cyl2CHT, h.cyl3CHT, h.cyl4CHT).toFixed(0)}°C CHT`,
     valC: (h: PartHighlights) => tempToColor(Math.max(h.cyl1CHT, h.cyl2CHT, h.cyl3CHT, h.cyl4CHT)),
@@ -46,7 +46,7 @@ export const ZONES = [
     name: 'EXHAUST MANIFOLD',
     sub: 'Stainless Steel Exhaust Pipe',
     center: [-0.45, 0.1, -0.2] as [number, number, number],
-    dir: [-1.8, 0.4, -0.8] as [number, number, number],
+    dir: [-0.9, 0.2, -0.4] as [number, number, number],
     glow: AMBER,
     val: (h: PartHighlights) => `${h.egt.toFixed(0)}°C EGT`,
     valC: (h: PartHighlights) => tempToColor(h.egt, 700, 780),
@@ -56,7 +56,7 @@ export const ZONES = [
     name: 'INTAKE / TURBO & CARBS',
     sub: 'Silver Aluminum Manifold',
     center: [0.45, 0.2, 0.1] as [number, number, number],
-    dir: [1.8, 0.5, 0.6] as [number, number, number],
+    dir: [0.9, 0.25, 0.3] as [number, number, number],
     glow: '#06b6d4',
     val: (h: PartHighlights) => `${h.rpm.toFixed(0)} RPM`,
     valC: (h: PartHighlights) => h.rpm > 3500 ? AMBER : CYAN,
@@ -66,7 +66,7 @@ export const ZONES = [
     name: 'CRANKCASE BLOCK',
     sub: 'Cast Aluminum Engine Core',
     center: [0, 0, 0] as [number, number, number],
-    dir: [0, -0.05, 0] as [number, number, number],
+    dir: [0, -0.02, 0] as [number, number, number],
     glow: '#94a3b8',
     val: (h: PartHighlights) => `${(h.health * 100).toFixed(0)}% HEALTH`,
     valC: (h: PartHighlights) => h.health > 0.8 ? CYAN : h.health > 0.5 ? AMBER : CRITICAL,
@@ -76,7 +76,7 @@ export const ZONES = [
     name: 'OIL SUMP & FILTER',
     sub: 'Yellow Cap & Lower Sump',
     center: [0, -0.35, 0] as [number, number, number],
-    dir: [0, -1.8, 0] as [number, number, number],
+    dir: [0, -0.9, 0] as [number, number, number],
     glow: '#eab308',
     val: (h: PartHighlights) => `${h.oilTemp.toFixed(0)}°C OIL`,
     valC: (h: PartHighlights) => h.oilTemp > 110 ? AMBER : CYAN,
@@ -86,7 +86,7 @@ export const ZONES = [
     name: 'GEARBOX & PROP FLANGE',
     sub: 'Machined Gearbox & Flange',
     center: [0, 0.1, 0.55] as [number, number, number],
-    dir: [0, 0.3, 2.0] as [number, number, number],
+    dir: [0, 0.15, 1.0] as [number, number, number],
     glow: '#f8fafc',
     val: (h: PartHighlights) => `${h.vibration.toFixed(2)} m/s² VIB`,
     valC: (h: PartHighlights) => h.vibration > 1.5 ? CRITICAL : h.vibration > 0.9 ? AMBER : CYAN,
@@ -163,29 +163,30 @@ function create6SeparateSubAssemblies(scene: THREE.Group): Zone6Mesh[] {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
     geometry.computeVertexNormals();
 
-    let colorHex = '#cbd5e1';
-    let roughness = 0.32;
-    let metalness = 0.75;
+    let colorHex = '#94a3b8';
+    let roughness = 0.35;
+    let metalness = 0.70;
 
     if (zone.id === 'cylhead') {
       colorHex = '#dc2626';
-      roughness = 0.18;
-      metalness = 0.35;
+      roughness = 0.22;
+      metalness = 0.30;
     } else if (zone.id === 'oilsump') {
       colorHex = '#334155';
-      roughness = 0.40;
+      roughness = 0.45;
+      metalness = 0.50;
     } else if (zone.id === 'propflange') {
-      colorHex = '#f1f5f9';
-      roughness = 0.22;
-      metalness = 0.85;
+      colorHex = '#cbd5e1';
+      roughness = 0.25;
+      metalness = 0.80;
     } else if (zone.id === 'turbo') {
       colorHex = '#cbd5e1';
-      roughness = 0.28;
-      metalness = 0.80;
+      roughness = 0.30;
+      metalness = 0.75;
     } else if (zone.id === 'exhaust') {
-      colorHex = '#94a3b8';
-      roughness = 0.32;
-      metalness = 0.80;
+      colorHex = '#64748b';
+      roughness = 0.38;
+      metalness = 0.75;
     }
 
     const material = new THREE.MeshStandardMaterial({
@@ -242,7 +243,7 @@ export function EngineModel({
     subAssemblies.forEach(zm => { zm.geometry.dispose(); zm.material.dispose(); });
   }, [subAssemblies]);
 
-  // Smooth 60 FPS animation loop — moves and focuses camera on selected part exclusively
+  // Smooth 60 FPS animation loop — compact, elegant dismantle explosion without lines
   useFrame((_, delta) => {
     const target = exploded ? explodeAmount : 0;
     explodeP.current += (target - explodeP.current) * Math.min(1, delta * 6);
@@ -258,7 +259,7 @@ export function EngineModel({
 
       zm.material.wireframe = wireframe;
 
-      // Animate position of each of the 6 sub-meshes independently
+      // Animate position closer together
       const dir = new THREE.Vector3(...zm.zone.dir);
       mesh.position.copy(dir).multiplyScalar(ease);
 
@@ -269,16 +270,16 @@ export function EngineModel({
         if (isSelected) {
           zm.material.opacity = 1.0;
           zm.material.emissive.set('#06b6d4');
-          zm.material.emissiveIntensity = 0.8;
+          zm.material.emissiveIntensity = 0.18;
         } else {
-          zm.material.opacity = 0.35; // Dim other components for exclusive focus!
+          zm.material.opacity = 0.22;
           zm.material.emissive.set('#000000');
           zm.material.emissiveIntensity = 0;
         }
       } else if (isHovered) {
         zm.material.opacity = 1.0;
         zm.material.emissive.set('#06b6d4');
-        zm.material.emissiveIntensity = 0.7;
+        zm.material.emissiveIntensity = 0.15;
       } else {
         zm.material.opacity = 1.0;
         zm.material.emissive.set('#000000');
@@ -287,7 +288,7 @@ export function EngineModel({
     });
 
     if (motorRef.current) {
-      motorRef.current.scale.setScalar(3 + p * 0.12);
+      motorRef.current.scale.setScalar(3 + p * 0.08);
     }
   });
 
@@ -319,28 +320,6 @@ export function EngineModel({
             }}
           />
         ))}
-
-        {/* Laser indicator connector lines */}
-        {exploded &&
-          ZONES.map((zone) => {
-            const ease = explodeP.current;
-            const targetPos: [number, number, number] = [
-              zone.dir[0] * ease,
-              zone.dir[1] * ease,
-              zone.dir[2] * ease,
-            ];
-            const isSelected = selectedZone === zone.name;
-            return (
-              <Line
-                key={`line-${zone.name}`}
-                points={[[0, 0, 0], targetPos]}
-                color={hoveredZone === zone.name || isSelected ? CYAN : zone.glow}
-                lineWidth={hoveredZone === zone.name || isSelected ? 3 : 1}
-                transparent
-                opacity={isSelected ? 1.0 : selectedZone ? 0.2 : Math.min(0.7, ease * 0.8)}
-              />
-            );
-          })}
       </group>
 
       {/* Holographic 3D HUD Labels */}
@@ -387,7 +366,7 @@ function ZoneLabel({
   const baseCenter = new THREE.Vector3(...zone.center);
 
   const labelPos = baseCenter.clone().add(dir.clone().multiplyScalar(ease));
-  labelPos.y += 0.25;
+  labelPos.y += 0.20;
 
   const glowColor = isHovered || isSelected ? CYAN : zone.glow;
 

@@ -6,28 +6,29 @@ import { EngineModel, type PartHighlights } from './EngineModel';
 
 export type EngineCameraView = 'overview' | 'intake' | 'exhaust' | 'thermal' | 'core' | 'oil' | 'gcs';
 
-const CAMERA_POSITIONS: Record<EngineCameraView, [number, number, number]> = {
-  overview: [1.6, 1.5, 7.2],
-  intake: [-4.4, 1.8, 3.8],
-  exhaust: [3.9, 0.8, 3.9],
-  thermal: [0, 4.2, 4.5],
-  core: [0, -1.1, 3.8],
-  oil: [-2.3, -2.4, 4.1],
-  gcs: [0, 0.75, 8.3],
+// Camera focal positions for compact closer dismantle spacing
+export const ZONE_CAMERA_FOCUS: Record<string, { pos: [number, number, number]; target: [number, number, number] }> = {
+  "CYLINDER HEAD (ROTAX RED)": { pos: [-1.98, 3.8, 7.2], target: [-1.98, 3.0, 1.1] },
+  "CYLINDER HEAD": { pos: [-1.98, 3.8, 7.2], target: [-1.98, 3.0, 1.1] },
+  "EXHAUST MANIFOLD": { pos: [-6.8, 1.2, 2.8], target: [-2.97, 0.7, -1.1] },
+  "INTAKE / TURBO & CARBS": { pos: [6.8, 1.5, 4.2], target: [2.97, 0.9, 1.2] },
+  "INTAKE / TURBO": { pos: [6.8, 1.5, 4.2], target: [2.97, 0.9, 1.2] },
+  "CRANKCASE BLOCK": { pos: [0, 0.6, 7.5], target: [0, -0.1, 0] },
+  "CRANKCASE": { pos: [0, 0.6, 7.5], target: [0, -0.1, 0] },
+  "OIL SUMP & FILTER": { pos: [0, -3.5, 6.8], target: [0, -3.0, 0.2] },
+  "OIL SUMP": { pos: [0, -3.5, 6.8], target: [0, -3.0, 0.2] },
+  "GEARBOX & PROP FLANGE": { pos: [0, 0.8, 11.2], target: [0, 0.6, 4.5] },
+  "PROP FLANGE": { pos: [0, 0.8, 11.2], target: [0, 0.6, 4.5] },
 };
 
-export const ZONE_CAMERA_FOCUS: Record<string, { pos: [number, number, number]; target: [number, number, number] }> = {
-  "CYLINDER HEAD (ROTAX RED)": { pos: [-2.8, 3.4, 3.2], target: [-1.2, 1.8, 0.4] },
-  "CYLINDER HEAD": { pos: [-2.8, 3.4, 3.2], target: [-1.2, 1.8, 0.4] },
-  "EXHAUST MANIFOLD": { pos: [-4.2, 1.4, -2.2], target: [-1.8, 0.4, -0.8] },
-  "INTAKE / TURBO & CARBS": { pos: [4.2, 1.8, 2.2], target: [1.8, 0.5, 0.6] },
-  "INTAKE / TURBO": { pos: [4.2, 1.8, 2.2], target: [1.8, 0.5, 0.6] },
-  "CRANKCASE BLOCK": { pos: [0, 0.6, 3.8], target: [0, -0.05, 0] },
-  "CRANKCASE": { pos: [0, 0.6, 3.8], target: [0, -0.05, 0] },
-  "OIL SUMP & FILTER": { pos: [0, -3.8, 2.8], target: [0, -1.8, 0] },
-  "OIL SUMP": { pos: [0, -3.8, 2.8], target: [0, -1.8, 0] },
-  "GEARBOX & PROP FLANGE": { pos: [0, 1.2, 5.2], target: [0, 0.3, 2.0] },
-  "PROP FLANGE": { pos: [0, 1.2, 5.2], target: [0, 0.3, 2.0] },
+const CAMERA_POSITIONS: Record<EngineCameraView, { pos: [number, number, number]; target: [number, number, number] }> = {
+  overview: { pos: [1.6, 1.5, 7.2], target: [0, 0, 0] },
+  intake: ZONE_CAMERA_FOCUS["INTAKE / TURBO"],
+  exhaust: ZONE_CAMERA_FOCUS["EXHAUST MANIFOLD"],
+  thermal: ZONE_CAMERA_FOCUS["CYLINDER HEAD"],
+  core: ZONE_CAMERA_FOCUS["CRANKCASE"],
+  oil: ZONE_CAMERA_FOCUS["OIL SUMP"],
+  gcs: { pos: [0, 0.75, 8.3], target: [0, 0, 0] },
 };
 
 export type EngineCanvasProps = {
@@ -51,6 +52,7 @@ export type EngineCanvasProps = {
 function CameraRig({ view, cameraZ, disabled }: { view: EngineCameraView; cameraZ: number; disabled: boolean }) {
   const { camera } = useThree();
   const target = useMemo(() => new THREE.Vector3(), []);
+  const lookTarget = useMemo(() => new THREE.Vector3(), []);
   const lastView = useRef(view);
   const transition = useRef(0);
 
@@ -62,43 +64,65 @@ function CameraRig({ view, cameraZ, disabled }: { view: EngineCameraView; camera
   useFrame((_, delta) => {
     if (disabled) return;
     if (transition.current >= 1) return;
-    const [x, y, z] = CAMERA_POSITIONS[view];
+    const v = CAMERA_POSITIONS[view];
+    const [x, y, z] = v.pos;
+    const [tx, ty, tz] = v.target;
     target.set(x, y, view === 'overview' ? cameraZ : z);
+    lookTarget.set(tx, ty, tz);
     camera.position.lerp(target, 1 - Math.exp(-delta * 4));
-    camera.lookAt(0, 0.1, 0);
+    camera.lookAt(lookTarget);
     transition.current = Math.min(1, transition.current + delta / 0.8);
   });
 
   return null;
 }
 
-// Camera zone focus rig — smoothly flies camera to inspect selected component exclusively
 function CameraZoneFocusRig({ selectedZone, controlsRef }: { selectedZone?: string | null; controlsRef: React.RefObject<any> }) {
   const { camera } = useThree();
-  const activeZoneRef = useRef<string | null>(null);
-  const transitioningRef = useRef(false);
-  const targetCamPos = useRef<THREE.Vector3>(new THREE.Vector3());
-  const targetLookAt = useRef<THREE.Vector3>(new THREE.Vector3());
+  const prevZone = useRef<string | null>(null);
+  const animProgress = useRef<number>(1);
+  const startCamPos = useRef(new THREE.Vector3());
+  const startTarget = useRef(new THREE.Vector3());
+  const endCamPos = useRef(new THREE.Vector3());
+  const endTarget = useRef(new THREE.Vector3());
 
   useEffect(() => {
-    if (selectedZone && ZONE_CAMERA_FOCUS[selectedZone]) {
-      activeZoneRef.current = selectedZone;
+    if (selectedZone && selectedZone !== prevZone.current && ZONE_CAMERA_FOCUS[selectedZone]) {
+      prevZone.current = selectedZone;
       const f = ZONE_CAMERA_FOCUS[selectedZone];
-      targetCamPos.current.set(...f.pos);
-      targetLookAt.current.set(...f.target);
-      transitioningRef.current = true;
+
+      startCamPos.current.copy(camera.position);
+      startTarget.current.copy(controlsRef.current ? controlsRef.current.target : new THREE.Vector3(0, 0, 0));
+
+      endCamPos.current.set(...f.pos);
+      endTarget.current.set(...f.target);
+
+      animProgress.current = 0;
+    } else if (!selectedZone && prevZone.current) {
+      prevZone.current = null;
+      startCamPos.current.copy(camera.position);
+      startTarget.current.copy(controlsRef.current ? controlsRef.current.target : new THREE.Vector3(0, 0, 0));
+
+      endCamPos.current.set(1.6, 1.5, 7.2);
+      endTarget.current.set(0, 0, 0);
+
+      animProgress.current = 0;
     }
-  }, [selectedZone]);
+  }, [selectedZone, camera, controlsRef]);
 
   useFrame((_, delta) => {
-    if (transitioningRef.current) {
-      camera.position.lerp(targetCamPos.current, Math.min(1, delta * 4.5));
+    if (animProgress.current < 1) {
+      animProgress.current = Math.min(1, animProgress.current + delta * 2.8);
+      const t = animProgress.current;
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+      camera.position.lerpVectors(startCamPos.current, endCamPos.current, ease);
+
       if (controlsRef.current) {
-        controlsRef.current.target.lerp(targetLookAt.current, Math.min(1, delta * 4.5));
+        controlsRef.current.target.lerpVectors(startTarget.current, endTarget.current, ease);
         controlsRef.current.update();
-      }
-      if (camera.position.distanceTo(targetCamPos.current) < 0.05) {
-        transitioningRef.current = false;
+      } else {
+        camera.lookAt(endTarget.current);
       }
     }
   });
