@@ -27,7 +27,7 @@ export const Route = createFileRoute("/sim")({
   component: SimPage,
 });
 
-export function SimPage() {
+function SimPage() {
   return (
     <ProtectedRoute>
       <ClientOnly fallback={<div className="grid h-screen w-screen place-items-center bg-[#040608] font-mono text-cyan text-xs tracking-wider animate-pulse">INITIALIZING AEROSPACE COMMAND CONSOLE…</div>}>
@@ -103,9 +103,9 @@ function SimPageContent() {
       {/* Top Header Bar */}
       <header className="flex h-10 shrink-0 items-center justify-between border-b border-cyan/30 bg-panel/90 px-4 backdrop-blur-md z-50">
         <div className="flex items-center gap-4">
-          <Link to="/" aria-label="Return to AERIS-TWIN landing page" className="flex items-center gap-2 label-xs hover:text-cyan transition-colors">
-            <ArrowLeft className="h-3 w-3" />
-            <span className="hidden sm:inline font-bold">AERIS-TWIN</span>
+          <Link to="/gcs" aria-label="Return to GCS Dashboard" className="flex items-center gap-2 label-xs text-cyan hover:text-cyan/80 transition-colors">
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline font-bold">BACK TO GCS FLEET DASHBOARD</span>
           </Link>
           <span className="flex items-center gap-2 label-xs text-cyan font-bold tracking-wider">
             <Plane className="h-3.5 w-3.5 text-cyan" />
@@ -117,6 +117,13 @@ function SimPageContent() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            to="/gcs"
+            className="flex h-7 items-center gap-1.5 border border-cyan/60 bg-cyan/10 px-2.5 text-[9px] font-mono label-xs text-cyan transition-all hover:bg-cyan/20 cursor-pointer"
+          >
+            <Activity className="h-3 w-3" /> GCS DASHBOARD
+          </Link>
+
           <button
             onClick={() => setShowFullConsole(!showFullConsole)}
             className={`flex h-7 items-center gap-1.5 border px-2.5 text-[9px] font-mono tracking-wider transition-all ${

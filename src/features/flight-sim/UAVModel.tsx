@@ -362,10 +362,9 @@ export function UAVModel() {
     };
   }, []);
 
-  // Animation loop — flight physics + chase camera
+  // Animation loop — position mesh & chase camera from global store state
   useFrame((_, delta) => {
     const s = store.getState();
-    s.tick(delta);
     const smoothing = 1 - Math.exp(-delta * 5);
 
     if (groupRef.current) {

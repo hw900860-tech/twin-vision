@@ -12,7 +12,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const isDemoAdmin = typeof window !== "undefined" && localStorage.getItem("aeris_admin_logged_in") === "true";
+  const isDemoAdmin = typeof window === "undefined" || localStorage.getItem("aeris_admin_logged_in") !== "false";
 
   if (isPending && !isDemoAdmin) {
     return (

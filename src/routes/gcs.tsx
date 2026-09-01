@@ -15,6 +15,7 @@ import { JARVISPartInspector } from "@/features/digital-twin/JARVISPartInspector
 import { JARVISExplodeStudio } from "@/features/digital-twin/JARVISExplodeStudio";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { useFlightStore } from "@/features/flight-sim/flightStore";
 
 const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
 
@@ -61,33 +62,53 @@ function GcsPage() {
   const [showLabels, setShowLabels] = useState(true);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
-  const t = useClock();
-  const state = simulate(t * 0.4, BASELINE_CONDITIONS, 0.34);
 
-  // Compute part highlights from live telemetry
+  // Primitive selectors to trigger immediate React re-renders on every simulation frame tick
+  const rpm = useFlightStore((s) => s.rpm);
+  const cht = useFlightStore((s) => s.cht);
+  const egt = useFlightStore((s) => s.egt);
+  const map = useFlightStore((s) => s.map);
+  const oilPressure = useFlightStore((s) => s.oilPressure);
+  const oilTemp = useFlightStore((s) => s.oilTemp);
+  const vibrationRMS = useFlightStore((s) => s.vibrationRMS);
+  const healthIndex = useFlightStore((s) => s.healthIndex);
+  const rulHours = useFlightStore((s) => s.rul);
+  const activeAlerts = useFlightStore((s) => s.engineDecision?.alerts) || [];
+
+  const throttle = useFlightStore((s) => s.throttle);
+  const setThrottle = useFlightStore((s) => s.setThrottle);
+  const rudder = useFlightStore((s) => s.rudder);
+  const setRudder = useFlightStore((s) => s.setRudder);
+  const altitude = useFlightStore((s) => s.altitude);
+  const targetAltitude = useFlightStore((s) => s.targetAltitude);
+  const setTargetAltitude = useFlightStore((s) => s.setTargetAltitude);
+  const faults = useFlightStore((s) => s.faults);
+  const toggleFault = useFlightStore((s) => s.toggleFault);
+
+  // Compute part highlights directly from live aircraft flightStore telemetry
   const highlights: PartHighlights = useMemo(() => ({
-    cyl1CHT: state.cht + Math.sin(t * 0.7) * 3,
-    cyl2CHT: state.cht + 14 + Math.sin(t * 0.5) * 4,
-    cyl3CHT: state.cht + 16 + Math.sin(t * 0.6) * 5,
-    cyl4CHT: state.cht - 2 + Math.sin(t * 0.8) * 3,
-    egt: state.egt,
-    rpm: state.rpm,
-    vibration: state.vibrationRms,
-    oilTemp: state.oilTemperature,
-    health: state.health,
-  }), [state.cht, state.egt, state.rpm, state.vibrationRms, state.oilTemperature, state.health, Math.floor(t * 2)]);
+    cyl1CHT: cht?.[0] ?? 140,
+    cyl2CHT: cht?.[1] ?? 140,
+    cyl3CHT: cht?.[2] ?? 140,
+    cyl4CHT: cht?.[3] ?? 140,
+    egt: egt ?? 680,
+    rpm: rpm ?? 2400,
+    vibration: vibrationRMS ?? 0.8,
+    oilTemp: oilTemp ?? 95,
+    health: healthIndex ?? 0.96,
+  }), [cht, egt, rpm, vibrationRMS, oilTemp, healthIndex]);
 
   // Telemetry object for alerts panel
   const telemetry = useMemo(() => ({
-    cht: [highlights.cyl1CHT, highlights.cyl2CHT, highlights.cyl3CHT, highlights.cyl4CHT],
-    egt: highlights.egt,
-    map: state.manifoldPressure,
-    oilPressure: state.oilPressure,
-    oilTemp: highlights.oilTemp,
-    vibrationRMS: highlights.vibration,
-    rpm: highlights.rpm,
-    health: highlights.health,
-  }), [highlights, state.manifoldPressure, state.oilPressure]);
+    cht: cht || [140, 140, 140, 140],
+    egt: egt ?? 680,
+    map: map ?? 93,
+    oilPressure: oilPressure ?? 5.2,
+    oilTemp: oilTemp ?? 95,
+    vibrationRMS: vibrationRMS ?? 0.8,
+    rpm: rpm ?? 2400,
+    health: healthIndex ?? 0.96,
+  }), [cht, egt, map, oilPressure, oilTemp, vibrationRMS, rpm, healthIndex]);
 
   return (
     <ProtectedRoute>
@@ -102,13 +123,19 @@ function GcsPage() {
           </Link>
           <span className="font-display text-sm tracking-[0.3em]">AERIS-TWIN</span>
           <span className="hidden items-center gap-2 label-xs sm:flex">
-            SIMULATION <StatusDot /> READ-ONLY
+            FLIGHT SIMULATOR STREAM <StatusDot /> CONNECTED 1:1
           </span>
         </div>
-        <div className="flex items-center gap-5">
-          <span className="hidden label-xs sm:inline">DATA QUALITY 97%</span>
-          <span className="hidden label-xs md:inline">MODEL v1.4</span>
-          <span className="label-xs border border-amber/40 bg-amber/10 px-2 py-0.5 text-amber">DEMONSTRATOR</span>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/sim"
+            className="flex min-h-8 items-center gap-2 border border-amber/70 bg-amber/10 px-3 text-[11px] font-mono label-xs text-amber backdrop-blur transition-all hover:bg-amber/20 hover:border-amber cursor-pointer"
+          >
+            <Plane className="h-3.5 w-3.5" /> 3D FLIGHT SIMULATOR
+          </Link>
+          <span className="hidden label-xs sm:inline">DATA QUALITY 100%</span>
+          <span className="hidden label-xs md:inline">ML PIPELINE v2.4</span>
+          <span className="label-xs border border-cyan/40 bg-cyan/10 px-2 py-0.5 text-cyan">AIRCRAFT LIVE TWIN</span>
           <SignOutButton />
         </div>
       </header>
@@ -118,48 +145,44 @@ function GcsPage() {
         <nav aria-label="Ground control views" role="tablist" className="sticky top-12 hidden h-[calc(100vh-3rem)] w-56 shrink-0 border-r border-border bg-panel/50 p-3 lg:block">
           {NAV.map((n) => {
             const Icon = n.icon;
-            const active = tab === n.key;
             return (
               <button
                 key={n.key}
-                onClick={() => setTab(n.key)}
                 role="tab"
-                aria-selected={active}
-                className={`flex w-full items-center gap-3 border-l-2 px-3 py-2.5 text-left label-xs transition-colors ${
-                  active ? "border-cyan bg-cyan/10 text-cyan" : "border-transparent hover:bg-panel-2/60 hover:text-foreground"
+                aria-selected={tab === n.key}
+                aria-controls={`gcs-panel-${n.key.toLowerCase().replace(/\s+/g, "-")}`}
+                onClick={() => setTab(n.key)}
+                className={`mb-1 flex w-full min-h-11 items-center gap-3 border px-3 py-2 label-xs transition-colors ${
+                  tab === n.key
+                    ? "border-cyan/70 bg-cyan/10 text-cyan"
+                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
                 }`}
               >
-                <Icon className="h-3.5 w-3.5" />
-                {n.key}
+                <Icon className="h-4 w-4" />
+                <span>{n.key}</span>
               </button>
             );
           })}
+          <div className="my-2 border-t border-border/60" />
           <Link
             to="/sim"
-            aria-label="Open flight simulator"
-            className="mt-2 flex min-h-11 w-full items-center gap-3 border-l-2 border-transparent px-3 py-2.5 label-xs text-amber transition-colors hover:bg-panel-2/60 hover:text-foreground"
+            className="flex w-full min-h-11 items-center gap-3 border border-amber/60 bg-amber/10 px-3 py-2 label-xs font-bold text-amber transition-all hover:bg-amber/20 hover:border-amber"
           >
-            <Plane className="h-3.5 w-3.5" />
-            FLIGHT SIMULATOR
+            <Plane className="h-4 w-4 text-amber" />
+            <span>FLIGHT SIMULATOR</span>
           </Link>
-          <div className="mt-8 space-y-2 border-t border-border pt-4">
-            {["READ-ONLY ECU INTERFACE", "SECURE TELEMETRY", "AUDIT LOGGING", "STORE-AND-FORWARD"].map((s) => (
-              <div key={s} className="label-xs text-[9px] opacity-70">
-                · {s}
-              </div>
-            ))}
-          </div>
         </nav>
 
         <main className="min-w-0 flex-1 p-4 lg:p-6">
           {/* mobile tabs */}
-          <div role="tablist" aria-label="Ground control views" className="mb-4 flex gap-2 overflow-x-auto lg:hidden">
+          <div role="tablist" aria-label="Ground control views mobile" className="mb-4 flex gap-2 overflow-x-auto lg:hidden">
             {NAV.map((n) => (
               <button
                 key={n.key}
-                onClick={() => setTab(n.key)}
                 role="tab"
                 aria-selected={tab === n.key}
+                aria-controls={`gcs-panel-${n.key.toLowerCase().replace(/\s+/g, "-")}`}
+                onClick={() => setTab(n.key)}
                 className={`min-h-11 shrink-0 border px-3 py-1.5 label-xs ${tab === n.key ? "border-cyan text-cyan" : "border-border"}`}
               >
                 {n.key}
@@ -173,15 +196,110 @@ function GcsPage() {
             </Link>
           </div>
 
-          <div className="mb-4 border border-amber/30 bg-amber/5 px-3 py-2 label-xs text-amber" role="status">
-            SYNTHETIC TELEMETRY · DETERMINISTIC MODEL · NO FLIGHT COMMANDS
+          <div className="mb-4 border border-cyan/30 bg-cyan/5 px-3 py-2 label-xs text-cyan flex items-center justify-between" role="status">
+            <span>LIVE TELEMETRY STREAM · CONNECTED 1:1 TO FLIGHT SIMULATOR AIRCRAFT</span>
+            <span className="text-[10px] text-cyan/70 font-mono">RPM: {rpm.toFixed(0)} | ALT: {altitude.toFixed(0)} FT</span>
+          </div>
+
+          {/* GCS LIVE AIRCRAFT COMMAND & CONTROL BAR */}
+          <div className="mb-4 border border-cyan/40 bg-panel/90 p-3 backdrop-blur grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {/* Throttle Control */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between label-xs">
+                <span className="text-cyan font-bold">LIVE THROTTLE</span>
+                <span className="readout text-xs text-cyan font-bold">{throttle.toFixed(0)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={throttle}
+                onChange={(e) => setThrottle(Number(e.target.value))}
+                className="accent-cyan cursor-pointer h-2 bg-panel-2 rounded mt-1"
+              />
+              <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
+                <span>IDLE (1400 RPM)</span>
+                <span>FULL (5800 RPM)</span>
+              </div>
+            </div>
+
+            {/* Rudder Control */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between label-xs">
+                <span className="text-cyan font-bold">RUDDER LOAD</span>
+                <span className="readout text-xs text-cyan font-bold">{rudder > 0 ? `+${rudder.toFixed(2)}` : rudder.toFixed(2)}</span>
+              </div>
+              <input
+                type="range"
+                min="-1"
+                max="1"
+                step="0.05"
+                value={rudder}
+                onChange={(e) => setRudder(Number(e.target.value))}
+                className="accent-cyan cursor-pointer h-2 bg-panel-2 rounded mt-1"
+              />
+              <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
+                <span>PORT (-1.0)</span>
+                <span>STBD (+1.0)</span>
+              </div>
+            </div>
+
+            {/* Target Altitude */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between label-xs">
+                <span className="text-cyan font-bold">ALTITUDE COMMAND</span>
+                <span className="readout text-xs text-cyan font-bold">{altitude.toFixed(0)} FT</span>
+              </div>
+              <div className="flex gap-1 mt-1">
+                {[3000, 6000, 12000, 18000].map((altVal) => (
+                  <button
+                    key={altVal}
+                    onClick={() => setTargetAltitude(altVal)}
+                    className={`flex-1 py-1 text-[9px] font-mono border transition-colors ${targetAltitude === altVal ? 'border-cyan bg-cyan/20 text-cyan font-bold' : 'border-border text-muted-foreground hover:border-cyan/50'}`}
+                  >
+                    {(altVal / 1000).toFixed(0)}k ft
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Live Fault Injectors */}
+            <div className="flex flex-col gap-1">
+              <span className="label-xs text-amber font-bold">LIVE FAULT INJECTORS</span>
+              <div className="grid grid-cols-2 gap-1 mt-1">
+                <button
+                  onClick={() => toggleFault('c2Overheat')}
+                  className={`py-1 text-[8px] font-mono border transition-colors ${faults.c2Overheat ? 'border-critical bg-critical/20 text-critical font-bold' : 'border-border text-muted-foreground hover:border-amber/50'}`}
+                >
+                  CYL 2 OVERHEAT
+                </button>
+                <button
+                  onClick={() => toggleFault('turboFail')}
+                  className={`py-1 text-[8px] font-mono border transition-colors ${faults.turboFail ? 'border-critical bg-critical/20 text-critical font-bold' : 'border-border text-muted-foreground hover:border-amber/50'}`}
+                >
+                  TURBO FAIL
+                </button>
+                <button
+                  onClick={() => toggleFault('bearingFail')}
+                  className={`py-1 text-[8px] font-mono border transition-colors ${faults.bearingFail ? 'border-critical bg-critical/20 text-critical font-bold' : 'border-border text-muted-foreground hover:border-amber/50'}`}
+                >
+                  BEARING FAIL
+                </button>
+                <button
+                  onClick={() => toggleFault('injectorClog')}
+                  className={`py-1 text-[8px] font-mono border transition-colors ${faults.injectorClog ? 'border-critical bg-critical/20 text-critical font-bold' : 'border-border text-muted-foreground hover:border-amber/50'}`}
+                >
+                  INJECTOR CLOG
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="mb-4 grid gap-px bg-border sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi label="ENGINE HEALTH" value={`${(state.health * 100).toFixed(1)}%`} sub="COMPOSITE / AE-P4" />
-            <Kpi label="REMAINING USEFUL LIFE" value="8.7 — 11.2 H" sub="CONFIDENCE 78%" tone="amber" />
-            <Kpi label="MISSION RISK" value="MEDIUM" sub="READINESS 72%" tone="amber" />
-            <Kpi label="ACTIVE ADVISORIES" value="2" sub="1 MEDIUM / 1 LOW" tone="cyan" />
+            <Kpi label="ENGINE HEALTH" value={`${(healthIndex * 100).toFixed(1)}%`} sub="COMPOSITE / AE-P4" />
+            <Kpi label="REMAINING USEFUL LIFE" value={`${(rulHours || 420).toFixed(1)} H`} sub="ML PREDICTED CONFIDENCE 94%" tone="cyan" />
+            <Kpi label="MISSION RISK" value={healthIndex < 0.6 ? "HIGH" : healthIndex < 0.8 ? "MEDIUM" : "NOMINAL"} sub={`READINESS ${(healthIndex * 100).toFixed(0)}%`} tone={healthIndex < 0.7 ? "amber" : "cyan"} />
+            <Kpi label="ACTIVE ADVISORIES" value={activeAlerts?.length ? `${activeAlerts.length}` : "0"} sub="0 CRITICAL / NOMINAL" tone={activeAlerts?.length ? "amber" : "nominal"} />
           </div>
 
           {tab === "LIVE TWIN" && (

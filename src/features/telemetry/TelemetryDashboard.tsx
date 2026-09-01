@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { Area, AreaChart, Line, LineChart, ResponsiveContainer, YAxis } from "recharts";
-import { Bar, Panel, Readout, useClock } from "@/components/hud/primitives";
+import { Bar, Panel, Readout } from "@/components/hud/primitives";
 import { BASELINE_CONDITIONS, simulate, type Conditions } from "@/lib/domain/engine/model";
+import { useFlightStore } from "@/features/flight-sim/flightStore";
 
 type Channel = {
   key: string;
@@ -52,26 +53,69 @@ export function TelemetryDashboard({
   fault?: number;
   compact?: boolean;
 }) {
-  const t = useClock();
-  const now = Math.floor(t * 2) / 2;
-  const state = simulate(now, conditions, fault);
+  // Explicit selectors force React components to re-render on every state tick!
+  const liveRpm = useFlightStore((s) => s.rpm) ?? 2400;
+  const cht = useFlightStore((s) => s.cht) || [140, 140, 140, 140];
+  const maxCht = Math.max(...cht);
+  const liveEgt = useFlightStore((s) => s.egt) ?? 680;
+  const liveOilP = useFlightStore((s) => s.oilPressure) ?? 5.2;
+  const liveOilT = useFlightStore((s) => s.oilTemp) ?? 95;
+  const liveVib = useFlightStore((s) => s.vibrationRMS) ?? 0.8;
+  const throttle = useFlightStore((s) => s.throttle) ?? 65;
+  const healthIndex = useFlightStore((s) => s.healthIndex) ?? 0.96;
+  const faults = useFlightStore((s) => s.faults) || { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false };
+  const history = useFlightStore((s) => s.historyBuffer) || [];
 
+  const liveFuelFlow = 8.5 + (throttle / 100) * 14.2;
+  const liveBatt = 28.1 + (liveRpm > 2000 ? 0.4 : -1.2);
+  const liveAltHealth = liveRpm > 2000 ? 98 : 45;
+  const liveInjEff = faults?.injectorClog ? 52 : 94;
+
+  const currentValues: Record<string, number> = {
+    rpm: liveRpm,
+    cht: maxCht,
+    egt: liveEgt,
+    oilp: liveOilP,
+    oilt: liveOilT,
+    ff: liveFuelFlow,
+    vib: liveVib,
+    batt: liveBatt,
+    alt: liveAltHealth,
+    inj: liveInjEff,
+  };
+
+  // Sparkline data series mapping from flightStore historyBuffer
   const series = useMemo(() => {
     const out: Record<string, { v: number }[]> = {};
-    for (const c of CHANNELS) out[c.key] = [];
-    for (let i = 40; i >= 0; i--) {
-      const s = simulate(now - i * 0.5, conditions, fault);
-      for (const c of CHANNELS) out[c.key]!.push({ v: c.get(s) });
+    CHANNELS.forEach((c) => (out[c.key] = []));
+
+    if (history.length > 0) {
+      history.forEach((pt) => {
+        out.rpm.push({ v: pt.map ? liveRpm * (0.9 + (pt.map / 30) * 0.1) : liveRpm });
+        out.cht.push({ v: pt.chtMax });
+        out.egt.push({ v: pt.egt });
+        out.oilp.push({ v: pt.oilPressure });
+        out.oilt.push({ v: pt.oilTemp });
+        out.ff.push({ v: liveFuelFlow });
+        out.vib.push({ v: pt.vibrationRMS });
+        out.batt.push({ v: liveBatt });
+        out.alt.push({ v: liveAltHealth });
+        out.inj.push({ v: liveInjEff });
+      });
+    } else {
+      CHANNELS.forEach((c) => {
+        out[c.key] = Array.from({ length: 20 }, () => ({ v: currentValues[c.key] || 0 }));
+      });
     }
     return out;
-  }, [now, conditions, fault]);
+  }, [history, liveRpm, maxCht, liveEgt, liveOilP, liveOilT, liveVib, throttle, liveFuelFlow, liveBatt, liveAltHealth, liveInjEff]);
 
   const subsystems = [
-    { k: "COMBUSTION", v: state.combustionHealth },
-    { k: "THERMAL", v: state.thermalHealth },
-    { k: "LUBRICATION", v: state.lubricationHealth },
-    { k: "VIBRATION", v: Math.max(0, 1 - (state.vibrationRms - 0.5) / 1.6) },
-    { k: "ELECTRICAL", v: state.electricalHealth },
+    { k: "COMBUSTION", v: faults?.injectorClog ? 0.52 : 0.94 },
+    { k: "THERMAL", v: Math.max(0.2, 1.0 - (maxCht - 140) / 100) },
+    { k: "LUBRICATION", v: Math.max(0.2, 1.0 - (liveOilT - 90) / 60) },
+    { k: "VIBRATION", v: Math.max(0.1, 1.0 - (liveVib - 0.4) / 2.0) },
+    { k: "ELECTRICAL", v: liveAltHealth / 100 },
   ];
 
   const channels = compact ? CHANNELS.slice(0, 6) : CHANNELS;
@@ -81,6 +125,7 @@ export function TelemetryDashboard({
       <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3">
         {channels.map((c) => {
           const tone = TONE_HEX[c.tone ?? "cyan"]!;
+          const val = currentValues[c.key] ?? 0;
           return (
             <div key={c.key} className="min-w-0 bg-panel/80 p-3">
               <div className="flex items-baseline justify-between">
@@ -88,9 +133,9 @@ export function TelemetryDashboard({
                 <span className="label-xs text-[9px] opacity-60">{c.unit}</span>
               </div>
               <div className="readout mt-1 truncate text-lg" style={{ color: tone }}>
-                {c.get(state).toFixed(c.digits)}
+                {val.toFixed(c.digits)}
               </div>
-              <Sparkline data={series[c.key]!} tone={tone} />
+              <Sparkline data={series[c.key] || []} tone={tone} />
             </div>
           );
         })}
@@ -99,7 +144,7 @@ export function TelemetryDashboard({
       <Panel label="ENGINE HEALTH" corner="AE-P4">
         <div className="p-4">
           <div className="flex items-end gap-3">
-            <span className="readout text-4xl text-cyan">{(state.health * 100).toFixed(1)}</span>
+            <span className="readout text-4xl text-cyan">{(healthIndex * 100).toFixed(1)}</span>
             <span className="label-xs pb-2">% COMPOSITE</span>
           </div>
           <div className="mt-5 space-y-3">
@@ -109,14 +154,14 @@ export function TelemetryDashboard({
                   <span className="label-xs">{s.k}</span>
                   <span className="readout text-xs">{(s.v * 100).toFixed(0)}%</span>
                 </div>
-                <Bar value={s.v * 100} tone={s.v > 0.9 ? "nominal" : s.v > 0.75 ? "cyan" : "amber"} />
+                <Bar value={s.v * 100} tone={s.v > 0.85 ? "nominal" : s.v > 0.65 ? "cyan" : "amber"} />
               </div>
             ))}
           </div>
           <div className="mt-5 border-t border-border/60 pt-3">
             <div className="flex items-baseline justify-between">
               <span className="label-xs">ANOMALY SCORE</span>
-              <span className="readout text-sm text-amber">{(state.anomalyScore * 100).toFixed(0)}%</span>
+              <span className="readout text-sm text-amber">{((1.0 - healthIndex) * 100).toFixed(0)}%</span>
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, LockKeyhole, ShieldCheck } from "lucide-react";
 import { signIn } from "@/lib/auth-client";
 
@@ -14,6 +14,7 @@ export const Route = createFileRoute("/admin/login")({
 });
 
 function AdminLoginPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("demo@aeris-twin.local");
   const [password, setPassword] = useState("AerisDemo-2026!");
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +24,7 @@ function AdminLoginPage() {
     if (typeof window !== "undefined") {
       localStorage.setItem("aeris_admin_logged_in", "true");
     }
-    window.location.assign("/gcs");
+    navigate({ to: "/gcs" });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -42,7 +43,7 @@ function AdminLoginPage() {
         return;
       }
 
-      window.location.assign("/gcs");
+      navigate({ to: "/gcs" });
     } catch {
       executeDemoBypass();
     }
