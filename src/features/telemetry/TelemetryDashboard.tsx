@@ -122,7 +122,21 @@ export function TelemetryDashboard({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between px-3 py-2 bg-panel/90 border border-cyan/30 rounded backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-cyan animate-pulse" />
+            <span className="label-xs text-cyan font-bold">20Hz REAL-TIME ENGINE SENSOR BUS</span>
+          </div>
+          <button
+            onClick={() => useFlightStore.getState().exportCSV()}
+            className="px-2.5 py-1 bg-cyan/20 border border-cyan/50 text-cyan text-[10px] font-mono font-bold hover:bg-cyan/30 transition-all rounded"
+          >
+            EXPORT TELEMETRY CSV
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3">
         {channels.map((c) => {
           const tone = TONE_HEX[c.tone ?? "cyan"]!;
           const val = currentValues[c.key] ?? 0;
@@ -140,6 +154,7 @@ export function TelemetryDashboard({
           );
         })}
       </div>
+    </div>
 
       <Panel label="ENGINE HEALTH" corner="AE-P4">
         <div className="p-4">

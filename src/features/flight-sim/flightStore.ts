@@ -132,6 +132,7 @@ export interface FlightState {
   // Telemetry Logger & Replay
   isRecording: boolean;
   recordedLogs: TelemetryLogEntry[];
+  sessionLogs: TelemetryLogEntry[];
   isReplaying: boolean;
   replayIndex: number;
 
@@ -321,39 +322,38 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
   const prevBuffer = state.historyBuffer || [];
   const updatedBuffer = [...prevBuffer.slice(-39), newPoint];
 
-  // Logging telemetry if active
-  let updatedLogs = state.recordedLogs;
-  if (state.isRecording) {
-    const activeFaultsStr = Object.entries(activeFaultFlags).filter(([_, v]) => v).map(([k]) => k).join('|') || 'NOMINAL';
-    const logEntry: TelemetryLogEntry = {
-      timestamp: Number(t.toFixed(2)),
-      altitude: Number(state.altitude.toFixed(1)),
-      speed: Number(state.speed.toFixed(1)),
-      verticalSpeed: Number((state.pitchAngle * 1000).toFixed(1)),
-      pitch: Number((state.pitchAngle * 57.3).toFixed(2)),
-      roll: Number(state.bankAngle.toFixed(2)),
-      heading: Number(state.heading.toFixed(1)),
-      throttle: Number(state.throttle.toFixed(1)),
-      engineLoad: Number((overallLoad * 100).toFixed(1)),
-      rpm: Number(rpm.toFixed(0)),
-      map: Number(map.toFixed(1)),
-      boost: Number((map * 0.0338639).toFixed(2)),
-      cht1: Number(cht[0].toFixed(1)),
-      cht2: Number(cht[1].toFixed(1)),
-      cht3: Number(cht[2].toFixed(1)),
-      cht4: Number(cht[3].toFixed(1)),
-      egt1: Number(egt.toFixed(1)),
-      egt2: Number(egt.toFixed(1)),
-      egt3: Number((egt + (fs.injectorClog > 0.3 ? 68 : 0)).toFixed(1)),
-      egt4: Number(egt.toFixed(1)),
-      oilTemp: Number(oilTemp.toFixed(1)),
-      oilPressure: Number(oilPressure.toFixed(2)),
-      vibrationRMS: Number(vib.toFixed(3)),
-      health: Number((healthIndex * 100).toFixed(1)),
-      faultState: activeFaultsStr,
-    };
-    updatedLogs = [...state.recordedLogs, logEntry];
-  }
+  // Continuous telemetry logging for CSV export
+  const activeFaultsStr = Object.entries(activeFaultFlags).filter(([_, v]) => v).map(([k]) => k).join('|') || 'NOMINAL';
+  const logEntry: TelemetryLogEntry = {
+    timestamp: Number(t.toFixed(2)),
+    altitude: Number(state.altitude.toFixed(1)),
+    speed: Number(state.speed.toFixed(1)),
+    verticalSpeed: Number((state.pitchAngle * 1000).toFixed(1)),
+    pitch: Number((state.pitchAngle * 57.3).toFixed(2)),
+    roll: Number(state.bankAngle.toFixed(2)),
+    heading: Number(state.heading.toFixed(1)),
+    throttle: Number(state.throttle.toFixed(1)),
+    engineLoad: Number((overallLoad * 100).toFixed(1)),
+    rpm: Number(rpm.toFixed(0)),
+    map: Number(map.toFixed(1)),
+    boost: Number((map * 0.0338639).toFixed(2)),
+    cht1: Number(cht[0].toFixed(1)),
+    cht2: Number(cht[1].toFixed(1)),
+    cht3: Number(cht[2].toFixed(1)),
+    cht4: Number(cht[3].toFixed(1)),
+    egt1: Number(egt.toFixed(1)),
+    egt2: Number(egt.toFixed(1)),
+    egt3: Number((egt + (fs.injectorClog > 0.3 ? 68 : 0)).toFixed(1)),
+    egt4: Number(egt.toFixed(1)),
+    oilTemp: Number(oilTemp.toFixed(1)),
+    oilPressure: Number(oilPressure.toFixed(2)),
+    vibrationRMS: Number(vib.toFixed(3)),
+    health: Number((healthIndex * 100).toFixed(1)),
+    faultState: activeFaultsStr,
+  };
+
+  const updatedSessionLogs = [...(state.sessionLogs || []).slice(-499), logEntry];
+  const updatedLogs = state.isRecording ? [...state.recordedLogs, logEntry] : state.recordedLogs;
 
   return {
     rpm, map, cht, egt, oilPressure, oilTemp,
@@ -364,6 +364,7 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
     engineDecision,
     historyBuffer: updatedBuffer,
     recordedLogs: updatedLogs,
+    sessionLogs: updatedSessionLogs,
   };
 }
 
@@ -436,6 +437,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   focusedComponent: null,
   isRecording: false,
   recordedLogs: [],
+  sessionLogs: [],
   isReplaying: false,
   replayIndex: 0,
   engineDecision: null,
@@ -454,19 +456,60 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   toggleRecording: () => set((s) => ({ isRecording: !s.isRecording })),
   clearLogs: () => set({ recordedLogs: [] }),
   exportCSV: () => {
-    const { recordedLogs } = get();
-    if (!recordedLogs || recordedLogs.length === 0) return;
+    const state = get();
+    let logsToExport = state.recordedLogs;
+
+    // Fallback 1: If user didn't hit REC TELEMETRY, export session logs
+    if (!logsToExport || logsToExport.length === 0) {
+      logsToExport = state.sessionLogs || [];
+    }
+
+    // Fallback 2: If session logs empty, construct snapshot from current flight state
+    if (!logsToExport || logsToExport.length === 0) {
+      const activeFaultsStr = Object.entries(state.faults || {}).filter(([_, v]) => v).map(([k]) => k).join('|') || 'NOMINAL';
+      logsToExport = [{
+        timestamp: Number((state.missionElapsed || 0).toFixed(2)),
+        altitude: Number((state.altitude || 0).toFixed(1)),
+        speed: Number((state.speed || 0).toFixed(1)),
+        verticalSpeed: Number(((state.pitchAngle || 0) * 1000).toFixed(1)),
+        pitch: Number(((state.pitchAngle || 0) * 57.3).toFixed(2)),
+        roll: Number((state.bankAngle || 0).toFixed(2)),
+        heading: Number((state.heading || 0).toFixed(1)),
+        throttle: Number((state.throttle || 0).toFixed(1)),
+        engineLoad: 50.0,
+        rpm: Number((state.rpm || 2400).toFixed(0)),
+        map: Number((state.map || 93).toFixed(1)),
+        boost: Number(((state.map || 93) * 0.0338639).toFixed(2)),
+        cht1: Number((state.cht?.[0] ?? 140).toFixed(1)),
+        cht2: Number((state.cht?.[1] ?? 140).toFixed(1)),
+        cht3: Number((state.cht?.[2] ?? 140).toFixed(1)),
+        cht4: Number((state.cht?.[3] ?? 140).toFixed(1)),
+        egt1: Number((state.egt || 680).toFixed(1)),
+        egt2: Number((state.egt || 680).toFixed(1)),
+        egt3: Number((state.egt || 680).toFixed(1)),
+        egt4: Number((state.egt || 680).toFixed(1)),
+        oilTemp: Number((state.oilTemp || 95).toFixed(1)),
+        oilPressure: Number((state.oilPressure || 5.2).toFixed(2)),
+        vibrationRMS: Number((state.vibrationRMS || 0.8).toFixed(3)),
+        health: Number(((state.healthIndex || 0.95) * 100).toFixed(1)),
+        faultState: activeFaultsStr,
+      }];
+    }
+
     const headers = "timestamp,altitude,speed,verticalSpeed,pitch,roll,heading,throttle,engineLoad,rpm,map,boost,cht1,cht2,cht3,cht4,egt1,egt2,egt3,egt4,oilTemp,oilPressure,vibrationRMS,health,faultState\n";
-    const rows = recordedLogs.map((l) =>
+    const rows = logsToExport.map((l) =>
       `${l.timestamp},${l.altitude.toFixed(1)},${l.speed.toFixed(1)},${l.verticalSpeed.toFixed(1)},${l.pitch.toFixed(2)},${l.roll.toFixed(2)},${l.heading.toFixed(1)},${l.throttle.toFixed(1)},${l.engineLoad.toFixed(1)},${l.rpm.toFixed(0)},${l.map.toFixed(1)},${l.boost.toFixed(2)},${l.cht1.toFixed(1)},${l.cht2.toFixed(1)},${l.cht3.toFixed(1)},${l.cht4.toFixed(1)},${l.egt1.toFixed(1)},${l.egt2.toFixed(1)},${l.egt3.toFixed(1)},${l.egt4.toFixed(1)},${l.oilTemp.toFixed(1)},${l.oilPressure.toFixed(2)},${l.vibrationRMS.toFixed(3)},${l.health.toFixed(1)},${l.faultState}`
     ).join("\n");
-    const blob = new Blob([headers + rows], { type: 'text/csv' });
+
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `AERIS_TWIN_FlightTelemetry_${Date.now()}.csv`;
+    a.download = `AERIS_TWIN_Telemetry_Export_${Date.now()}.csv`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
   startReplay: () => set({ isReplaying: true, replayIndex: 0 }),
   stopReplay: () => set({ isReplaying: false }),

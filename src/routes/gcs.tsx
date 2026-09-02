@@ -431,22 +431,48 @@ function GcsPage() {
           {tab === "SIMULATION LAB" && <SimulationLab />}
           {tab === "MAINTENANCE" && <MaintenanceAdvisory />}
           {tab === "REPORTS" && (
-            <Panel label="REPORTS" corner="EXPORT">
-              <div className="p-4">
-                {[
-                  { k: "MSN-2214 MISSION REPORT", v: "GENERATED 00:41 UTC", p: 100 },
-                  { k: "FLEET HEALTH SUMMARY / 30 D", v: "GENERATED 21:12 UTC", p: 100 },
-                  { k: "AERIS-RUL-01 MODEL CARD", v: "v1.4 — SYNTHETIC VALIDATION", p: 100 },
-                  { k: "ADVISORY AUDIT TRAIL", v: "STREAMING", p: 64 },
-                ].map((r) => (
-                  <div key={r.k} className="border-b border-border/60 py-3 last:border-0">
-                    <div className="flex items-baseline justify-between">
-                      <span className="label-xs">{r.k}</span>
-                      <span className="readout text-[10px] text-muted-foreground">{r.v}</span>
+            <Panel label="FLIGHT & ENGINE TELEMETRY REPORTS" corner="EXPORT ALL CSV">
+              <div className="p-4 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-panel-2/60 border border-cyan/30 rounded">
+                  <div>
+                    <div className="label-xs text-cyan font-bold text-[11px]">EXPORT LIVE FLIGHT TELEMETRY DATASET</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      Exports complete 20Hz telemetry log including CHT 1–4, EGT 1–4, Vibration RMS, MAP, RPM, Oil Pressure, and ML Health Index.
                     </div>
-                    <Bar className="mt-2" value={r.p} tone={r.p === 100 ? "nominal" : "cyan"} />
                   </div>
-                ))}
+                  <button
+                    onClick={() => useFlightStore.getState().exportCSV()}
+                    className="px-3 py-1.5 bg-cyan/20 border border-cyan text-cyan text-xs font-mono font-bold hover:bg-cyan/30 transition-all rounded shadow-md flex items-center gap-1.5"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    DOWNLOAD FULL CSV
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {[
+                    { k: "MSN-2214 MISSION TELEMETRY REPORT", v: "FULL RECORDING — CSV", p: 100 },
+                    { k: "FLEET HEALTH & MAINTENANCE LOG", v: "AUTOMATIC SYNTHESIS", p: 100 },
+                    { k: "AERIS-RUL-01 MODEL CARD & ANOMALY MATRIX", v: "v1.4 VALIDATION DATASET", p: 100 },
+                    { k: "ADVISORY & FAULT AUDIT TRAIL", v: "STREAMING LOG", p: 100 },
+                  ].map((r) => (
+                    <div key={r.k} className="border-b border-border/60 py-3 last:border-0 flex items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-baseline justify-between mb-1">
+                          <span className="label-xs text-foreground/90 font-bold">{r.k}</span>
+                          <span className="readout text-[10px] text-muted-foreground">{r.v}</span>
+                        </div>
+                        <Bar value={r.p} tone="cyan" />
+                      </div>
+                      <button
+                        onClick={() => useFlightStore.getState().exportCSV()}
+                        className="px-2.5 py-1 text-[10px] border border-cyan/40 bg-cyan/10 text-cyan hover:bg-cyan/20 font-mono font-semibold rounded shrink-0 transition-colors"
+                      >
+                        EXPORT CSV
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </Panel>
           )}

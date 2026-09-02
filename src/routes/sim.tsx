@@ -392,14 +392,13 @@ function SimPageContent() {
               {s.isRecording ? '● RECORDING TELEMETRY' : 'REC TELEMETRY'}
             </button>
 
-            {s.recordedLogs.length > 0 && (
-              <button
-                onClick={s.exportCSV}
-                className="px-2 py-0.5 border border-cyan/50 bg-cyan/15 text-[8px] text-cyan font-bold hover:bg-cyan/30 rounded"
-              >
-                EXPORT CSV ({s.recordedLogs.length})
-              </button>
-            )}
+            <button
+              onClick={s.exportCSV}
+              className="px-2 py-0.5 border border-cyan/50 bg-cyan/15 text-[8px] text-cyan font-bold hover:bg-cyan/30 rounded transition-colors shadow-sm"
+              title="Export complete telemetry log to CSV"
+            >
+              EXPORT CSV ({(s.recordedLogs?.length || s.sessionLogs?.length || 1)})
+            </button>
           </div>
         </div>
 

@@ -118,11 +118,14 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+import { MouseEffect } from "@/components/MouseEffect";
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
+      <MouseEffect />
       <GlobalSimulationLoop />
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
