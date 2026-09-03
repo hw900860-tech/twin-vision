@@ -83,6 +83,8 @@ export type EngineCanvasProps = {
   selectedZone?: string | null;
   /** External deterministic rotation clock — keeps the spin continuous across scenes. */
   rotationSync?: { angle: number };
+  /** Cinematic handoff stance — tilts the twin to the video's final camera angle at the cut, easing to upright as it docks. */
+  macroPose?: { yawDeg: number; pitchDeg: number; blend: number };
 };
 
 function CameraRig({ view, cameraZ, disabled }: { view: EngineCameraView; cameraZ: number; disabled: boolean }) {
@@ -186,6 +188,7 @@ function EngineCanvas({
   onSelectZone,
   selectedZone,
   rotationSync,
+  macroPose,
 }: EngineCanvasProps) {
   const controlsRef = useRef<any>(null);
   const setFocusedComponent = useFlightStore((s) => s.setFocusedComponent);
@@ -246,6 +249,7 @@ function EngineCanvas({
           onSelectZone={onSelectZone}
           selectedZone={selectedZone}
           rotationSync={rotationSync}
+          macroPose={macroPose}
         />
       </Suspense>
       {interactive && (

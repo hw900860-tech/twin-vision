@@ -247,6 +247,7 @@ export function EngineModel({
   onSelectZone,
   selectedZone,
   rotationSync,
+  macroPose: _macroPose,
 }: {
   spin?: boolean;
   fault?: number;
@@ -269,9 +270,20 @@ export function EngineModel({
    * frame; `spin` is ignored.
    */
   rotationSync?: { angle: number };
+  /**
+   * Cinematic handoff pose — the macro twin opens TILTED to match the exact
+   * camera stance of the video's final engine frame (the clip looks down on the
+   * engine from slightly right of its axis, which is why its red valve-cover
+   * band and bright case read at frame centre rather than on top). `blend`
+   * scales the pose from 1 (full match at the cut) to 0 (the twin's natural
+   * upright resting pose once it has docked). Applied on the outer group so the
+   * showcase spin on the motor is unaffected.
+   */
+  macroPose?: { yawDeg: number; pitchDeg: number; blend: number };
 }) {
   const group = useRef<THREE.Group>(null);
   const motorRef = useRef<THREE.Group>(null);
+  const macroPose = _macroPose;
   const meshRefs = useRef<Map<string, THREE.Mesh>>(new Map());
   const explodeP = useRef(0);
   const [hoveredZone, setHoveredZone] = useState<string | null>(null);
@@ -283,6 +295,19 @@ export function EngineModel({
   const faults = useFlightStore((s) => s.faults);
   const engineDecision = useFlightStore((s) => s.engineDecision);
   const setFocusedComponent = useFlightStore((s) => s.setFocusedComponent);
+
+  // Handoff pose (radians). Euler order XYZ on the outer group composes
+  // Rx(pitch)·Ry(yaw), exactly the stance measured against the video's final
+  // engine frame. Fades out with `blend` so the twin rights itself as it glides
+  // centre → right and lands at the familiar upright hero pose.
+  const poseRotation = useMemo<[number, number, number]>(() => {
+    const b = macroPose ? Math.min(1, Math.max(0, macroPose.blend)) : 0;
+    return [
+      (macroPose?.pitchDeg ?? 0) * (Math.PI / 180) * b,
+      (macroPose?.yawDeg ?? 0) * (Math.PI / 180) * b,
+      0,
+    ];
+  }, [macroPose?.pitchDeg, macroPose?.yawDeg, macroPose?.blend]);
 
   const subAssemblies = useMemo(() => create6SeparateSubAssemblies(scene), [scene]);
 
@@ -448,7 +473,7 @@ export function EngineModel({
   });
 
   return (
-    <group ref={group} position={modelPosition} scale={modelScale}>
+    <group ref={group} position={modelPosition} scale={modelScale} rotation={poseRotation}>
       <group ref={motorRef} scale={[3, 3, 3]} position={[0, 0.1, 0.5]}>
         {/* Render 6 separate physical sub-mesh objects */}
         {subAssemblies.map((zm) => (

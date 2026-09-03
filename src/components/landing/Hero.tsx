@@ -97,10 +97,21 @@ const ENGINE_MODULE_WARM_MS = 600;
  */
 const DESKTOP_REST_SCALE = 1.15;
 const DESKTOP_MACRO_SCALE = 2.45;
+/**
+ * Handoff stance. Measured against the actual clip (7.4–7.65s frames, before
+ * the dashboard tail): the video camera looks DOWN on the engine's front from
+ * slightly right of its axis — its bright case centre reads at ≈(58%w, 52–56%h)
+ * and the engine band spans ≈21→90%h. Raster-projecting engine.glb through the
+ * app's macro transform shows the same composition only when the twin holds a
+ * yaw +10° / pitch −18° stance, so the macro opens TILTED like the clip and
+ * then rights itself as it glides centre → right into the upright hero pose.
+ */
+const HANDOFF_YAW_DEG = 10;
+const HANDOFF_PITCH_DEG = -18;
 /** Horizontal hold offset (vw) so the macro twin overlaps the video's engine. */
-const DESKTOP_MACRO_X_OFFSET_VW = -3.5;
+const DESKTOP_MACRO_X_OFFSET_VW = -2;
 /** Downward hold offset (vh) so the macro twin overlaps the video's engine vertically. */
-const DESKTOP_MACRO_Y_OFFSET_VH = 4;
+const DESKTOP_MACRO_Y_OFFSET_VH = 0;
 const MOBILE_REST_SCALE = 1.02;
 const MOBILE_MACRO_SCALE = 1.3;
 
@@ -385,6 +396,20 @@ export function Hero() {
   const modelScale = isDesktop
     ? DESKTOP_REST_SCALE + (DESKTOP_MACRO_SCALE - DESKTOP_REST_SCALE) * (1 - handoffEase)
     : MOBILE_REST_SCALE + (MOBILE_MACRO_SCALE - MOBILE_REST_SCALE) * (1 - handoffEase);
+  // Cinematic stance blend: 1 = the twin presents the video's tilted camera
+  // angle at the cut; eases to 0 (upright hero pose) with the macro → rest
+  // resolve, so the handoff overlaps the clip and the engine rights itself as
+  // it docks on the right. Stable once settled (memo keeps the canvas from
+  // re-reconciling after the choreography ends).
+  const poseBlend = revealed ? 1 - handoffEase : 1;
+  const macroPose = useMemo(
+    () => ({
+      yawDeg: HANDOFF_YAW_DEG,
+      pitchDeg: HANDOFF_PITCH_DEG,
+      blend: poseBlend,
+    }),
+    [poseBlend],
+  );
   // Memoized so the canvas gets a stable reference once the choreography settles
   // (React.memo shallow-compares props — a fresh array every frame would defeat it).
   const modelPosition = useMemo<[number, number, number]>(
@@ -568,6 +593,7 @@ export function Hero() {
                   highlights={highlights}
                   modelScale={modelScale}
                   modelPosition={modelPosition}
+                  macroPose={macroPose}
                   cameraZ={isDesktop ? 7 : 7.4}
                   onSelectZone={(zoneName) => setSelectedZone(zoneName)}
                   selectedZone={selectedZone}
