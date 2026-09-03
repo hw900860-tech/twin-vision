@@ -610,3 +610,34 @@ The TAPAS BH-201 was a ₹1,786 crore lesson that **raw performance metrics aren
 - **Action** — tell the operator what to do (advisory banner + alerts)
 
 That's what a Digital Twin does. And that's what AERIS-TWIN is.
+
+---
+
+## UAV → Ground Datalink — the live communication path
+
+### The question we get asked
+> "How does telemetry actually reach the control centre, at what latency, and in what format? You can't send CSV files live."
+
+Correct — CSV never crosses the link. The link carries **compact binary frames** at 20 Hz; CSV is a debrief *report* the ground station generates after flight. This repo implements the full path for real: an airborne browser session, a ground-station gateway process, and a ground console receiving over a genuine network hop.
+
+### Architecture
+```
+/sim window (AIRBORNE)              server/relay.ts (:3010)              /gcs window (GROUND)
+flightStore.tick() 20 Hz   ──encode──▶  binary frames 112 B  ──decode+CRC──▶  writes flightStore
+channel model (LOS/SATCOM) ──ws──▶  hub: telemetry→grounds,  ◀──0x02 CMD──  operator controls
+0x03 ACK ◀────────────────────────  commands→airborne                     retry ×3 + ACK UI
+```
+- **Format** — fixed-layout binary (magic/ver/type/seq/txSec header, 24 × f32 payload, fault+emergency flags, CRC-16). ~112 B/frame @ 20 Hz ≈ **18 kbps**, decode < 1 ms, integrity verified per frame. Production would swap the hand-rolled codec for generated MAVLink 2 / Protobuf — same interface.
+- **Latency budget (sample → screen)** — LOS datalink ≈ **20–40 ms** one-way; Iridium-class SATCOM ≈ **220–520 ms** one-way. "Sub-50 ms" is a *designed, measured* budget over LOS/ground links, never a claim over SATCOM physics. The GCS bar shows measured one-way latency (frame timestamp vs local clock — accurate here because both windows share one machine; real deployments use NTP/PTP), gateway RTT, loss %, seq gaps and last-frame age.
+- **QoS classes** — telemetry is an unacknowledged, latest-wins stream (UDP-like); operator commands are acknowledged with retry ×3 (TCP-like). Command RTT is displayed live ("THROTTLE ACK 4 ms").
+- **Channel model** — LOS / SATCOM / OUTAGE buttons on the flight-sim's DATALINK MODEM panel simulate the RF link (delay, jitter, loss). The WebSocket hop itself is real: flip SATCOM on the sim window and the GCS latency readout jumps; kill the relay and the GCS shows NO LINK instead of silently faking data.
+- **Store-and-forward (next phase)** — on reconnect the ground requests missing sequence numbers and the airborne bursts the gap; a binary session recorder on the relay turns the raw stream into the debrief CSV ground-side.
+
+### Running the demo (two windows)
+1. `npm run relay` → ground-station gateway on `ws://localhost:3010` (or `RELAY_PORT=3010 node server/relay.ts`).
+2. `npm run dev` → app on :5174.
+3. Open **/sim** in one browser window (AIRBORNE) and **/gcs** in a second window (GROUND). Watch the GCS link bar: LIVE + one-way latency, RTT, loss, CRC, gaps. Drag the GCS throttle or inject a fault — it travels down the link (ACK shown), and the UAV responds.
+4. Flip the sim's DATALINK modem to SATCOM → GCS latency jumps to ~250 ms with small loss. Switch to OUTAGE → NO LINK, frame age climbing. Back to LOS → stream resumes, gaps counted.
+
+### Deployment honesty
+WebSockets need a persistent process. Local demo = the relay on your laptop. A public preview would host the relay as a small always-on Node service or Cloudflare Durable Objects (this repo already targets Cloudflare via Nitro). The local two-window demo is what we present — the network hop is real.

@@ -52,11 +52,11 @@ function EngineLoadVectorArrow() {
 
 const CAMERA_POSITIONS: Record<EngineCameraView, { pos: [number, number, number]; target: [number, number, number] }> = {
   overview: { pos: [1.6, 1.5, 7.2], target: [0, 0, 0] },
-  intake: ZONE_CAMERA_FOCUS["INTAKE / TURBO"],
-  exhaust: ZONE_CAMERA_FOCUS["EXHAUST MANIFOLD"],
-  thermal: ZONE_CAMERA_FOCUS["CYLINDER HEAD"],
-  core: ZONE_CAMERA_FOCUS["CRANKCASE"],
-  oil: ZONE_CAMERA_FOCUS["OIL SUMP"],
+  intake: ZONE_CAMERA_FOCUS["INTAKE / TURBO"]!,
+  exhaust: ZONE_CAMERA_FOCUS["EXHAUST MANIFOLD"]!,
+  thermal: ZONE_CAMERA_FOCUS["CYLINDER HEAD"]!,
+  core: ZONE_CAMERA_FOCUS["CRANKCASE"]!,
+  oil: ZONE_CAMERA_FOCUS["OIL SUMP"]!,
   gcs: { pos: [0, 0.75, 8.3], target: [0, 0, 0] },
 };
 
@@ -115,7 +115,7 @@ function CameraRig({ view, cameraZ, disabled }: { view: EngineCameraView; camera
   return null;
 }
 
-function CameraZoneFocusRig({ selectedZone, controlsRef }: { selectedZone?: string | null; controlsRef: React.RefObject<any> }) {
+function CameraZoneFocusRig({ selectedZone, controlsRef }: { selectedZone?: string | null | undefined; controlsRef: React.RefObject<any> }) {
   const { camera } = useThree();
   const prevZone = useRef<string | null>(null);
   const animProgress = useRef<number>(1);
@@ -214,7 +214,7 @@ function EngineCanvas({
     >
       <fog attach="fog" args={['#070a0d', 12, 35]} />
       <CameraRig view={cameraView} cameraZ={cameraZ} disabled={interactive} />
-      <CameraZoneFocusRig selectedZone={selectedZone} controlsRef={controlsRef} />
+      <CameraZoneFocusRig {...(selectedZone != null ? { selectedZone } : {})} controlsRef={controlsRef} />
 
       {/* Studio lighting — neutral key + cyan brand rim. Materials are now
           physical (red covers, silver alloy) so the wash is kept neutral. */}
@@ -246,10 +246,10 @@ function EngineCanvas({
           showLabels={showLabels}
           modelScale={modelScale}
           modelPosition={modelPosition}
-          onSelectZone={onSelectZone}
-          selectedZone={selectedZone}
-          rotationSync={rotationSync}
-          macroPose={macroPose}
+          {...(onSelectZone != null ? { onSelectZone } : {})}
+          {...(selectedZone != null ? { selectedZone } : {})}
+          {...(rotationSync != null ? { rotationSync } : {})}
+          {...(macroPose != null ? { macroPose } : {})}
         />
       </Suspense>
       {interactive && (

@@ -336,6 +336,7 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
   const prevBuffer = state.historyBuffer || [];
   const updatedBuffer = [...prevBuffer.slice(-39), newPoint];
 
+
   // Continuous telemetry logging for CSV export
   const activeFaultsStr = Object.entries(activeFaultFlags).filter(([_, v]) => v).map(([k]) => k).join('|') || 'NOMINAL';
   const logEntry: TelemetryLogEntry = {

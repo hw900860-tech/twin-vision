@@ -20,12 +20,12 @@ export function JARVISExplodeStudio({
   const [autoRotate, setAutoRotate] = useState(false);
   const [wireframe, setWireframe] = useState(false);
   const [explodeAmount, setExplodeAmount] = useState(1.0);
-  const [selectedPart, setSelectedPart] = useState<string>("CYLINDER HEAD");
+  const [selectedPart, setSelectedPart] = useState<string | null>("CYLINDER HEAD");
 
   if (!isOpen) return null;
 
   const activeZone = ZONES.find((z) => z.name === selectedPart) ?? ZONES[0];
-  const meta = ZONE_DETAILS[selectedPart] ?? ZONE_DETAILS["CYLINDER HEAD"];
+  const meta = ((selectedPart ? ZONE_DETAILS[selectedPart] : null) ?? ZONE_DETAILS["CYLINDER HEAD"])!;
   const telemetryItems = meta.getTelemetry(highlights);
 
   return (

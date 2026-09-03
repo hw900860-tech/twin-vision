@@ -112,6 +112,7 @@ export function TelemetryDashboard({
 
     if (history.length > 0) {
       history.forEach((pt) => {
+
         CHANNELS.forEach((c) => {
           const arr = out[c.key];
           if (!arr) return;

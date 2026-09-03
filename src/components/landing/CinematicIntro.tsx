@@ -184,9 +184,13 @@ export function CinematicIntro({
         // engine and the X-ray twin overlap most, so the dissolve reads as one
         // object transforming instead of a hard hand-off.
         opacity: active ? 1 : 0,
+        // Blur-dissolve: as the video fades it also defocuses + brightens, so
+        // the emerging X-ray twin beneath reads as one object materialising
+        // instead of a hard cross-dissolve of two different renderings.
+        filter: active ? "none" : "blur(10px) brightness(1.12)",
         transition: active
           ? "none"
-          : `opacity ${FADE_S * 1000}ms cubic-bezier(0.65, 0, 0.35, 1)`,
+          : `opacity ${FADE_S * 1000}ms cubic-bezier(0.65, 0, 0.35, 1), filter ${FADE_S * 1000}ms cubic-bezier(0.65, 0, 0.35, 1)`,
         pointerEvents: active ? "auto" : "none",
       }}
     >

@@ -63,13 +63,13 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
   const outputs = decision?.modelOutputs;
 
   const activeZoneName = s.selectedSubsystem || 'CYLINDER HEAD (ROTAX RED)';
-  const activeMeta = SUBSYSTEM_MAPPING[activeZoneName] || SUBSYSTEM_MAPPING['CYLINDER HEAD (ROTAX RED)'];
+  const activeMeta = SUBSYSTEM_MAPPING[activeZoneName] ?? SUBSYSTEM_MAPPING['CYLINDER HEAD (ROTAX RED)']!;
 
   const highlights = {
-    cyl1CHT: outputs?.cylhead.cht1 ?? s.cht[0],
-    cyl2CHT: outputs?.cylhead.cht2 ?? s.cht[1],
-    cyl3CHT: outputs?.cylhead.cht3 ?? s.cht[2],
-    cyl4CHT: outputs?.cylhead.cht4 ?? s.cht[3],
+    cyl1CHT: outputs?.cylhead.cht1 ?? s.cht[0] ?? 150,
+    cyl2CHT: outputs?.cylhead.cht2 ?? s.cht[1] ?? 150,
+    cyl3CHT: outputs?.cylhead.cht3 ?? s.cht[2] ?? 150,
+    cyl4CHT: outputs?.cylhead.cht4 ?? s.cht[3] ?? 150,
     egt: outputs?.exhaust.avgEGT ?? s.egt,
     rpm: s.rpm,
     vibration: s.vibrationRMS,

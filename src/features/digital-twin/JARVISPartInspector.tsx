@@ -11,7 +11,7 @@ export interface ZoneMetadata {
   description: string;
   diagnosticNote: string;
   glow: string;
-  getTelemetry: (h: PartHighlights) => Array<{ label: string; value: string; tone?: string }>;
+  getTelemetry: (h: PartHighlights) => Array<{ label: string; value: string; tone?: string; color?: string }>;
 }
 
 export const ZONE_DETAILS: Record<string, ZoneMetadata> = {
@@ -130,7 +130,7 @@ export function JARVISPartInspector({
     description: "Engine component monitored by real-time JARVIS digital twin telemetry system.",
     diagnosticNote: "No active anomaly detected on this node.",
     glow: "#6fd8e8",
-    getTelemetry: (h) => [{ label: "HEALTH", value: `${(h.health * 100).toFixed(0)}%` }],
+    getTelemetry: (h) => [{ label: "HEALTH", value: `${(h.health * 100).toFixed(0)}%`, tone: "#6fd8e8" }],
   };
 
   const telemetryItems = meta.getTelemetry(highlights);

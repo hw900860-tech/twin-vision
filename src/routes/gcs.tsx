@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useMemo } from "react";
+import { lazy, Suspense, useState, useMemo, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, LayoutGrid, Activity, Stethoscope, History, FlaskConical, Wrench, FileText, Expand, Shrink, Tag, Plane } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
@@ -16,6 +16,9 @@ import { JARVISExplodeStudio } from "@/features/digital-twin/JARVISExplodeStudio
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { useFlightStore } from "@/features/flight-sim/flightStore";
+import { startGroundLink, stopGroundLink } from "@/features/datalink/ground";
+import { useLinkStore } from "@/features/datalink/linkStore";
+import { GcsLinkBar } from "@/features/datalink/GcsLinkBar";
 import { MaydayBanner } from "@/features/telemetry/MaydayBanner";
 import { EnvironmentPanel } from "@/features/environment/EnvironmentPanel";
 import { PostFlightAnalytics } from "@/features/reports/PostFlightAnalytics";
@@ -60,6 +63,14 @@ function Kpi({ label, value, sub, tone = "cyan" }: { label: string; value: strin
 }
 
 function GcsPage() {
+  // Datalink role: this window is the GROUND station. Its local simulation is
+  // paused (see GlobalSimulationLoop) and the GCS renders only telemetry that
+  // arrives over the real WebSocket link from an airborne /sim window.
+  useEffect(() => {
+    startGroundLink();
+    return () => stopGroundLink();
+  }, []);
+
   const [tab, setTab] = useState<NavKey>("LIVE TWIN");
   const [exploded, setExploded] = useState(false);
   const [showLabels, setShowLabels] = useState(true);
@@ -77,6 +88,11 @@ function GcsPage() {
   const healthIndex = useFlightStore((s) => s.healthIndex);
   const rulHours = useFlightStore((s) => s.rul);
   const activeAlerts = useFlightStore((s) => s.engineDecision?.alerts) || [];
+  const linkAirborneOnline = useLinkStore((s) => s.airborneOnline);
+  const linkFrames = useLinkStore((s) => s.rxFrames);
+  const linkAge = useLinkStore((s) => s.lastFrameAgeMs);
+  const linkLatency = useLinkStore((s) => s.latencyMs);
+  const linkLoss = useLinkStore((s) => s.lossPct);
 
   const throttle = useFlightStore((s) => s.throttle);
   const setThrottle = useFlightStore((s) => s.setThrottle);
@@ -127,7 +143,10 @@ function GcsPage() {
           </Link>
           <span className="font-display text-sm tracking-[0.3em]">AERIS-TWIN</span>
           <span className="hidden items-center gap-2 label-xs sm:flex">
-            FLIGHT SIMULATOR STREAM <StatusDot /> CONNECTED 1:1
+            FLIGHT SIMULATOR STREAM <StatusDot />{" "}
+            {linkAirborneOnline && linkFrames > 0 && linkAge < 1500
+              ? `LINKED ${linkLatency.toFixed(0)}ms · LOSS ${linkLoss.toFixed(1)}%`
+              : "AWAITING AIRBORNE SESSION"}
           </span>
         </div>
         <div className="flex items-center gap-4">
@@ -143,6 +162,8 @@ function GcsPage() {
           <SignOutButton />
         </div>
       </header>
+
+      <GcsLinkBar />
 
       <div className="relative z-10 flex">
         {/* left nav */}
@@ -200,9 +221,13 @@ function GcsPage() {
             </Link>
           </div>
 
-          <div className="mb-4 border border-cyan/30 bg-cyan/5 px-3 py-2 label-xs text-cyan flex items-center justify-between" role="status">
-            <span>LIVE TELEMETRY STREAM · CONNECTED 1:1 TO FLIGHT SIMULATOR AIRCRAFT</span>
-            <span className="text-[10px] text-cyan/70 font-mono">RPM: {rpm.toFixed(0)} | ALT: {altitude.toFixed(0)} FT</span>
+          <div className="mb-4 border px-3 py-2 label-xs flex items-center justify-between" role="status" style={{ borderColor: linkAirborneOnline && linkFrames > 0 && linkAge < 1500 ? "rgba(16,185,129,0.5)" : "rgba(234,179,8,0.5)", background: linkAirborneOnline && linkFrames > 0 && linkAge < 1500 ? "rgba(16,185,129,0.07)" : "rgba(234,179,8,0.06)", color: linkAirborneOnline && linkFrames > 0 && linkAge < 1500 ? "#34d399" : "#eab308" }}>
+            <span>
+              {linkAirborneOnline && linkFrames > 0 && linkAge < 1500
+                ? "LIVE TELEMETRY STREAM · DATA CROSSING THE LINK"
+                : "AWAITING AIRBORNE TELEMETRY — OPEN /sim IN ANOTHER WINDOW TO START THE STREAM"}
+            </span>
+            <span className="text-[10px] font-mono opacity-80">RPM: {rpm.toFixed(0)} | ALT: {altitude.toFixed(0)} FT</span>
           </div>
 
           {/* GCS LIVE AIRCRAFT COMMAND & CONTROL BAR */}

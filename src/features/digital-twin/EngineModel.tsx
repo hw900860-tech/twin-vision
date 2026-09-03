@@ -125,7 +125,7 @@ function create6SeparateSubAssemblies(scene: THREE.Group): Zone6Mesh[] {
   scene.traverse((child) => { if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh); });
   if (meshes.length === 0) return [];
 
-  const srcMesh = meshes[0];
+  const srcMesh = meshes[0]!;
   const geo = srcMesh.geometry.index ? srcMesh.geometry.toNonIndexed() : srcMesh.geometry.clone();
   const pos = geo.getAttribute('position');
   if (!pos) return [];
@@ -172,7 +172,7 @@ function create6SeparateSubAssemblies(scene: THREE.Group): Zone6Mesh[] {
 
     for (let v = 0; v < 3; v++) {
       const idx = i + v;
-      buckets[targetZone].push(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
+      buckets[targetZone]!.push(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
     }
   }
 
@@ -261,7 +261,7 @@ export function EngineModel({
   explodeAmount?: number;
   modelScale?: number;
   modelPosition?: [number, number, number];
-  onSelectZone?: (zoneName: string) => void;
+  onSelectZone?: (zoneName: string | null) => void;
   selectedZone?: string | null;
   /**
    * Drives the showcase rotation from an external deterministic clock (see
@@ -287,7 +287,7 @@ export function EngineModel({
   const meshRefs = useRef<Map<string, THREE.Mesh>>(new Map());
   const explodeP = useRef(0);
   const [hoveredZone, setHoveredZone] = useState<string | null>(null);
-  const { scene } = useGLTF('/engine.glb');
+  const { scene } = useGLTF('/engine.glb') as { scene: THREE.Group };
   const h = highlights ?? EMPTY_HIGHLIGHTS;
 
   const vizMode = useFlightStore((s) => s.vizMode);
@@ -467,9 +467,7 @@ export function EngineModel({
       zm.material.depthWrite = !wantTransparent;
     });
 
-    if (motorRef.current) {
-      motorRef.current.scale.setScalar(3 + p * 0.08);
-    }
+    motorRef.current?.scale.setScalar(3 + p * 0.08);
   });
 
   return (

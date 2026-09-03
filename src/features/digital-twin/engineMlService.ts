@@ -145,6 +145,7 @@ export interface EngineStateInputs {
 
 // 1. Model 1 — CYLINDER HEAD (CylinderHeadML)
 export function runCylinderHeadModel(state: EngineStateInputs): CylinderHeadMLOutput {
+
   const [c1 = 0, c2 = 0, c3 = 0, c4 = 0] = state.cht;
   const maxCHT = Math.max(c1, c2, c3, c4);
   const minCHT = Math.min(c1, c2, c3, c4);
@@ -331,6 +332,14 @@ export interface EngineDecisionResult {
   diagnosisText: string;
   recommendedAction: string;
   alerts: EngineAlert[];
+  subsystems: {
+    cylinderHead: CylinderHeadMLOutput;
+    exhaust: ExhaustMLOutput;
+    turboIntake: TurboIntakeMLOutput;
+    crankcase: CrankcaseMLOutput;
+    oilSump: OilSumpMLOutput;
+    propGearbox: PropGearboxMLOutput;
+  };
   modelOutputs: {
     cylhead: CylinderHeadMLOutput;
     exhaust: ExhaustMLOutput;
@@ -417,6 +426,14 @@ export function runEngineDecisionEngine(state: EngineStateInputs): EngineDecisio
     diagnosisText,
     recommendedAction,
     alerts,
+    subsystems: {
+      cylinderHead: cylhead,
+      exhaust,
+      turboIntake: turbo,
+      crankcase,
+      oilSump: oil,
+      propGearbox: gearbox,
+    },
     modelOutputs: { cylhead, exhaust, turbo, crankcase, oil, gearbox },
   };
 }
