@@ -21,6 +21,7 @@ export const DL_MSG_TELEMETRY = 0x01; // airborne → ground, unacknowledged str
 export const DL_MSG_CMD = 0x02; // ground → airborne, acknowledged control
 export const DL_MSG_ACK = 0x03; // airborne → ground, command acknowledgement
 export const DL_MSG_HEARTBEAT = 0x04; // keep-alive / rtt probe (json envelope)
+export const DL_MSG_GAP_REQ = 0x05; // ground → airborne: "I have through seq X — replay what you buffered after it" (store-and-forward)
 
 export const DL_HEADER_BYTES = 14; // magic2 + ver1 + type1 + seq2 + txSec8 (f64 epoch seconds)
 
@@ -88,6 +89,8 @@ export const TELEMETRY_FRAME_BYTES =
   DL_HEADER_BYTES + PAYLOAD_FIELDS.length * 4 + DL_FLAGS_BYTES + DL_CRC_BYTES; // 112 B
 
 export const CMD_FRAME_BYTES = DL_HEADER_BYTES + 5 + DL_CRC_BYTES; // 17 B
+
+export const GAP_REQ_FRAME_BYTES = DL_HEADER_BYTES + 4 + DL_CRC_BYTES; // 20 B (payload: u32 groundSeq)
 
 export const DEFAULT_RELAY_URL = "ws://localhost:3010";
 

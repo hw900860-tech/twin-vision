@@ -7,6 +7,7 @@
 import {
   CMD_FRAME_BYTES,
   DL_CRC_BYTES,
+  DL_MSG_GAP_REQ,
   DL_HEADER_BYTES,
   DL_MAGIC,
   DL_MSG_ACK,
@@ -14,6 +15,7 @@ import {
   DL_MSG_TELEMETRY,
   DL_VERSION,
   EMERGENCY_CRASHED,
+  GAP_REQ_FRAME_BYTES,
   EMERGENCY_FORCED_LANDING,
   EMERGENCY_NOMINAL,
   EMERGENCY_RECOVERY,
@@ -78,6 +80,49 @@ function putHeader(dv: DataView, type: number, seq: number, txMs: number): void 
   dv.setUint8(3, type);
   dv.setUint16(4, seq & 0xffff);
   dv.setFloat64(6, txMs / 1000, false); // epoch seconds f64 — no 32-bit wraparound
+}
+
+
+/** Frame type at byte 3 — lets the relay / receivers route without a full decode. */
+export function readFrameType(buf: ArrayBuffer | Uint8Array): number {
+  const dv = buf instanceof Uint8Array ? new DataView(buf.buffer, buf.byteOffset, buf.byteLength) : new DataView(buf);
+  return dv.getUint8(3);
+}
+
+/** Sequence number at bytes 4-5. */
+export function readFrameSeq(buf: ArrayBuffer | Uint8Array): number {
+  const dv = buf instanceof Uint8Array ? new DataView(buf.buffer, buf.byteOffset, buf.byteLength) : new DataView(buf);
+  return dv.getUint16(4);
+}
+
+/** GAP_REQ (ground → airborne): "I have received through seq groundSeq". */
+export function encodeGapReq(groundSeq: number, txMs: number): ArrayBuffer {
+  const buf = new ArrayBuffer(GAP_REQ_FRAME_BYTES);
+  const dv = new DataView(buf);
+  putHeader(dv, DL_MSG_GAP_REQ, 0, txMs);
+  dv.setUint32(DL_HEADER_BYTES, groundSeq >>> 0, false);
+  const bodyLen = GAP_REQ_FRAME_BYTES - DL_CRC_BYTES;
+  dv.setUint16(bodyLen, crc16(new Uint8Array(buf, 0, bodyLen)));
+  return buf;
+}
+
+export interface DecodedGapReq {
+  groundSeq: number;
+  txMs: number;
+  crcOk: boolean;
+}
+
+export function decodeGapReq(buf: ArrayBuffer): DecodedGapReq | null {
+  if (buf.byteLength < GAP_REQ_FRAME_BYTES) return null;
+  const dv = new DataView(buf);
+  if (dv.getUint16(0) !== DL_MAGIC || dv.getUint8(2) !== DL_VERSION || dv.getUint8(3) !== DL_MSG_GAP_REQ) return null;
+  const bodyLen = GAP_REQ_FRAME_BYTES - DL_CRC_BYTES;
+  const crcOk = crc16(new Uint8Array(buf, 0, bodyLen)) === dv.getUint16(bodyLen);
+  return {
+    groundSeq: dv.getUint32(DL_HEADER_BYTES, false) >>> 0,
+    txMs: Math.round(dv.getFloat64(6, false) * 1000),
+    crcOk,
+  };
 }
 
 /** Reads one snapshot field by its payload key — keeps encode/decode in lockstep. */

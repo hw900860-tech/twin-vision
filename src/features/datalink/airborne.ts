@@ -20,6 +20,7 @@ import {
 } from "@/lib/datalink/protocol";
 import {
   decodeCmdFrame,
+  decodeGapReq,
   emergencyCodeOf,
   encodeAckFrame,
   encodeTelemetryFrame,
@@ -38,6 +39,16 @@ let seq = 0;
 let lastTxFrames = 0;
 let lastTxBytes = 0;
 let lastDropped = 0;
+
+/**
+ * Store-and-forward ring buffer. Every frame encoded for transmission is kept
+ * here (60 s at 20 Hz) so that when the ground station reports missing sequence
+ * numbers — radio outage, SATCOM loss, a dropped gateway connection — the
+ * airborne session can replay the exact missing window from its own buffer.
+ */
+const RING_CAP = 1200;
+const RING_MAX_REPLAY = 900; // max frames burst per GAP_REQ
+const ring: { seq: number; buf: ArrayBuffer }[] = [];
 
 function snapshot(): TelemetrySnapshot {
   const s = useFlightStore.getState();
@@ -77,7 +88,33 @@ function snapshot(): TelemetrySnapshot {
   };
 }
 
+/** Replay buffered frames whose seq is strictly after the ground's reported last seq. */
+function replyGapBurst(groundSeq: number): number {
+  let sent = 0;
+  for (const f of ring) {
+    if (sent >= RING_MAX_REPLAY) break;
+    const dist = (f.seq - groundSeq) & 0xffff;
+    if (dist > 0 && dist < 60000) {
+      if (socket?.connected && socket.sendBinary(f.buf)) sent++;
+    }
+  }
+  return sent;
+}
+
 function handleBinary(buf: ArrayBuffer): void {
+  const gap = decodeGapReq(buf);
+  if (gap) {
+    // Radio is physically off in OUTAGE — the burst cannot be transmitted. The
+    // ground side re-requests on its own retry schedule once frames flow again.
+    if (gap.crcOk && channel?.mode !== "OUTAGE") {
+      const sent = replyGapBurst(gap.groundSeq);
+      if (sent > 0) {
+        const ls = useLinkStore.getState();
+        useLinkStore.getState().patch({ replaysSent: ls.replaysSent + sent });
+      }
+    }
+    return;
+  }
   const cmd = decodeCmdFrame(buf);
   if (!cmd || !cmd.crcOk) return;
   const flight = useFlightStore.getState();
@@ -110,6 +147,9 @@ function handleBinary(buf: ArrayBuffer): void {
 function tick(): void {
   if (!socket?.connected) return;
   const frame = encodeTelemetryFrame(snapshot(), seq, Date.now());
+  ring.push({ seq, buf: frame });
+  if (ring.length > RING_CAP) ring.splice(0, ring.length - RING_CAP);
+  const mySeq = seq;
   seq = (seq + 1) & 0xffff;
   channel?.dispatch(frame, (b) => {
     if (socket?.connected && socket.sendBinary(b)) {
@@ -127,7 +167,7 @@ function rateTicker(): void {
   lastTxFrames = ls.txFrames;
   lastTxBytes = ls.txBytes;
   lastDropped = channel?.dropped ?? 0;
-  useLinkStore.getState().patch({ txRateHz: deltaFrames, txBps: deltaBytes * 8 });
+  useLinkStore.getState().patch({ txRateHz: deltaFrames, txBps: deltaBytes * 8, txBuffer: ring.length });
   if (deltaDropped > 0) useLinkStore.getState().patch({ txDropped: ls.txDropped + deltaDropped });
 }
 

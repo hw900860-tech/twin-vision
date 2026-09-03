@@ -20,6 +20,9 @@ export function GcsLinkBar() {
   const rxFrames = useLinkStore((s) => s.rxFrames);
   const rxBadCrc = useLinkStore((s) => s.rxBadCrc);
   const rxGaps = useLinkStore((s) => s.rxGaps);
+  const gapRecovered = useLinkStore((s) => s.gapRecovered);
+  const gapPending = useLinkStore((s) => s.gapPending);
+  const gapLost = useLinkStore((s) => s.gapLost);
   const lastFrameAgeMs = useLinkStore((s) => s.lastFrameAgeMs);
   const cmdStatus = useLinkStore((s) => s.cmdStatus);
   const cmdRttMs = useLinkStore((s) => s.cmdRttMs);
@@ -79,6 +82,17 @@ export function GcsLinkBar() {
       <span className="text-muted-foreground">
         GAPS <b className="text-amber">{rxGaps}</b>
       </span>
+      <span className="text-muted-foreground" title="Store-and-forward: frames recovered by replaying the airborne buffer">
+        S&F REC <b className="text-nominal">{gapRecovered}</b>
+      </span>
+      <span className="text-muted-foreground" title="Frames still missing — waiting on airborne replay">
+        PEND {gapPending > 0 ? <b className="text-amber">{gapPending}</b> : <b className="text-cyan">0</b>}
+      </span>
+      {gapLost > 0 && (
+        <span className="text-muted-foreground" title="Frames abandoned — gap exceeded the airborne ring window">
+          LOST <b className="text-critical">{gapLost}</b>
+        </span>
+      )}
       <span className="text-muted-foreground">
         AGE <b style={{ color: ageCritical ? "#ef4444" : "#6fd8e8" }}>{fmtMs(lastFrameAgeMs)}</b>
       </span>

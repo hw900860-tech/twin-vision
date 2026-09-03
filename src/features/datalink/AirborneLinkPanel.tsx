@@ -9,6 +9,8 @@ export function AirborneLinkPanel() {
   const txBps = useLinkStore((s) => s.txBps);
   const txFrames = useLinkStore((s) => s.txFrames);
   const txDropped = useLinkStore((s) => s.txDropped);
+  const txBuffer = useLinkStore((s) => s.txBuffer);
+  const replaysSent = useLinkStore((s) => s.replaysSent);
   const airborneOnline = useLinkStore((s) => s.airborneOnline);
 
   const modes: { key: "LOS" | "SATCOM" | "OUTAGE"; label: string }[] = [
@@ -69,6 +71,12 @@ export function AirborneLinkPanel() {
         <span>SENT / DROPPED</span>
         <span className="text-right text-cyan">
           {txFrames} / {txDropped}
+        </span>
+        <span className="text-cyan" title="Store-and-forward ring: frames buffered on the aircraft for replay (60 s @ 20 Hz)">
+          S&F BUFFER
+        </span>
+        <span className="text-right text-cyan">
+          {txBuffer} · REPLAY <b className="text-nominal">{replaysSent}</b>
         </span>
         <span>PEER</span>
         <span className="text-right" style={{ color: airborneOnline ? "#10b981" : "#eab308" }}>

@@ -20,6 +20,10 @@ export interface LinkStatsState {
   txDropped: number;
   txRateHz: number;
   txBps: number;
+  /** Airborne store-and-forward ring depth (frames buffered for replay). */
+  txBuffer: number;
+  /** Frames replayed to the ground after a GAP_REQ. */
+  replaysSent: number;
 
   // receive side (ground)
   rxFrames: number;
@@ -28,6 +32,14 @@ export interface LinkStatsState {
   rxGaps: number;
   rxRateHz: number;
   lastRxTxMs: number; // txMs of the most recently applied frame
+  /** Outstanding missing sequence frames waiting on store-and-forward replay. */
+  gapPending: number;
+  /** Missing frames recovered via gap replay since link start. */
+  gapRecovered: number;
+  /** Missing frames abandoned as unrecoverable (ring under-run / request lost). */
+  gapLost: number;
+  /** GAP_REQ messages sent since link start. */
+  gapRequests: number;
 
   // link quality
   latencyMs: number; // EMA one-way frame latency (ground, same-machine clock)
@@ -62,6 +74,8 @@ export const useLinkStore = create<LinkStatsState>((set) => ({
   txDropped: 0,
   txRateHz: 0,
   txBps: 0,
+  txBuffer: 0,
+  replaysSent: 0,
 
   rxFrames: 0,
   rxBytes: 0,
@@ -69,6 +83,10 @@ export const useLinkStore = create<LinkStatsState>((set) => ({
   rxGaps: 0,
   rxRateHz: 0,
   lastRxTxMs: 0,
+  gapPending: 0,
+  gapRecovered: 0,
+  gapLost: 0,
+  gapRequests: 0,
 
   latencyMs: 0,
   rttMs: 0,
@@ -96,6 +114,19 @@ export const useLinkStore = create<LinkStatsState>((set) => ({
       lossPct: 0,
       lastFrameAgeMs: 0,
       lastRxTxMs: 0,
+      gapPending: 0,
+      gapRecovered: 0,
+      gapLost: 0,
+      gapRequests: 0,
     }),
-  resetTx: () => set({ txFrames: 0, txBytes: 0, txDropped: 0, txRateHz: 0, txBps: 0 }),
+  resetTx: () =>
+    set({
+      txFrames: 0,
+      txBytes: 0,
+      txDropped: 0,
+      txRateHz: 0,
+      txBps: 0,
+      txBuffer: 0,
+      replaysSent: 0,
+    }),
 }));

@@ -2,10 +2,17 @@
  * GROUND side of the datalink (the /gcs window).
  *
  * Receives binary telemetry frames that crossed the real network, decodes +
- * integrity-verifies them, writes the decoded values into the flight store the
- * GCS widgets already render, and recomputes the engine-health ML on the
- * ground from received data (the digital-twin story: same physics + ML model
- * runs ground-side on what arrived over the link).
+ * integrity-verifies them, and feeds an ORDERED store-and-forward receiver:
+ * frames are applied to the GCS in strict sequence order, missing frames
+ * (radio/SATCOM drops, gateway reconnects) trigger a GAP_REQ upstream, and the
+ * airborne session bursts its buffered window back down to close the hole —
+ * the classic "store-and-forward" datalink behaviour for beyond-line-of-sight
+ * UAV operations.
+ *
+ * Applied values are written into the flight store the GCS widgets render, and
+ * the engine-health ML is recomputed ground-side from received data (the
+ * digital-twin story: same physics + ML model runs ground-side on what arrived
+ * over the link).
  *
  * Command downlink: GCS controls are patched so operator actions become
  * acknowledged command frames (QoS: guaranteed delivery, retry ×3).
@@ -13,6 +20,7 @@
 import { useFlightStore } from "@/features/flight-sim/flightStore";
 import { runEngineDecisionEngine } from "@/features/digital-twin/engineMlService";
 import { LinkSocket } from "@/lib/datalink/client";
+import { OrderedReceiver } from "@/lib/datalink/orderReceiver";
 import {
   CMD_ALTITUDE,
   CMD_FAULT,
@@ -26,6 +34,7 @@ import {
   decodeTelemetryFrame,
   emergencyNameOf,
   encodeCmdFrame,
+  encodeGapReq,
   type DecodedTelemetry,
 } from "@/lib/datalink/codec";
 import { useLinkStore } from "./linkStore";
@@ -36,10 +45,14 @@ let pingTimer: ReturnType<typeof setInterval> | null = null;
 let ageTimer: ReturnType<typeof setInterval> | null = null;
 let rateTimer: ReturnType<typeof setInterval> | null = null;
 let pendingTimer: ReturnType<typeof setInterval> | null = null;
-let lastRxSeq = -1;
-let lastRxFrames = 0;
-let lastRxBytes = 0;
+let stallTimer: ReturnType<typeof setInterval> | null = null;
 let actionsPatched = false;
+
+// ---- ordered store-and-forward receive chain ----
+let receiver: OrderedReceiver | null = null;
+let gapReqAtMs = 0; // last GAP_REQ send time (throttle)
+let gapReqRetries = 0; // consecutive unanswered requests before abandoning a hole
+let lastRxFrames = 0;
 
 // ---- command downlink state ----
 let cmdSeq = 0;
@@ -61,39 +74,42 @@ function synthFft(throttle: number, vib: number, bearing: boolean, rpm: number):
   return out;
 }
 
-function applyTelemetry(f: DecodedTelemetry): void {
+/** Sync receiver counters (holes / pending / recovered / lost) into the store. */
+function syncReceiverStats(): void {
+  if (!receiver) return;
+  const st = receiver.state;
+  const ls = useLinkStore.getState();
+  const total = ls.rxFrames + st.holes;
+  const lossPct = total > 0 ? Math.min(100, (st.holes * 100) / total) : 0;
+  useLinkStore.getState().patch({
+    rxGaps: st.holes,
+    gapPending: st.pending,
+    gapRecovered: st.recovered,
+    gapLost: st.lost,
+    lossPct,
+  });
+}
+
+/** One in-order telemetry frame delivered by the receiver — write it to the GCS. */
+function applyLive(f: DecodedTelemetry, recovered: boolean): void {
   const now = Date.now();
   const ls = useLinkStore.getState();
 
-  // ---- integrity + sequence-gap accounting ----
-  if (!f.crcOk) {
-    useLinkStore.getState().patch({ rxBadCrc: ls.rxBadCrc + 1 });
-    return;
+  // One-way latency EMA. Replayed (store-and-forward) frames are excluded: their
+  // age is dominated by buffering time on the aircraft, not the live link.
+  let latencyMs = ls.latencyMs;
+  if (!recovered) {
+    const lat = Math.max(0, now - f.txMs);
+    latencyMs = latencyMs > 0 ? latencyMs * 0.8 + lat * 0.2 : lat;
   }
-  let gaps = 0;
-  if (lastRxSeq >= 0) {
-    const expected = (lastRxSeq + 1) & 0xffff;
-    gaps = (f.seq - expected + 65536) % 65536;
-    if (gaps > 1000) gaps = 0; // wrap-around sanity
-  }
-  lastRxSeq = f.seq;
-  const rxGaps = ls.rxGaps + gaps;
-  const totalExpected = ls.rxFrames + rxGaps + 1;
-  const lossPct = totalExpected > 0 ? Math.min(100, (rxGaps * 100) / totalExpected) : 0;
-
-  // ---- one-way latency (EMA). Same-machine clock in the demo; on real
-  // deployments this is PTP/NTP-synchronised between air and ground. ----
-  const lat = Math.max(0, now - f.txMs);
-  const latencyMs = ls.latencyMs > 0 ? ls.latencyMs * 0.8 + lat * 0.2 : lat;
 
   useLinkStore.getState().patch({
     rxFrames: ls.rxFrames + 1,
     rxBytes: ls.rxBytes + 112,
-    rxGaps,
-    lossPct,
     latencyMs,
     lastRxTxMs: f.txMs,
   });
+  syncReceiverStats();
 
   // ---- write decoded values into the store the GCS renders ----
   const s = useFlightStore.getState();
@@ -151,6 +167,55 @@ function applyTelemetry(f: DecodedTelemetry): void {
       faults: { ...f.faults },
     }),
   });
+}
+
+/**
+ * Ask the airborne session to replay everything it buffered after our highest
+ * applied frame. Throttled: one live request is enough — its answer covers the
+ * whole ring window; retries happen only when a request goes unanswered.
+ */
+function requestGap(): void {
+  if (!socket?.connected || !receiver) return;
+  const now = Date.now();
+  if (now - gapReqAtMs < 500) return;
+  gapReqAtMs = now;
+  const base = receiver.highestApplied;
+  if (base < 0) return; // stream not started yet — nothing to recover
+  if (socket.sendBinary(encodeGapReq(base, now))) {
+    const ls = useLinkStore.getState();
+    useLinkStore.getState().patch({ gapRequests: ls.gapRequests + 1 });
+  }
+}
+
+/** Watch the hole: request replay, retry once, then abandon what can't be filled. */
+function stallWatch(): void {
+  if (!receiver) return;
+  const st = receiver.state;
+  syncReceiverStats();
+  if (st.pending === 0) {
+    gapReqRetries = 0;
+    return;
+  }
+  // Retry with backoff while the hole stays open: the modem may be in OUTAGE
+  // (the aircraft is still buffering — retrying is correct, abandoning is not).
+  const retryAt = 2500 + gapReqRetries * 2500; // ~2.5s, 5s, 7.5s, 10s after the hole
+  if (receiver.stallAgeMs > retryAt && gapReqRetries < 4) {
+    // No in-order progress — the earlier request (or its replay) was lost.
+    gapReqRetries++;
+    gapReqAtMs = 0;
+    requestGap();
+  } else if (receiver.stallAgeMs > 25000) {
+    // Hole cannot be filled (outage outlasted the airborne ring window). Drop
+    // it and resume from the newest held frame so the live stream never freezes.
+    const lost = receiver.fastForward();
+    gapReqRetries = 0;
+    gapReqAtMs = 0;
+    if (lost > 0) {
+      const ls = useLinkStore.getState();
+      console.warn(`[ground] abandoned ${lost} unrecoverable frame(s) — ring under-run`);
+    }
+    syncReceiverStats();
+  }
 }
 
 // ================= command downlink (acknowledged) =================
@@ -214,7 +279,13 @@ function onBinary(buf: ArrayBuffer): void {
     return;
   }
   const f = decodeTelemetryFrame(buf);
-  if (f) applyTelemetry(f);
+  if (!f) return;
+  if (!f.crcOk) {
+    const ls = useLinkStore.getState();
+    useLinkStore.getState().patch({ rxBadCrc: ls.rxBadCrc + 1 });
+    return;
+  }
+  receiver?.push(f);
 }
 
 function onControl(msg: Record<string, unknown>): void {
@@ -297,10 +368,22 @@ export function startGroundLink(): void {
   const ls = useLinkStore.getState();
   ls.resetRx();
   useLinkStore.getState().setRole("ground");
+
+  receiver = new OrderedReceiver({
+    onApply: (f, recovered) => applyLive(f, recovered),
+    onGap: () => requestGap(),
+  });
+
   socket = new LinkSocket(ls.relayUrl, {
     onOpen: () => {
       useLinkStore.getState().setWsStatus("online");
       socket?.sendControl({ type: "hello", role: "ground" });
+      // Reconnected mid-stream: anything the aircraft sent while we were down
+      // is sitting in its ring — ask for it immediately.
+      if (receiver?.started) {
+        gapReqAtMs = 0;
+        requestGap();
+      }
     },
     onClose: () => {
       useLinkStore.getState().setWsStatus("offline");
@@ -311,6 +394,7 @@ export function startGroundLink(): void {
     onControl,
   });
   socket.connect();
+
   pingTimer = setInterval(() => socket?.sendControl({ type: "ping", ts: Date.now() }), 1000);
   ageTimer = setInterval(() => {
     const s = useLinkStore.getState();
@@ -320,12 +404,12 @@ export function startGroundLink(): void {
   }, 500);
   rateTimer = setInterval(() => {
     const s = useLinkStore.getState();
-    const deltaFrames = s.rxFrames - lastRxFrames;
+    const d = s.rxFrames - lastRxFrames;
     lastRxFrames = s.rxFrames;
-    lastRxBytes = s.rxBytes;
-    useLinkStore.getState().patch({ rxRateHz: deltaFrames });
+    useLinkStore.getState().patch({ rxRateHz: d });
   }, 1000);
   pendingTimer = setInterval(checkPending, 200);
+  stallTimer = setInterval(stallWatch, 400);
   patchGroundActions();
 }
 
@@ -336,14 +420,16 @@ export function stopGroundLink(): void {
   if (ageTimer) clearInterval(ageTimer);
   if (rateTimer) clearInterval(rateTimer);
   if (pendingTimer) clearInterval(pendingTimer);
+  if (stallTimer) clearInterval(stallTimer);
   pingTimer = null;
   ageTimer = null;
   rateTimer = null;
   pendingTimer = null;
-  lastRxSeq = -1;
+  stallTimer = null;
   pending.clear();
   socket?.close();
   socket = null;
+  receiver = null;
   restoreGroundActions();
   useLinkStore.getState().setRole("offline");
   useLinkStore.getState().setWsStatus("offline");
