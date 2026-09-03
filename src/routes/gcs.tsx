@@ -23,6 +23,7 @@ import { MaydayBanner } from "@/features/telemetry/MaydayBanner";
 import { EnvironmentPanel } from "@/features/environment/EnvironmentPanel";
 import { PostFlightAnalytics } from "@/features/reports/PostFlightAnalytics";
 import { SensorHealthMatrix } from "@/features/sensors/SensorHealthMatrix";
+import { engineViewerAudio } from "@/features/digital-twin/engineViewerAudio";
 
 const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
 
@@ -373,7 +374,10 @@ function GcsPage() {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        setExploded((prev) => !prev);
+                        const next = !exploded;
+                        if (next) engineViewerAudio.explode();
+                        else engineViewerAudio.assemble();
+                        setExploded(next);
                       }}
                       aria-pressed={exploded}
                       className="flex min-h-10 items-center gap-2 border border-cyan/50 bg-panel/95 px-3 text-[9px] font-mono label-xs text-cyan backdrop-blur-sm transition-colors hover:bg-cyan/20 cursor-pointer pointer-events-auto select-none"
@@ -439,7 +443,12 @@ function GcsPage() {
               zoneName={selectedZone}
               highlights={highlights}
               onClose={() => setSelectedZone(null)}
-              onExplodeToggle={() => setExploded(!exploded)}
+              onExplodeToggle={() => {
+                const next = !exploded;
+                if (next) engineViewerAudio.explode();
+                else engineViewerAudio.assemble();
+                setExploded(next);
+              }}
               isExploded={exploded}
             />
           )}

@@ -9,6 +9,7 @@ import { ControlPanel } from "@/features/flight-sim/ControlPanel";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { useFlightStore } from "@/features/flight-sim/flightStore";
+import { FlightSimAudio } from "@/features/flight-sim/FlightSimAudio";
 import { startAirborneLink, stopAirborneLink } from "@/features/datalink/airborne";
 import { AirborneLinkPanel } from "@/features/datalink/AirborneLinkPanel";
 import { LinkStatusChip } from "@/features/datalink/LinkStatusChip";
@@ -79,6 +80,10 @@ function SimPageContent() {
           <SignOutButton />
         </div>
       </header>
+
+      {/* Sim-only audio: continuous engine voice follows live RPM/airspeed;
+          crash = impact + engine shutdown; restart spools back up. */}
+      <FlightSimAudio />
 
       {/* Main Flight Viewport: full-screen UAV simulator */}
       <div className="relative flex-1 overflow-hidden bg-[#020406]">

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Volume2, VolumeX } from "lucide-react";
 
 /**
  * AERIS-TWIN opening cinematic (MP4 → real GLB crossfade).
@@ -7,6 +8,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * viewport. The real 3D engine (engine.glb) is preloaded and warmed by the
  * Hero while this plays, and mounts underneath the video just before the cut —
  * so no WebGL runs during the main cinematic and playback stays smooth.
+ *
+ * SOUND: the served clip carries a muxed cinematic mix — the original
+ * soundtrack preserved, with a synthesised distant-aircraft → engine-roar
+ * swell layered over 0–7.5s (peaking while the cinematic engine rotates) that
+ * fades out just before the handoff. Because the roar lives ON the video
+ * timeline, muting/unmuting mid-play never drifts out of sync.
  *
  * At CUT_AT_S the clip has reached its final X-ray engine shot (measured frame
  * analysis of the ~10.0s asset: engine macro rotates 5.6–8.0s, dashboard tail
@@ -26,7 +33,7 @@ const CUT_AT_S = 7.55;
 /** Seconds the video keeps playing while fading (crossfade length). */
 const FADE_S = 1.4;
 /** Cache-busting asset version so an updated clip can never be served stale. */
-const VIDEO_SRC = "/assets/aeris-intro.mp4?v=4";
+const VIDEO_SRC = "/assets/aeris-intro.mp4?v=5";
 
 export function CinematicIntro({
   phase,
@@ -42,6 +49,14 @@ export function CinematicIntro({
   const [startPrompt, setStartPrompt] = useState(false);
   const [showSkip, setShowSkip] = useState(false);
   const [initHidden, setInitHidden] = useState(false);
+  // Audible-intro state. Browsers only allow UNMUTED autoplay after a user
+  // gesture on the page, so the clip starts muted; we probe for audible
+  // playback right after it starts and, if the browser refuses, keep it muted
+  // and lift the mute on the first gesture / the SOUND toggle (the roar is
+  // muxed onto the video timeline, so unmuting mid-play stays in sync).
+  const [soundOn, setSoundOn] = useState(false);
+  const [soundLocked, setSoundLocked] = useState(false);
+  const soundLockedRef = useRef(false);
 
   const fire = useCallback(() => {
     if (firedRef.current) return;
@@ -56,6 +71,54 @@ export function CinematicIntro({
     if (v) v.pause();
     fire();
   }, [fire]);
+
+  // Audible playback. `on = true` unmutes and (re)starts playback — which the
+  // browser only honours inside a real user gesture when it blocks unmuted
+  // autoplay. If even the gesture-triggered play is refused we fall back to
+  // muted playback and stay quiet rather than risk the intro not playing at
+  // all. Because the roar is muxed onto the video timeline, sync is inherent.
+  const applySound = useCallback((on: boolean) => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (on) {
+      v.muted = false;
+      const p = v.play();
+      if (p) {
+        p
+          .then(() => setSoundLocked(false))
+          .catch(() => {
+            // Unmuted playback refused (no user activation) — stay muted but
+            // keep the cinematic playing.
+            v.muted = true;
+            setSoundOn(false);
+            setSoundLocked(true);
+            const p2 = v.play();
+            if (p2) p2.catch(() => setStartPrompt(true));
+          });
+      } else {
+        // play() returned null (unsupported/aborted) — revert to the muted
+        // start so state and the actual element never disagree.
+        v.muted = true;
+        setSoundOn(false);
+        setSoundLocked(true);
+      }
+    } else {
+      v.muted = true;
+    }
+    setSoundOn(on);
+  }, []);
+  const applySoundRef = useRef(applySound);
+  applySoundRef.current = applySound;
+  soundLockedRef.current = soundLocked;
+
+  // First user gesture on the page lifts the autoplay sound lock (pointer,
+  // touch or keyboard) — the roar picks up exactly where the clip is.
+  const unlockSoundOnGesture = useCallback(() => {
+    const v = videoRef.current;
+    if (!v || !soundLockedRef.current || v.muted === false) return;
+    if (v.currentTime >= cutAtRef.current + FADE_S) return; // cinematic already over
+    applySoundRef.current(true);
+  }, []);
 
   // Init caption + skip affordance timers.
   useEffect(() => {
@@ -73,7 +136,7 @@ export function CinematicIntro({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    v.muted = true;
+    v.muted = true; // always start muted: unmuted autoplay needs a user gesture
 
     const reveal = () => setVideoOn(true);
     const tryPlay = () => {
@@ -95,6 +158,11 @@ export function CinematicIntro({
     v.addEventListener("ended", onEnded);
     v.addEventListener("error", onError);
 
+    const unlock = () => unlockSoundOnGesture();
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("touchstart", unlock);
+    window.addEventListener("keydown", unlock);
+
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduced) {
       v.pause();
@@ -114,12 +182,22 @@ export function CinematicIntro({
       }
       // Hard safety net even if metadata/playback stalls.
       window.setTimeout(fire, (CUT_AT_S + FADE_S + 1.2) * 1000);
+      // Probe for audible playback a beat after the clip is rolling: browsers
+      // that allow unmuted autoplay keep sound on; those that don't reject the
+      // play() and we stay muted until the first gesture above.
+      window.setTimeout(() => {
+        if (v.paused || v.ended || v.currentTime < 0.02) return;
+        applySoundRef.current(true);
+      }, 300);
     }
     return () => {
       v.removeEventListener("playing", onPlaying);
       v.removeEventListener("timeupdate", onTimeUpdate);
       v.removeEventListener("ended", onEnded);
       v.removeEventListener("error", onError);
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("touchstart", unlock);
+      window.removeEventListener("keydown", unlock);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -233,6 +311,36 @@ export function CinematicIntro({
         </div>
       </div>
 
+      {/* Sound toggle — engine roar is muxed onto the clip; browsers often
+          require a gesture to unlock audio, so this is also the unlock path. */}
+      {active && showSkip && !startPrompt && (
+        <button
+          type="button"
+          aria-pressed={soundOn}
+          aria-label={soundOn ? "Mute intro audio" : "Enable intro audio"}
+          onClick={() => applySound(!soundOn)}
+          className="absolute bottom-4 left-4 flex min-h-9 cursor-pointer items-center gap-2 border bg-background/60 px-3 py-1 font-mono text-[10px] tracking-[0.2em] transition-colors backdrop-blur-sm sm:bottom-6 sm:left-6"
+          style={{
+            borderColor: soundOn ? "rgba(111,216,232,0.45)" : "var(--border)",
+            color: soundOn ? "var(--cyan)" : "var(--muted-foreground)",
+          }}
+        >
+          {soundOn ? (
+            <Volume2 className="h-3.5 w-3.5" />
+          ) : (
+            <VolumeX
+              className="h-3.5 w-3.5"
+              style={
+                soundLocked
+                  ? { color: "var(--cyan)", animation: "aeris-pulse 1.6s ease-in-out infinite" }
+                  : undefined
+              }
+            />
+          )}
+          {soundOn ? "SOUND ON" : soundLocked ? "ENABLE SOUND" : "SOUND OFF"}
+        </button>
+      )}
+
       {/* Skip — after a beat, so accidental taps don't end it instantly. */}
       {active && showSkip && !startPrompt && (
         <button
@@ -244,21 +352,18 @@ export function CinematicIntro({
         </button>
       )}
 
-      {/* Autoplay-blocked fallback (should be rare for a muted video). */}
+      {/* Autoplay-blocked fallback (should be rare for a muted video). The tap
+          is a real user gesture, so it also requests audible playback. */}
       {active && startPrompt && (
         <button
           type="button"
           onClick={() => {
-            const v = videoRef.current;
-            if (!v) return;
             setStartPrompt(false);
-            v.muted = true;
-            const p = v.play();
-            if (p) p.catch(() => setStartPrompt(true));
+            applySound(true);
           }}
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border border-cyan/60 bg-cyan/10 px-5 py-3 font-mono text-[11px] tracking-[0.22em] text-cyan transition-colors hover:bg-cyan/20 cursor-pointer"
         >
-          TAP TO BEGIN
+          TAP TO BEGIN — WITH SOUND
         </button>
       )}
     </div>

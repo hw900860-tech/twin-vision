@@ -2,6 +2,7 @@ import React, { useState, Suspense, lazy } from 'react';
 import { useFlightStore } from './flightStore';
 import { evalStatus, type SubsystemStatus } from '../digital-twin/engineMlService';
 import { ShieldAlert, Layers, X, Zap, Expand, Shrink, BarChart2, Activity, Cpu, CheckCircle2 } from 'lucide-react';
+import { engineViewerAudio } from '../digital-twin/engineViewerAudio';
 
 const EngineCanvas = lazy(() => import('../digital-twin/EngineCanvas'));
 
@@ -213,7 +214,12 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
           )}
 
           <button
-            onClick={() => setExploded(!exploded)}
+            onClick={() => {
+              const next = !exploded;
+              if (next) engineViewerAudio.explode();
+              else engineViewerAudio.assemble();
+              setExploded(next);
+            }}
             className="flex h-6 items-center gap-1 border border-cyan/50 bg-cyan/15 px-2 text-[8.5px] font-mono text-cyan transition-all hover:bg-cyan/30"
           >
             {exploded ? <Shrink className="h-3 w-3" /> : <Expand className="h-3 w-3" />}

@@ -28,6 +28,7 @@ import { ENGINE_SPIN_RATE } from "@/features/digital-twin/EngineModel";
 import type { PartHighlights } from "@/features/digital-twin/EngineModel";
 import { JARVISPartInspector } from "@/features/digital-twin/JARVISPartInspector";
 import { JARVISExplodeStudio } from "@/features/digital-twin/JARVISExplodeStudio";
+import { engineViewerAudio } from "@/features/digital-twin/engineViewerAudio";
 import { CinematicIntro } from "./CinematicIntro";
 
 const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
@@ -650,7 +651,10 @@ export function Hero() {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setExploded((prev) => !prev);
+                const next = !exploded;
+                if (next) engineViewerAudio.explode();
+                else engineViewerAudio.assemble();
+                setExploded(next);
               }}
               className="flex min-h-10 cursor-pointer items-center gap-2 border px-3 py-1.5 text-[10px] font-mono tracking-wider transition-all select-none pointer-events-auto"
               style={{
@@ -706,7 +710,12 @@ export function Hero() {
           zoneName={selectedZone}
           highlights={highlights}
           onClose={() => setSelectedZone(null)}
-          onExplodeToggle={() => setExploded(!exploded)}
+          onExplodeToggle={() => {
+            const next = !exploded;
+            if (next) engineViewerAudio.explode();
+            else engineViewerAudio.assemble();
+            setExploded(next);
+          }}
           isExploded={exploded}
         />
       )}

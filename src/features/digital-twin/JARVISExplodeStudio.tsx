@@ -1,5 +1,6 @@
 import { useState, Suspense, lazy } from "react";
 import { X, Expand, Shrink, Eye, EyeOff, RotateCw, Activity, Layers, Zap, Info, ShieldCheck, ChevronRight, Sliders, Box } from "lucide-react";
+import { engineViewerAudio } from "./engineViewerAudio";
 import type { PartHighlights } from "./EngineModel";
 import { ZONES } from "./EngineModel";
 import { ZONE_DETAILS } from "./JARVISPartInspector";
@@ -58,7 +59,10 @@ export function JARVISExplodeStudio({
               value={explodeAmount}
               onChange={(e) => {
                 setExplodeAmount(parseFloat(e.target.value));
-                if (!exploded) setExploded(true);
+                if (!exploded) {
+                  engineViewerAudio.explode();
+                  setExploded(true);
+                }
               }}
               className="w-24 accent-cyan cursor-pointer"
             />
@@ -66,7 +70,12 @@ export function JARVISExplodeStudio({
           </div>
 
           <button
-            onClick={() => setExploded(!exploded)}
+            onClick={() => {
+              const next = !exploded;
+              if (next) engineViewerAudio.explode();
+              else engineViewerAudio.assemble();
+              setExploded(next);
+            }}
             className="flex h-9 items-center gap-2 border border-cyan/60 bg-cyan/15 px-3 text-xs font-mono tracking-wider text-cyan transition-all hover:bg-cyan/30 shadow-[0_0_12px_rgba(111,216,232,0.25)]"
           >
             {exploded ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
