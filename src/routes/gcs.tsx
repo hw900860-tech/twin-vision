@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useMemo, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, LayoutGrid, Activity, Stethoscope, History, FlaskConical, Wrench, FileText, Expand, Shrink, Tag, Plane } from "lucide-react";
+import { ArrowLeft, LayoutGrid, Activity, Stethoscope, History, FlaskConical, Wrench, FileText, Gauge, Expand, Shrink, Tag, Plane } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
 import { Bar, Panel, StatusDot, useClock } from "@/components/hud/primitives";
 import { TelemetryDashboard } from "@/features/telemetry/TelemetryDashboard";
@@ -22,6 +22,7 @@ import { GcsLinkBar } from "@/features/datalink/GcsLinkBar";
 import { MaydayBanner } from "@/features/telemetry/MaydayBanner";
 import { EnvironmentPanel } from "@/features/environment/EnvironmentPanel";
 import { PostFlightAnalytics } from "@/features/reports/PostFlightAnalytics";
+import { SensorHealthMatrix } from "@/features/sensors/SensorHealthMatrix";
 
 const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
 
@@ -44,6 +45,7 @@ const NAV = [
   { key: "DIAGNOSTICS", icon: Stethoscope },
   { key: "MISSION REPLAY", icon: History },
   { key: "SIMULATION LAB", icon: FlaskConical },
+  { key: "SENSOR MATRIX", icon: Gauge },
   { key: "MAINTENANCE", icon: Wrench },
   { key: "REPORTS", icon: FileText },
 ] as const;
@@ -459,6 +461,11 @@ function GcsPage() {
           )}
           {tab === "MISSION REPLAY" && <ReplayConsole />}
           {tab === "SIMULATION LAB" && <SimulationLab />}
+          {tab === "SENSOR MATRIX" && (
+            <div id="gcs-panel-sensor-matrix" role="tabpanel" aria-label="Analytical sensor redundancy">
+              <SensorHealthMatrix />
+            </div>
+          )}
           {tab === "MAINTENANCE" && <MaintenanceAdvisory />}
           {tab === "REPORTS" && (
             <Panel label="FLIGHT & ENGINE TELEMETRY REPORTS" corner="EXPORT ALL CSV">
