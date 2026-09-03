@@ -22,8 +22,9 @@ import {
   Zap,
 } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
-import { TechButton, useClock } from "@/components/hud/primitives";
+import { TechButton } from "@/components/hud/primitives";
 import { simulate, estimateRul, BASELINE_CONDITIONS } from "@/lib/domain/engine/model";
+import { ENGINE_SPIN_RATE } from "@/features/digital-twin/EngineModel";
 import type { PartHighlights } from "@/features/digital-twin/EngineModel";
 import { JARVISPartInspector } from "@/features/digital-twin/JARVISPartInspector";
 import { JARVISExplodeStudio } from "@/features/digital-twin/JARVISExplodeStudio";
@@ -41,46 +42,65 @@ const ENGINE_EASE = "cubic-bezier(0.22, 0.61, 0.36, 1)";
 const ENGINE_REST_SHIFT_VW = 22.6;
 
 /**
- * Handoff beat structure (milliseconds, relative to the video cut at ~7.7s):
- *  0ms    video pauses on its final engine frame — the cinematic's X-RAY state
- *         — and begins a SLOW ≈1.2s fade. Beneath it the GLB sits STATIC at
- *         the same macro framing, rendered in that same X-ray look (translucent
- *         cyan wireframe), so the twin emerges from the exact pixels the video
- *         leaves behind — nothing rotating, nothing different, no pop.
- *  950ms  video is nearly gone — the engine starts its CENTRE → RIGHT glide
- *         and eases macro → resting scale while resolving X-ray → physical
- *         (all three finish ~2100ms);
- *  2100ms engine arrives at its existing resting position, physical again;
- *  2300ms slow showcase idle rotation resumes (post-handoff only);
- *  2550ms choreography is over — hero is fully live & interactive.
+ * Handoff beat structure (seconds relative to the video cut at ~7.55s, when the
+ * clip is showing its final X-RAY engine macro shot):
+ *  0.0s  video reaches the cut and the overlay starts its slow crossfade. The
+ *        video KEEPS PLAYING (its engine motion continues) while the GLB —
+ *        already warmed & held STATIC beneath the clip — emerges in the SAME
+ *        X-ray look at the SAME macro framing and orientation. Because the twin
+ *        does not rotate during the fade it overlaps the video engine frame
+ *        cleanly; the twin literally materialises out of the fading video frame.
+ *  1.05s video is nearly gone — the engine starts its CENTRE → RIGHT glide and
+ *        eases macro → resting scale while resolving X-ray → physical
+ *        (all three finish ~2.2s);
+ *  2.2s  engine arrives at its existing resting position, physical again;
+ *  ~2.35s the slow showcase idle rotation resumes (static until now);
+ *  2.7s  choreography is over — hero is fully live & interactive.
  */
-const ENGINE_DRIFT_DELAY_MS = 950;
+const ENGINE_DRIFT_DELAY_MS = 1050;
 const ENGINE_DRIFT_MS = 1150;
 /** Seconds the engine holds the video's macro framing before it starts easing down. */
-const MACRO_HOLD_S = 0.95;
+const MACRO_HOLD_S = 1.05;
 /** Seconds to ease macro → resting scale (aligned with the CENTRE → RIGHT glide). */
 const MACRO_SHRINK_S = 1.15;
-/** Idle showcase rotation resumes only after the engine has settled at its resting position. */
-const ENGINE_IDLE_AFTER_S = 2.3;
 /** When the X-ray → physical resolve starts (as the glide begins). */
-const XRAY_RESOLVE_START_S = 1.15;
+const XRAY_RESOLVE_START_S = 1.2;
 /** How long the resolve takes — it completes as the engine arrives at rest. */
-const XRAY_RESOLVE_S = 0.95;
-const LIVE_DELAY_MS = 2550;
-/** Page chrome starts materializing only once the video has mostly cleared.
- *  NOTE: this is added to `revealStart`, which is a SECONDS clock (useClock),
- *  so it must be expressed in seconds, not milliseconds. */
-const UI_SHIFT_S = 0.55;
+const XRAY_RESOLVE_S = 1.0;
+const LIVE_DELAY_MS = 2700;
+/** Page chrome starts materializing only once the video has mostly cleared (seconds after the cut). */
+const UI_SHIFT_S = 0.6;
 
 /**
- * Macro-matching handoff: the cinematic leaves the engine as a tight, almost
- * frame-filling macro shot at screen centre. The real GLB must open at that
- * SAME presence (bigger + centred) so the dissolve reads as the video engine
- * literally becoming the twin, then ease down to its existing resting overview
- * scale while it glides right. Resting scale stays the current hero value.
+ * Engine rotation policy: the twin holds ONE static orientation through the
+ * whole cinematic crossfade + centre→right glide — a GLB spinning independently
+ * under a rotating video can never overlap it, and the static pose is what
+ * makes the handoff read as the same engine. The slow showcase idle rotation
+ * only resumes once the engine has fully landed at its resting position.
+ */
+const ENGINE_IDLE_AFTER_S = 2.35;
+/** ms after the cinematic starts to warm the R3F engine stage beneath the opaque video. */
+const ENGINE_PREWARM_MS = 7050;
+/** ms after the cinematic starts to pull the lazy EngineCanvas module (GLB parse happens early). */
+const ENGINE_MODULE_WARM_MS = 600;
+
+/**
+ * Macro-matching handoff. Frame-measured against the actual clip's final
+ * engine shot (~7.55s of the 10.0s asset): the video engine's silhouette spans
+ * ≈10→82% of the viewport width and ≈10→90% of the height — a big, nearly
+ * screen-filling macro. The GLB macro scale below is computed (three.js
+ * projection of engine.glb at the overview camera) so the twin's on-screen
+ * footprint overlaps that same region instead of rendering a third smaller.
+ * The macro pose also holds a small LEFT offset (−3.5vw) matching the video
+ * silhouette's centre (bbox ≈ 46%w, left-heavy), then eases into the existing
+ * resting overview scale/position as it glides right.
  */
 const DESKTOP_REST_SCALE = 1.15;
-const DESKTOP_MACRO_SCALE = 1.65;
+const DESKTOP_MACRO_SCALE = 2.45;
+/** Horizontal hold offset (vw) so the macro twin overlaps the video's engine. */
+const DESKTOP_MACRO_X_OFFSET_VW = -3.5;
+/** Downward hold offset (vh) so the macro twin overlaps the video's engine vertically. */
+const DESKTOP_MACRO_Y_OFFSET_VH = 4;
 const MOBILE_REST_SCALE = 1.02;
 const MOBILE_MACRO_SCALE = 1.3;
 
@@ -202,32 +222,75 @@ function LiveTelemetry({
 
 export function Hero() {
   const [phase, setPhase] = useState<HeroPhase>("cinematic");
-  const [revealStart, setRevealStart] = useState(0);
   const [exploded, setExploded] = useState(false);
   const [showLabels, setShowLabels] = useState(true);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
 
-  const t = useClock();
+  // Engine stage: mounted ("warmed") beneath the opaque video a short beat
+  // before the clip reaches its final engine shot, so the WebGL context and
+  // X-ray materials are ready the instant the crossfade opens. During the main
+  // cinematic nothing 3D renders at all — video playback has priority.
+  const [engineReady, setEngineReady] = useState(false);
+  const engineStageOn = phase !== "cinematic" || engineReady;
+
+  // Cut-clock. VIDEO-PLAYBACK PRIORITY: while the cinematic plays there is NO
+  // rAF-driven React state and NO per-frame reconciliation anywhere in the hero
+  // (that per-frame work was what stuttered the clip). The clock only starts at
+  // the cut; every choreography timing below is in seconds since the cut.
+  const clockOn = phase !== "cinematic";
+  const [now, setNow] = useState(-1);
+  useEffect(() => {
+    if (!clockOn) return;
+    let raf = 0;
+    const start = performance.now();
+    const loop = (ts: number) => {
+      setNow((ts - start) / 1000);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [clockOn]);
+
+  const t = now >= 0 ? now : 0;
   const tRef = useRef(0);
   tRef.current = t;
-  const revealStartRef = useRef(0);
 
   const onCut = useCallback(() => {
-    revealStartRef.current = tRef.current;
-    setRevealStart(tRef.current);
     setPhase("reveal");
-    // Signal the shared navigation (rendered above the hero) to fade in — but
-    // only once the video has mostly cleared, so the nav doesn't ghost through
-    // the tail of the cinematic.
+    setEngineReady(true); // skip-intro path — stage must mount immediately
     if (typeof window !== "undefined") {
+      // Signal the shared navigation to fade in as the video clears.
       window.setTimeout(
         () => window.dispatchEvent(new CustomEvent("aeris:reveal")),
-        900,
+        950,
       );
     }
   }, []);
+
+  // While the video plays: (1) pull the lazy EngineCanvas module early so the
+  // engine.glb fetch/parse (useGLTF.preload) lands in the black boot section,
+  // not at the cut; (2) warm the stage ~0.5s before the video's final engine
+  // shot so the crossfade opens on a live GLB, not a first-frame shader build.
+  useEffect(() => {
+    if (phase !== "cinematic") return;
+    const warmModule = window.setTimeout(() => {
+      void import("@/features/digital-twin/EngineCanvas").catch(() => undefined);
+    }, ENGINE_MODULE_WARM_MS);
+    const warmStage = window.setTimeout(() => setEngineReady(true), ENGINE_PREWARM_MS);
+    return () => {
+      window.clearTimeout(warmModule);
+      window.clearTimeout(warmStage);
+    };
+  }, [phase]);
+
+  // Rotation policy. `rotationSync` is a stable object mutated in the render
+  // loop (never a fresh reference, so the memoized canvas is never reconciled
+  // because of it). The actual angle integration lives with the derived values
+  // below (it depends on `elapsedSinceCut`).
+  const rotationSync = useMemo(() => ({ angle: 0 }), []);
+  const prevTRef = useRef(-1);
 
   // Move to the fully interactive state once the choreography has settled.
   useEffect(() => {
@@ -276,41 +339,48 @@ export function Hero() {
   );
 
   const revealed = phase !== "cinematic";
-  // Page chrome runs on its own clock so nothing fades in while the video is
-  // still visible — the interface appears only as the video clears and the
-  // engine starts opening the right side of the composition.
-  const uiStart = revealStart > 0 ? revealStart + UI_SHIFT_S : 0;
-  const now = t;
+  // Page chrome materializes as the video clears and the engine opens up the
+  // right side. All timings below are seconds since the cut (`now`), so the
+  // interface can never ghost through the still-playing video.
+  const uiStart = revealed ? UI_SHIFT_S : 0;
+  const elapsedSinceCut = revealed ? Math.max(0, now) : 0;
 
-  // The GLB stays STATIC through the cinematic and the handoff: a rotating
-  // engine beneath the video can never line up with the paused video frame,
-  // which is exactly what read as a mismatch at the cut. Slow showcase idle
-  // rotation only resumes once the engine has settled at its resting position.
-  const elapsedSinceCut = revealStart > 0 ? now - revealStart : 0;
-  const engineIdle = revealStart > 0 && elapsedSinceCut >= ENGINE_IDLE_AFTER_S;
+  // Engine rotation: held STATIC at angle 0 through the cinematic crossfade and
+  // the centre→right glide — a GLB spinning independently under a fading video
+  // can never overlap it, and the static pose is what makes the handoff read as
+  // the same engine. Once the engine has fully landed (ENGINE_IDLE_AFTER_S) the
+  // slow showcase idle rotation integrates smoothly from 0: no reset, no pop.
+  if (engineStageOn && !exploded) {
+    const dt =
+      prevTRef.current >= 0 ? Math.min(0.1, Math.max(0, t - prevTRef.current)) : 0;
+    prevTRef.current = t;
+    if (elapsedSinceCut >= ENGINE_IDLE_AFTER_S) {
+      rotationSync.angle += ENGINE_SPIN_RATE * dt;
+    } else {
+      rotationSync.angle = 0;
+    }
+  } else {
+    prevTRef.current = -1;
+  }
 
-  // X-ray reveal strength: 1 = engine rendered exactly like the video's final
-  // X-ray engine (translucent cyan wireframe). It holds that look while the
-  // video fades, then resolves to the physical engine as it glides centre →
-  // right — full physical the moment it arrives at its resting position.
-  const resolveP =
-    revealStart > 0
-      ? Math.min(1, Math.max(0, (elapsedSinceCut - XRAY_RESOLVE_START_S) / XRAY_RESOLVE_S))
-      : 0;
+  // X-ray reveal strength: 1 = the engine rendered exactly like the video's
+  // final X-ray shot (translucent cyan wireframe). It holds that holographic
+  // look through the whole crossfade, then resolves to the physical engine as
+  // it glides centre → right — fully physical the moment it lands at rest.
+  const resolveP = revealed
+    ? Math.min(1, Math.max(0, (elapsedSinceCut - XRAY_RESOLVE_START_S) / XRAY_RESOLVE_S))
+    : 0;
   const xrayStrength = 1 - easeOutCubic(resolveP);
 
-  // Macro → overview continuity. The GLB sits at the cinematic MACRO framing
-  // (big, centre) from frame zero — invisible beneath the video. It HOLDS that
-  // exact framing while the video slowly fades (so the twin literally emerges
-  // from the same pixels — no size change mid-fade, no pop), and only once the
-  // video is nearly gone does it ease macro → resting scale, timed with the
-  // CENTRE → RIGHT glide. 0 = handoff, 1 = rest.
-  // `now` and `revealStart` are both in SECONDS (useClock). The scale holds the
-  // macro framing for MACRO_HOLD_S while the video fades, then eases to rest.
-  const handoffP =
-    revealStart > 0
-      ? Math.min(1, Math.max(0, now - revealStart - MACRO_HOLD_S) / MACRO_SHRINK_S)
-      : 0;
+  // Macro → overview continuity: the twin opens at the cinematic MACRO framing
+  // (big, centre) and HOLDS it through the crossfade — so the engine emerges
+  // from the exact pixels the still-playing video leaves — then eases macro →
+  // resting scale in lockstep with the CENTRE → RIGHT glide. 0 = handoff, 1 =
+  // rest. The scale holds the macro framing for MACRO_HOLD_S (≈ crossfade),
+  // then eases to rest.
+  const handoffP = revealed
+    ? Math.min(1, Math.max(0, (elapsedSinceCut - MACRO_HOLD_S) / MACRO_SHRINK_S))
+    : 0;
   const handoffEase = easeOutCubic(handoffP);
   const modelScale = isDesktop
     ? DESKTOP_REST_SCALE + (DESKTOP_MACRO_SCALE - DESKTOP_REST_SCALE) * (1 - handoffEase)
@@ -321,6 +391,14 @@ export function Hero() {
     () => (isDesktop ? [0, -0.25 + 0.23 * (1 - handoffEase), 0] : [0, -0.2, 0]),
     [isDesktop, handoffEase],
   );
+
+  // Holographic bloom — a soft cyan halo that swells as the video gives way to
+  // the X-ray twin and decays before the engine glides right. It masks the
+  // crossfade seam and sells the "the engine is materialising" moment. One
+  // smooth hump across the fade window (0 → ~0.5 → 0 over ~1.5s).
+  const bloomP = revealed
+    ? Math.sin(Math.min(1, elapsedSinceCut / 1.5) * Math.PI) * 0.5
+    : 0;
 
   // Warm/bright grade that tracks the same handoff clock as scale: strongest at
   // the video cut, neutral by the time the engine settles at its hero position.
@@ -334,7 +412,16 @@ export function Hero() {
   // right-side digital-twin frame after the handoff. The hold + glide split
   // makes the viewer lock onto the same engine for a beat before the page
   // materializes around it — no hard cut, no teleport.
-  const engineShift = isDesktop && revealed ? `translateX(${ENGINE_REST_SHIFT_VW}vw)` : undefined;
+  // While the video plays (and through the macro hold) the twin sits at the
+  // measured video-engine offset (slightly left + slightly lower than true
+  // centre — where the video's engine actually is); at the cut the CSS
+  // transition glides it from that pose to the existing right-frame resting
+  // position (delay = hold), so the final layout is untouched.
+  const engineShift = isDesktop
+    ? revealed
+      ? `translateX(${ENGINE_REST_SHIFT_VW}vw)`
+      : `translate(${DESKTOP_MACRO_X_OFFSET_VW}vw, ${DESKTOP_MACRO_Y_OFFSET_VH}vh)`
+    : undefined;
   const engineTransition =
     isDesktop && revealed
       ? `transform ${ENGINE_DRIFT_MS}ms ${ENGINE_EASE} ${ENGINE_DRIFT_DELAY_MS}ms`
@@ -438,7 +525,7 @@ export function Hero() {
         </div>
       </div>
 
-      {/* ---- real 3D engine — mounted & preloading beneath the cinematic ---- */}
+      {/* ---- real 3D engine — warmed beneath the cinematic, live at the cut ---- */}
       <div
         className="relative z-[2] h-[64svh] w-full lg:absolute lg:inset-0 lg:h-auto"
         style={{
@@ -451,28 +538,42 @@ export function Hero() {
         <div className="pointer-events-none absolute top-1/2 left-1/2 aspect-square w-[min(92vw,58svh)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan/10 lg:hidden" />
         <div className="pointer-events-none absolute top-1/2 left-1/2 aspect-square w-[min(70vw,44svh)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber/10 lg:hidden" />
 
+        {/* Holographic bloom behind the canvas — masks the video→twin seam. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            opacity: bloomP,
+            background:
+              "radial-gradient(ellipse 36% 30% at 50% 47%, oklch(0.7 0.17 205 / 0.55), transparent 70%)",
+          }}
+        />
+
         <div className="absolute inset-0" style={handoffFilter ? { filter: handoffFilter } : undefined}>
           <ClientOnly fallback={null}>
-            <Suspense fallback={null}>
-              <HeroEngineCanvas
-                interactive
-                autoRotate={!exploded && engineIdle}
-                autoRotateSpeed={0.6}
-                spin={false}
-                cameraView="overview"
-                showLabels={showLabels}
-                fault={0.12}
-                exploded={exploded}
-                physicalTone
-                xrayReveal={xrayStrength}
-                highlights={highlights}
-                modelScale={modelScale}
-                modelPosition={modelPosition}
-                cameraZ={isDesktop ? 7 : 7.4}
-                onSelectZone={(zoneName) => setSelectedZone(zoneName)}
-                selectedZone={selectedZone}
-              />
-            </Suspense>
+            {engineStageOn && (
+              <Suspense fallback={null}>
+                <HeroEngineCanvas
+                  interactive
+                  autoRotate={false}
+                  autoRotateSpeed={0.6}
+                  spin={!exploded}
+                  rotationSync={rotationSync}
+                  cameraView="overview"
+                  showLabels={showLabels}
+                  fault={0.12}
+                  exploded={exploded}
+                  physicalTone
+                  xrayReveal={xrayStrength}
+                  highlights={highlights}
+                  modelScale={modelScale}
+                  modelPosition={modelPosition}
+                  cameraZ={isDesktop ? 7 : 7.4}
+                  onSelectZone={(zoneName) => setSelectedZone(zoneName)}
+                  selectedZone={selectedZone}
+                />
+              </Suspense>
+            )}
           </ClientOnly>
         </div>
 
@@ -557,7 +658,7 @@ export function Hero() {
         <ChevronDown className="h-4 w-4 animate-bounce text-cyan/70" />
       </a>
 
-      {/* cinematic intro overlay */}
+      {/* ---- MP4 cinematic overlay → real GLB crossfade ---- */}
       <CinematicIntro phase={phase} onCut={onCut} />
 
       {/* JARVIS Part Inspector Modal */}

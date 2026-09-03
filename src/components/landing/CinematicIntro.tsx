@@ -1,30 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * AERIS-TWIN opening cinematic.
+ * AERIS-TWIN opening cinematic (MP4 → real GLB crossfade).
  *
- * Plays the local repository MP4 (/assets/aeris-intro.mp4) once, full viewport.
+ * Plays the local repository clip (/assets/aeris-intro.mp4) once, full
+ * viewport. The real 3D engine (engine.glb) is preloaded and warmed by the
+ * Hero while this plays, and mounts underneath the video just before the cut —
+ * so no WebGL runs during the main cinematic and playback stays smooth.
  *
- * The clip runs ~10.0s: black system init → TAPAS BH-201 → aircraft flight →
- * deconstruction → engine reveal → engine rotating in a tight macro shot. From
- * ~8.0s the frame brightens and UI/text columns begin to appear — that final
- * AI-generated presentation tail must never be shown. The cut fires at ~7.7s,
- * on the strongest clean rotating-engine frame, and hands off to the already
- * preloaded, already-rotating real 3D engine beneath this overlay.
+ * At CUT_AT_S the clip has reached its final X-ray engine shot (measured frame
+ * analysis of the ~10.0s asset: engine macro rotates 5.6–8.0s, dashboard tail
+ * begins ~8.0s). The Hero mounts the GLB X-ray twin at matching macro framing,
+ * and THIS overlay starts its slow crossfade — crucially the video is NOT
+ * paused: it keeps playing while its opacity drops to 0 over ~1.4s (the engine
+ * motion continues naturally, exactly like the twin underneath), then pauses.
  *
- * The parent hero is responsible for the choreography that starts at `onCut`.
+ * Playback smoothness rules:
+ *  - No React state is updated from video time. A single lightweight rAF loop
+ *    only watches currentTime for the cut/pause moments.
+ *  - The overlay and this component do not re-render per frame.
  */
 
-/**
- * Nominal cut for the known ~10.0s asset — strongest engine frame, immediately
- * before the final presentation tail (measured frame analysis of the current
- * clip: engine macro rotates 5.6–8.0s; dashboard UI appears ~8.0s+).
- */
-const NOMINAL_CUT_S = 7.7;
-/** If a future clip has an unexpected duration, trim proportionally. */
-const MAX_TAIL_S = 2.3;
-/** Cache-busting version of the clip so an updated asset can never be served stale. */
-const VIDEO_SRC = "/assets/aeris-intro.mp4?v=2";
+/** Nominal cut — strongest clean rotating-X-ray-engine frame of the known asset. */
+const CUT_AT_S = 7.55;
+/** Seconds the video keeps playing while fading (crossfade length). */
+const FADE_S = 1.4;
+/** Cache-busting asset version so an updated clip can never be served stale. */
+const VIDEO_SRC = "/assets/aeris-intro.mp4?v=4";
 
 export function CinematicIntro({
   phase,
@@ -35,98 +37,74 @@ export function CinematicIntro({
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const firedRef = useRef(false);
-  const cutAtRef = useRef(NOMINAL_CUT_S);
+  const cutAtRef = useRef(CUT_AT_S);
   const [videoOn, setVideoOn] = useState(false);
-  const [initHidden, setInitHidden] = useState(false);
-  const [showSkip, setShowSkip] = useState(false);
   const [startPrompt, setStartPrompt] = useState(false);
+  const [showSkip, setShowSkip] = useState(false);
+  const [initHidden, setInitHidden] = useState(false);
 
   const fire = useCallback(() => {
     if (firedRef.current) return;
     firedRef.current = true;
-    const v = videoRef.current;
-    if (v && !v.paused) v.pause();
-    onCut();
+    onCut(); // NOTE: the video is NOT paused here — it keeps playing into the fade.
   }, [onCut]);
 
-  // Init label + skip affordance timers.
+  // Manual skip (button / Escape / reduced-motion): end the intro NOW and stop
+  // the clip — it must not keep playing invisibly behind the fading overlay.
+  const skip = useCallback(() => {
+    const v = videoRef.current;
+    if (v) v.pause();
+    fire();
+  }, [fire]);
+
+  // Init caption + skip affordance timers.
   useEffect(() => {
-    const t1 = window.setTimeout(() => setInitHidden(true), 1550);
-    const t2 = window.setTimeout(() => setShowSkip(true), 900);
+    const t1 = window.setTimeout(() => setInitHidden(true), 1500);
+    const t2 = window.setTimeout(() => setShowSkip(true), 800);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
   }, []);
 
-  // Precise frame-accurate cut while the video is actually playing.
-  useEffect(() => {
-    if (phase !== "cinematic" || !videoOn) return;
-    let raf = 0;
-    const loop = () => {
-      const v = videoRef.current;
-      if (v && v.currentTime >= cutAtRef.current) {
-        fire();
-        return;
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [phase, videoOn, fire]);
-
-  // Autoplay + fallbacks.
-  //
-  // IMPORTANT: playback is started here, inside an effect, AFTER the event
-  // listeners exist — never via the `autoPlay` attribute. When the page is
-  // server-rendered the browser can otherwise start the video before React
-  // hydrates; the `playing` event then fires to no listener, `videoOn` never
-  // flips, and the clip plays invisibly under a black overlay. The extra
-  // readyState/timeupdate backstops below make the video visible the instant
-  // it genuinely has frames, no matter which events were missed.
+  // Autoplay, started AFTER listeners exist (a pre-hydration autoplay race left
+  // the clip playing invisibly once). ReadyState/timeupdate backstops surface
+  // the video the moment it genuinely has frames.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     v.muted = true;
 
-    const reveal = () => {
-      setVideoOn(true);
-      setStartPrompt(false);
-    };
+    const reveal = () => setVideoOn(true);
     const tryPlay = () => {
       const p = v.play();
       if (p) p.catch(() => setStartPrompt(true));
     };
-    const onPlaying = () => reveal();
+    const onPlaying = () => {
+      setVideoOn(true);
+      setStartPrompt(false);
+    };
     const onTimeUpdate = () => {
-      // Backstop: if autoplay beat hydration, currentTime advances with no
-      // `playing` event — surface the video the moment frames are moving.
+      // Backstop only — bails to a no-op once visible, never drives UI state.
       if (v.currentTime > 0.05) reveal();
     };
     const onEnded = () => fire();
-    const onError = () => {
-      // Never trap the visitor on a black screen.
-      window.setTimeout(fire, 120);
-    };
+    const onError = () => window.setTimeout(fire, 120);
     v.addEventListener("playing", onPlaying);
     v.addEventListener("timeupdate", onTimeUpdate);
     v.addEventListener("ended", onEnded);
     v.addEventListener("error", onError);
 
-    // Reduced-motion: skip the cinematic quickly, keep the page content.
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduced) {
       v.pause();
-      reveal();
-      window.setTimeout(fire, 250);
+      window.setTimeout(skip, 250);
     } else {
-      // Already playing when hydration landed (autoplay raced us)? Just reveal.
-      // Already ended? Rewind so the visitor still gets one clean cinematic run.
       if (v.ended) {
         try {
           v.currentTime = 0;
         } catch {
-          /* seek may fail on some browsers while loading — play() will cope */
+          /* seek may fail while loading — play() will cope */
         }
       }
       if (!v.paused && v.currentTime > 0.05 && v.readyState >= 2) {
@@ -135,7 +113,7 @@ export function CinematicIntro({
         tryPlay();
       }
       // Hard safety net even if metadata/playback stalls.
-      window.setTimeout(fire, NOMINAL_CUT_S * 1000 + 1600);
+      window.setTimeout(fire, (CUT_AT_S + FADE_S + 1.2) * 1000);
     }
     return () => {
       v.removeEventListener("playing", onPlaying);
@@ -146,15 +124,39 @@ export function CinematicIntro({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Single lightweight rAF loop — the ONLY per-frame work. It fires the cut at
+  // CUT_AT_S and pauses the still-playing video once the crossfade is done.
+  useEffect(() => {
+    if (phase === "live" || !videoOn) return;
+    let raf = 0;
+    const loop = () => {
+      const v = videoRef.current;
+      if (!v) {
+        raf = requestAnimationFrame(loop);
+        return;
+      }
+      if (!firedRef.current && v.currentTime >= cutAtRef.current) {
+        fire();
+      } else if (firedRef.current && v.currentTime >= cutAtRef.current + FADE_S && !v.paused) {
+        v.pause();
+      } else if (v.ended && !v.paused) {
+        v.pause();
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [phase, videoOn, fire]);
+
   // Escape skips the intro.
   useEffect(() => {
     if (phase !== "cinematic") return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") fire();
+      if (e.key === "Escape") skip();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, fire]);
+  }, [phase, skip]);
 
   if (phase === "live") return null;
 
@@ -162,30 +164,31 @@ export function CinematicIntro({
     const v = videoRef.current;
     if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
     if (v.duration >= 9.2) {
-      cutAtRef.current = NOMINAL_CUT_S;
+      cutAtRef.current = CUT_AT_S;
     } else {
-      cutAtRef.current = Math.min(NOMINAL_CUT_S, Math.max(4.6, v.duration - MAX_TAIL_S));
+      cutAtRef.current = Math.min(CUT_AT_S, Math.max(4.6, v.duration - 2.45));
     }
   };
 
   const active = phase === "cinematic";
 
-  // The handoff dissolve: the video is paused on its strongest engine frame and
-  // the overlay then fades SLOWLY (≈1.2s, gentle ease). Underneath, the real GLB
-  // engine sits at the exact same macro framing, already rotating — so the twin
-  // literally emerges from the fading video frame, then the page choreography
-  // (engine centre → right, UI materializing) starts as the video clears.
-  const overlayTransition = active
-    ? "none"
-    : "opacity 1200ms cubic-bezier(0.4, 0, 0.25, 1)";
-
   return (
     <div
       aria-hidden={!active}
-      style={{ transition: overlayTransition }}
-      className={`fixed inset-0 z-[80] bg-[#040609] ${
-        active ? "opacity-100" : "pointer-events-none opacity-0"
-      }`}
+      className="fixed inset-0 z-[80] bg-[#040609]"
+      style={{
+        // The crossfade: opacity 1 → 0 over ~1.4s while the video KEEPS PLAYING
+        // (motion continues into the GLB beneath). Pointer events release the
+        // instant the fade starts so the live hero is already interactive. The
+        // ease-in-out curve lingers on the mid-tones — that is where the video
+        // engine and the X-ray twin overlap most, so the dissolve reads as one
+        // object transforming instead of a hard hand-off.
+        opacity: active ? 1 : 0,
+        transition: active
+          ? "none"
+          : `opacity ${FADE_S * 1000}ms cubic-bezier(0.65, 0, 0.35, 1)`,
+        pointerEvents: active ? "auto" : "none",
+      }}
     >
       <video
         ref={videoRef}
@@ -198,7 +201,6 @@ export function CinematicIntro({
         loop={false}
         aria-label="AERIS-TWIN cinematic introduction"
         onLoadedMetadata={onLoadedMetadata}
-        onTimeUpdate={onLoadedMetadata}
         className="absolute inset-0 h-full w-full object-cover transition-opacity duration-700"
         style={{ opacity: videoOn ? 1 : 0 }}
       />
@@ -231,8 +233,8 @@ export function CinematicIntro({
       {active && showSkip && !startPrompt && (
         <button
           type="button"
-          onClick={fire}
-          className="absolute right-4 bottom-4 flex min-h-9 items-center gap-2 border border-border bg-background/60 px-3 py-1 font-mono text-[10px] tracking-[0.2em] text-muted-foreground transition-colors hover:border-cyan/60 hover:text-cyan cursor-pointer backdrop-blur-sm sm:right-6 sm:bottom-6"
+          onClick={skip}
+          className="absolute right-4 bottom-4 flex min-h-9 cursor-pointer items-center gap-2 border border-border bg-background/60 px-3 py-1 font-mono text-[10px] tracking-[0.2em] text-muted-foreground transition-colors hover:border-cyan/60 hover:text-cyan backdrop-blur-sm sm:right-6 sm:bottom-6"
         >
           SKIP INTRO <span className="text-cyan/80">ESC</span>
         </button>

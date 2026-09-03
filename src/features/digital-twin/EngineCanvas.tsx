@@ -81,6 +81,8 @@ export type EngineCanvasProps = {
   autoRotateSpeed?: number;
   onSelectZone?: (zoneName: string | null) => void;
   selectedZone?: string | null;
+  /** External deterministic rotation clock — keeps the spin continuous across scenes. */
+  rotationSync?: { angle: number };
 };
 
 function CameraRig({ view, cameraZ, disabled }: { view: EngineCameraView; cameraZ: number; disabled: boolean }) {
@@ -183,6 +185,7 @@ function EngineCanvas({
   autoRotateSpeed = 0.6,
   onSelectZone,
   selectedZone,
+  rotationSync,
 }: EngineCanvasProps) {
   const controlsRef = useRef<any>(null);
   const setFocusedComponent = useFlightStore((s) => s.setFocusedComponent);
@@ -242,6 +245,7 @@ function EngineCanvas({
           modelPosition={modelPosition}
           onSelectZone={onSelectZone}
           selectedZone={selectedZone}
+          rotationSync={rotationSync}
         />
       </Suspense>
       {interactive && (

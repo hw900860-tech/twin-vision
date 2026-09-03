@@ -8,6 +8,20 @@ const CYAN = '#06b6d4';
 const AMBER = '#f59e0b';
 const CRITICAL = '#ef4444';
 
+/**
+ * Slow showcase idle spin (rad/s). Both the real-time cinematic and the landing
+ * hero drive the engine from this single deterministic clock, so the rotation is
+ * bit-for-bit continuous across the video→twin handoff — the engine never stops,
+ * jumps or restarts when one scene hands off to the next.
+ */
+export const ENGINE_SPIN_RATE = 0.12;
+let spinStartAbs = 0;
+/** Deterministic engine angle in radians for the current wall-clock time. */
+export function engineSpinAngle(): number {
+  if (!spinStartAbs) spinStartAbs = performance.now();
+  return ENGINE_SPIN_RATE * ((performance.now() - spinStartAbs) / 1000);
+}
+
 // Cinematic X-ray reveal palette — the video hands off with the engine in its
 // X-ray state (translucent cyan wireframe), so the twin must open in the SAME
 // look and only then resolve into the physical engine.
@@ -232,6 +246,7 @@ export function EngineModel({
   modelPosition = [0, -0.35, 0],
   onSelectZone,
   selectedZone,
+  rotationSync,
 }: {
   spin?: boolean;
   fault?: number;
@@ -247,6 +262,13 @@ export function EngineModel({
   modelPosition?: [number, number, number];
   onSelectZone?: (zoneName: string) => void;
   selectedZone?: string | null;
+  /**
+   * Drives the showcase rotation from an external deterministic clock (see
+   * `engineSpinAngle`) so the angle is continuous across scenes. When provided,
+   * the engine rotates around its visual centre to exactly this angle each
+   * frame; `spin` is ignored.
+   */
+  rotationSync?: { angle: number };
 }) {
   const group = useRef<THREE.Group>(null);
   const motorRef = useRef<THREE.Group>(null);
@@ -281,7 +303,15 @@ export function EngineModel({
     const physGlow = new THREE.Color();
     const blendTmp = new THREE.Color();
 
-    if (group.current && spin) group.current.rotation.y += delta * 0.12;
+    // Showcase rotation. With `rotationSync` (deterministic shared clock) we
+    // snap to that exact angle so the spin is continuous across scenes. Otherwise
+    // accumulate on the motor group — NOT the outer group — so the engine spins
+    // around its true visual centre (the outer group carries the model offset).
+    if (rotationSync) {
+      if (motorRef.current) motorRef.current.rotation.y = rotationSync.angle;
+    } else if (spin && motorRef.current) {
+      motorRef.current.rotation.y += delta * ENGINE_SPIN_RATE;
+    }
 
     const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
 
