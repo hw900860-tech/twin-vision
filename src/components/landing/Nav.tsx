@@ -13,12 +13,26 @@ const ITEMS = [
 export function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  // The nav rides above the cinematic hero, so it stays hidden until the hero
+  // dispatches the handoff event (video engine → live digital twin). A fallback
+  // timer guarantees it can never be stuck invisible.
+  const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
     const h = () => setScrolled(window.scrollY > 40);
     h();
     window.addEventListener("scroll", h, { passive: true });
     return () => window.removeEventListener("scroll", h);
+  }, []);
+
+  useEffect(() => {
+    const show = () => setRevealed(true);
+    window.addEventListener("aeris:reveal", show);
+    const fallback = window.setTimeout(show, 10500);
+    return () => {
+      window.removeEventListener("aeris:reveal", show);
+      window.clearTimeout(fallback);
+    };
   }, []);
 
   useEffect(() => {
@@ -32,7 +46,14 @@ export function Nav() {
 
   return (
     <header
-      className={`fixed inset-x-0 top-0 z-50 border-b transition-colors duration-500 ${
+      style={{
+        opacity: revealed ? 1 : 0,
+        transform: revealed ? "none" : "translateY(-10px)",
+        pointerEvents: revealed ? "auto" : "none",
+        transition:
+          "opacity 600ms cubic-bezier(0.22, 0.61, 0.36, 1), transform 600ms cubic-bezier(0.22, 0.61, 0.36, 1), background-color 500ms ease, border-color 500ms ease",
+      }}
+      className={`fixed inset-x-0 top-0 z-50 border-b ${
         scrolled ? "border-border bg-background/85 backdrop-blur-md" : "border-transparent"
       }`}
     >

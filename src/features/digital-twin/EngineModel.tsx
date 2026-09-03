@@ -8,6 +8,12 @@ const CYAN = '#06b6d4';
 const AMBER = '#f59e0b';
 const CRITICAL = '#ef4444';
 
+// Cinematic X-ray reveal palette — the video hands off with the engine in its
+// X-ray state (translucent cyan wireframe), so the twin must open in the SAME
+// look and only then resolve into the physical engine.
+const XRAY_LINE = new THREE.Color('#155e75');
+const XRAY_GLOW = new THREE.Color('#22d3ee');
+
 export interface PartHighlights {
   cyl1CHT: number;
   cyl2CHT: number;
@@ -164,30 +170,32 @@ function create6SeparateSubAssemblies(scene: THREE.Group): Zone6Mesh[] {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
     geometry.computeVertexNormals();
 
-    let colorHex = '#94a3b8';
-    let roughness = 0.35;
-    let metalness = 0.70;
+    // Physical Rotax 914 palette — reads as the real engine (bright red valve
+    // covers, cast/silver aluminium, dark gunmetal exhaust), not a cyber mass.
+    let colorHex = '#a7acb3'; // crankcase: cast aluminium
+    let roughness = 0.55;
+    let metalness = 0.60;
 
     if (zone.id === 'cylhead') {
-      colorHex = '#dc2626';
-      roughness = 0.22;
-      metalness = 0.30;
+      colorHex = '#c8131f'; // Rotax valve-cover red
+      roughness = 0.24;
+      metalness = 0.32;
     } else if (zone.id === 'oilsump') {
-      colorHex = '#334155';
-      roughness = 0.45;
-      metalness = 0.50;
+      colorHex = '#26292e'; // graphite sump
+      roughness = 0.60;
+      metalness = 0.35;
     } else if (zone.id === 'propflange') {
-      colorHex = '#cbd5e1';
-      roughness = 0.25;
-      metalness = 0.80;
+      colorHex = '#d9dee4'; // machined gearbox & prop flange
+      roughness = 0.18;
+      metalness = 0.92;
     } else if (zone.id === 'turbo') {
-      colorHex = '#cbd5e1';
-      roughness = 0.30;
-      metalness = 0.75;
+      colorHex = '#c8cdd5'; // silver aluminium manifold / carbs
+      roughness = 0.28;
+      metalness = 0.85;
     } else if (zone.id === 'exhaust') {
-      colorHex = '#64748b';
-      roughness = 0.38;
-      metalness = 0.75;
+      colorHex = '#43484f'; // heat-darkened steel exhaust
+      roughness = 0.50;
+      metalness = 0.80;
     }
 
     const material = new THREE.MeshStandardMaterial({
@@ -195,11 +203,16 @@ function create6SeparateSubAssemblies(scene: THREE.Group): Zone6Mesh[] {
       roughness,
       metalness,
       side: THREE.DoubleSide,
-      transparent: true,
+      // Opaque by default — translucency is switched on only for X-ray /
+      // selection-dimming states. Always-transparent meshes render as a glassy
+      // wireframe-ish mass and hide the physical colours underneath.
+      transparent: false,
       opacity: 1.0,
       emissive: new THREE.Color('#000000'),
       emissiveIntensity: 0,
     });
+    // Physical base colour, kept for the X-ray → physical resolution blend.
+    material.userData['baseColor'] = new THREE.Color(colorHex);
 
     return { geometry, material, zone };
   }).filter(Boolean) as Zone6Mesh[];
@@ -212,6 +225,8 @@ export function EngineModel({
   exploded = false,
   showLabels = true,
   wireframe = false,
+  physicalTone = false,
+  xrayReveal = 0,
   explodeAmount = 1.0,
   modelScale = 1,
   modelPosition = [0, -0.35, 0],
@@ -224,6 +239,9 @@ export function EngineModel({
   exploded?: boolean;
   showLabels?: boolean;
   wireframe?: boolean;
+  physicalTone?: boolean;
+  /** 1 = engine rendered in the cinematic's X-ray look … 0 = physical engine. Only meaningful with physicalTone. */
+  xrayReveal?: number;
   explodeAmount?: number;
   modelScale?: number;
   modelPosition?: [number, number, number];
@@ -259,6 +277,9 @@ export function EngineModel({
     explodeP.current += (target - explodeP.current) * Math.min(1, delta * 6);
     const p = explodeP.current;
     const t = Date.now() / 1000;
+    // Reusable colour temps for the physical↔X-ray blend (avoid per-frame churn).
+    const physGlow = new THREE.Color();
+    const blendTmp = new THREE.Color();
 
     if (group.current && spin) group.current.rotation.y += delta * 0.12;
 
@@ -317,6 +338,49 @@ export function EngineModel({
         zm.material.opacity = selectedZone ? (isSelected ? 1.0 : 0.25) : 1.0;
         zm.material.emissive.copy(heatColor);
         zm.material.emissiveIntensity = 0.35 + valueToMap * 0.55 + (isHovered ? 0.2 : 0);
+      } else if (physicalTone) {
+        // PHYSICAL-TONE (landing twin) — real Rotax colours; emissive is
+        // reserved for hover/selection and genuinely extreme load.
+        const heatColor = getStressColor(stress);
+        const baseColor =
+          (zm.material.userData['baseColor'] as THREE.Color | undefined) ??
+          new THREE.Color('#a7acb3');
+        let physOpacity = selectedZone ? (isSelected ? 1.0 : 0.3) : 1.0;
+        physGlow.set('#000000');
+        let glowIntensity = 0;
+        if (isSelected) {
+          physGlow.set('#06b6d4');
+          glowIntensity = 0.45;
+        } else if (isHovered) {
+          physGlow.set('#06b6d4');
+          glowIntensity = 0.22;
+        } else if (stress > 0.7) {
+          physGlow.copy(heatColor);
+          glowIntensity = Math.min(0.55, (stress - 0.55) * 0.9);
+        }
+
+        // X-RAY REVEAL blend: the cinematic ends with the engine in its X-ray
+        // state — the twin must open in that SAME look (translucent cyan
+        // wireframe) and only then resolve into the physical engine, otherwise
+        // the handoff reads as a different object. k: 1 = full X-ray, 0 =
+        // physical. Wireframe switches off at the half point while opacity +
+        // emissive keep blending, so the resolve reads as a solidification.
+        const k = Math.min(1, Math.max(0, xrayReveal));
+        if (k > 0.0001) {
+          blendTmp.copy(baseColor).lerp(XRAY_LINE, k);
+          zm.material.color.copy(blendTmp);
+          zm.material.opacity = physOpacity * (1 - k) + 0.5 * k;
+          zm.material.wireframe = k > 0.5;
+          blendTmp.copy(physGlow).lerp(XRAY_GLOW, k);
+          zm.material.emissive.copy(blendTmp);
+          zm.material.emissiveIntensity = glowIntensity * (1 - k) + 1.15 * k;
+        } else {
+          zm.material.color.copy(baseColor);
+          zm.material.opacity = physOpacity;
+          zm.material.wireframe = false;
+          zm.material.emissive.copy(physGlow);
+          zm.material.emissiveIntensity = glowIntensity;
+        }
       } else {
         // NORMAL mode — Dynamic stress highlight driven by Throttle, Rudder & Flight Physics
         const heatColor = getStressColor(stress);
@@ -336,6 +400,16 @@ export function EngineModel({
           zm.material.emissiveIntensity = 0;
         }
       }
+
+      // Follow opacity with real transparency. Opaque by default — only the
+      // translucent X-ray / selection-dimming states should alpha-blend (this
+      // also stops internal geometry ghosting through and washing out colour).
+      const wantTransparent = zm.material.opacity < 0.999;
+      if (zm.material.transparent !== wantTransparent) {
+        zm.material.transparent = wantTransparent;
+        zm.material.needsUpdate = true;
+      }
+      zm.material.depthWrite = !wantTransparent;
     });
 
     if (motorRef.current) {

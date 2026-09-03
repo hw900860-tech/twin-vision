@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useRef, useEffect } from 'react';
+import { Suspense, useMemo, useRef, useEffect, memo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html, Environment, Lightformer, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -67,6 +67,10 @@ export type EngineCanvasProps = {
   highlights?: PartHighlights;
   exploded?: boolean;
   wireframe?: boolean;
+  /** Physical look: opaque materials with real Rotax colours — data-viz glow only on hover/select/extreme load. */
+  physicalTone?: boolean;
+  /** 1 = engine rendered in the cinematic's X-ray look … 0 = physical. Only meaningful with physicalTone. */
+  xrayReveal?: number;
   explodeAmount?: number;
   cameraZ?: number;
   cameraView?: EngineCameraView;
@@ -74,6 +78,7 @@ export type EngineCanvasProps = {
   modelScale?: number;
   modelPosition?: [number, number, number];
   autoRotate?: boolean;
+  autoRotateSpeed?: number;
   onSelectZone?: (zoneName: string | null) => void;
   selectedZone?: string | null;
 };
@@ -159,13 +164,15 @@ function CameraZoneFocusRig({ selectedZone, controlsRef }: { selectedZone?: stri
   return null;
 }
 
-export default function EngineCanvas({
+function EngineCanvas({
   interactive = false,
   spin = true,
   fault = 0,
   highlights,
   exploded = false,
   wireframe = false,
+  physicalTone = false,
+  xrayReveal = 0,
   explodeAmount = 1.0,
   cameraZ = 7.2,
   cameraView = 'overview',
@@ -173,6 +180,7 @@ export default function EngineCanvas({
   modelScale = 1,
   modelPosition = [0, -0.35, 0],
   autoRotate = false,
+  autoRotateSpeed = 0.6,
   onSelectZone,
   selectedZone,
 }: EngineCanvasProps) {
@@ -202,18 +210,19 @@ export default function EngineCanvas({
       <CameraRig view={cameraView} cameraZ={cameraZ} disabled={interactive} />
       <CameraZoneFocusRig selectedZone={selectedZone} controlsRef={controlsRef} />
 
-      {/* Rich studio lighting */}
-      <ambientLight intensity={0.65} />
-      <directionalLight position={[6, 9, 7]} intensity={2.2} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-      <directionalLight position={[-6, 3, -5]} intensity={0.9} color="#06b6d4" />
-      <directionalLight position={[0, -5, 4]} intensity={0.6} color="#f8fafc" />
-      <pointLight position={[0, -2, 3]} intensity={14} color="#f59e0b" distance={10} />
+      {/* Studio lighting — neutral key + cyan brand rim. Materials are now
+          physical (red covers, silver alloy) so the wash is kept neutral. */}
+      <ambientLight intensity={0.85} />
+      <directionalLight position={[6, 9, 7]} intensity={2.6} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+      <directionalLight position={[-6, 3, -5]} intensity={1.0} color="#06b6d4" />
+      <directionalLight position={[0, -5, 4]} intensity={0.9} color="#f8fafc" />
+      <pointLight position={[2, -3.5, 4]} intensity={4.5} color="#ffe9cf" distance={16} />
 
       <Suspense fallback={null}>
         <Environment>
-          <Lightformer intensity={2.0} position={[0, 5, 2]} scale={[12, 6, 1]} />
+          <Lightformer intensity={2.6} position={[0, 5, 2]} scale={[12, 6, 1]} />
           <Lightformer intensity={1.2} color="#06b6d4" position={[-6, 1, -2]} rotation-y={Math.PI / 2} scale={[16, 2, 1]} />
-          <Lightformer intensity={0.8} color="#f59e0b" position={[6, 0, 2]} rotation-y={-Math.PI / 2} scale={[12, 2, 1]} />
+          <Lightformer intensity={0.5} color="#fff3e2" position={[6, 0, 2]} rotation-y={-Math.PI / 2} scale={[12, 2, 1]} />
         </Environment>
 
         <EngineFlowField />
@@ -225,6 +234,8 @@ export default function EngineCanvas({
           {...(highlights !== undefined ? { highlights } : {})}
           exploded={exploded}
           wireframe={wireframe}
+          physicalTone={physicalTone}
+          xrayReveal={xrayReveal}
           explodeAmount={explodeAmount}
           showLabels={showLabels}
           modelScale={modelScale}
@@ -237,7 +248,7 @@ export default function EngineCanvas({
         <OrbitControls
           ref={controlsRef}
           autoRotate={autoRotate}
-          autoRotateSpeed={0.6}
+          autoRotateSpeed={autoRotateSpeed}
           enablePan={true}
           enableZoom={true}
           minDistance={0.5}
@@ -251,3 +262,9 @@ export default function EngineCanvas({
     </Canvas>
   );
 }
+
+// Memoized: per-frame parents (e.g. the landing hero's rAF clock) must not
+// re-render and re-reconcile the whole R3F scene every frame once the props
+// have stopped changing. That reconciliation is what made the video→twin
+// handoff stutter.
+export default memo(EngineCanvas);
