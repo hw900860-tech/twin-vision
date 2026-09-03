@@ -3,6 +3,9 @@ import { Area, AreaChart, Line, LineChart, ResponsiveContainer, YAxis } from "re
 import { Bar, Panel, Readout } from "@/components/hud/primitives";
 import { BASELINE_CONDITIONS, simulate, type Conditions } from "@/lib/domain/engine/model";
 import { useFlightStore } from "@/features/flight-sim/flightStore";
+import { chtRedlineShiftC, oilRedlineShiftC, sampleAtmosphere } from "@/lib/domain/engine/environment";
+
+const CRITICAL_HEX = "#e2523f";
 
 type Channel = {
   key: string;
@@ -65,6 +68,19 @@ export function TelemetryDashboard({
   const healthIndex = useFlightStore((s) => s.healthIndex) ?? 0.96;
   const faults = useFlightStore((s) => s.faults) || { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false };
   const history = useFlightStore((s) => s.historyBuffer) || [];
+  const weather = useFlightStore((s) => s.weather);
+  const altitude = useFlightStore((s) => s.altitude) ?? 6000;
+
+  // Environment-normalized thermal redline shifts (0 when sim-only)
+  const envShifts = useMemo(() => {
+    if (!weather) return { chtShiftC: 0, oilShiftC: 0 };
+    try {
+      const delta = sampleAtmosphere(altitude, weather).ambientDeltaC;
+      return { chtShiftC: chtRedlineShiftC(delta), oilShiftC: oilRedlineShiftC(delta) };
+    } catch {
+      return { chtShiftC: 0, oilShiftC: 0 };
+    }
+  }, [weather, altitude]);
 
   const liveFuelFlow = 8.5 + (throttle / 100) * 14.2;
   const liveBatt = 28.1 + (liveRpm > 2000 ? 0.4 : -1.2);
@@ -84,31 +100,39 @@ export function TelemetryDashboard({
     inj: liveInjEff,
   };
 
-  // Sparkline data series mapping from flightStore historyBuffer
+  /**
+   * Sparkline data series mapped 1:1 from the flightStore history buffer.
+   * CHT / EGT / OIL PRESSURE / OIL TEMP / VIBRATION come straight from the
+   * recorded 20 Hz stream so the traces stay synchronized with the telemetry
+   * and the MAYDAY gate (Feature A).
+   */
   const series = useMemo(() => {
     const out: Record<string, { v: number }[]> = {};
     CHANNELS.forEach((c) => (out[c.key] = []));
 
     if (history.length > 0) {
       history.forEach((pt) => {
-        out.rpm.push({ v: pt.map ? liveRpm * (0.9 + (pt.map / 30) * 0.1) : liveRpm });
-        out.cht.push({ v: pt.chtMax });
-        out.egt.push({ v: pt.egt });
-        out.oilp.push({ v: pt.oilPressure });
-        out.oilt.push({ v: pt.oilTemp });
-        out.ff.push({ v: liveFuelFlow });
-        out.vib.push({ v: pt.vibrationRMS });
-        out.batt.push({ v: liveBatt });
-        out.alt.push({ v: liveAltHealth });
-        out.inj.push({ v: liveInjEff });
+        CHANNELS.forEach((c) => {
+          const arr = out[c.key];
+          if (!arr) return;
+          switch (c.key) {
+            case "rpm": arr.push({ v: liveRpm }); break;
+            case "cht": arr.push({ v: pt.chtMax }); break;
+            case "egt": arr.push({ v: pt.egt }); break;
+            case "oilp": arr.push({ v: pt.oilPressure }); break;
+            case "oilt": arr.push({ v: pt.oilTemp }); break;
+            case "vib": arr.push({ v: pt.vibrationRMS }); break;
+            default: arr.push({ v: currentValues[c.key] ?? 0 }); break;
+          }
+        });
       });
     } else {
       CHANNELS.forEach((c) => {
-        out[c.key] = Array.from({ length: 20 }, () => ({ v: currentValues[c.key] || 0 }));
+        out[c.key] = Array.from({ length: 20 }, () => ({ v: currentValues[c.key] ?? 0 }));
       });
     }
     return out;
-  }, [history, liveRpm, maxCht, liveEgt, liveOilP, liveOilT, liveVib, throttle, liveFuelFlow, liveBatt, liveAltHealth, liveInjEff]);
+  }, [history, liveRpm, liveFuelFlow, liveBatt, liveAltHealth, liveInjEff, currentValues]);
 
   const subsystems = [
     { k: "COMBUSTION", v: faults?.injectorClog ? 0.52 : 0.94 },
@@ -117,6 +141,18 @@ export function TelemetryDashboard({
     { k: "VIBRATION", v: Math.max(0.1, 1.0 - (liveVib - 0.4) / 2.0) },
     { k: "ELECTRICAL", v: liveAltHealth / 100 },
   ];
+
+  /** True when a channel is inside its red band (environment-normalized). */
+  function channelCritical(channelKey: string, val: number): boolean {
+    switch (channelKey) {
+      case "cht": return val > 210 + envShifts.chtShiftC;
+      case "egt": return val > 770;
+      case "oilt": return val > 120 + envShifts.oilShiftC;
+      case "oilp": return val < 2.0;
+      case "vib": return val > 1.6;
+      default: return false;
+    }
+  }
 
   const channels = compact ? CHANNELS.slice(0, 6) : CHANNELS;
 
@@ -138,18 +174,21 @@ export function TelemetryDashboard({
 
         <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3">
         {channels.map((c) => {
-          const tone = TONE_HEX[c.tone ?? "cyan"]!;
           const val = currentValues[c.key] ?? 0;
+          const over = channelCritical(c.key, val);
+          const tone = over ? CRITICAL_HEX : (TONE_HEX[c.tone ?? "cyan"] ?? CRITICAL_HEX);
+          const data = series[c.key] || [];
           return (
-            <div key={c.key} className="min-w-0 bg-panel/80 p-3">
+            <div key={c.key} className={`min-w-0 p-3 ${over ? "bg-[#2b0d0a]/80 border-t-2 border-t-[#e2523f]" : "bg-panel/80 border-t-2 border-t-transparent"}`}>
               <div className="flex items-baseline justify-between">
-                <span className="label-xs truncate">{c.label}</span>
+                <span className={`label-xs truncate ${over ? "text-[#e2523f] font-bold" : ""}`}>{c.label}</span>
                 <span className="label-xs text-[9px] opacity-60">{c.unit}</span>
               </div>
-              <div className="readout mt-1 truncate text-lg" style={{ color: tone }}>
+              <div className={`readout mt-1 flex items-baseline gap-2 truncate text-lg ${over ? "animate-pulse" : ""}`} style={{ color: tone }}>
                 {val.toFixed(c.digits)}
+                {over && <span className="label-xs text-[7px] font-bold text-[#e2523f]">REDLINE</span>}
               </div>
-              <Sparkline data={series[c.key] || []} tone={tone} />
+              <Sparkline data={data} tone={tone} />
             </div>
           );
         })}

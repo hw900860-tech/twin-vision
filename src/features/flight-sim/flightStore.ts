@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { terrainHeightAt } from './terrainMath';
 import { runEngineDecisionEngine, type EngineDecisionResult, type SubsystemStatus } from '../digital-twin/engineMlService';
+import { sampleAtmosphere, type WeatherObservation } from '@/lib/domain/engine/environment';
+import { serializeTelemetryLogs } from '@/lib/flight-analysis/sessionCsv';
 
 export type Biome = 'himalaya' | 'thar' | 'coastal';
 export type MissionPreset = 'nominalRoutine' | 'highAltitudeFailure' | 'coastalRecovery';
@@ -141,6 +143,9 @@ export interface FlightState {
   selectedSubsystem: string | null;
   historyBuffer: TelemetryHistoryPoint[];
 
+  // Layer-2 Environmental Ingestion (live weather bound to physics)
+  weather: WeatherObservation | null;
+
   setThrottle: (v: number) => void;
   setRudder: (v: number) => void;
   setTargetHeading: (h: number) => void;
@@ -161,6 +166,8 @@ export interface FlightState {
   exportCSV: () => void;
   startReplay: () => void;
   stopReplay: () => void;
+  syncLiveWeather: (obs: WeatherObservation) => void;
+  clearLiveWeather: () => void;
   tick: (dt: number) => void;
 }
 
@@ -188,11 +195,17 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightState> {
-  const altitudeFactor = Math.exp(-state.altitude / 27000);
   const thr = state.throttle / 100;
   const biomeConfig = BIOME_CONFIG[state.biome];
-  const ambientTemp = state.ambientTemp;
   const t = Date.now() / 1000;
+
+  // Layer-2 environmental ingestion: when live weather is bound, ambient
+  // temperature follows the ISA lapse to the current flight altitude and the
+  // air-density ratio is computed from the true density altitude. When no
+  // live weather is bound the legacy fixed-biome model is preserved exactly.
+  const atmosphere = state.weather ? sampleAtmosphere(state.altitude, state.weather) : null;
+  const ambientTemp = atmosphere ? atmosphere.oatC : state.ambientTemp;
+  const altitudeFactor = atmosphere ? atmosphere.densityRatio : Math.exp(-state.altitude / 27000);
 
   // Smooth fault intensity lerping (thermal and mechanical inertia)
   const fs: FaultSmoothState = {
@@ -290,7 +303,8 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
 
   const engineDecision = runEngineDecisionEngine({
     altitude: state.altitude,
-    ambientTemp: state.ambientTemp,
+    ambientTemp,
+    ambientDeltaC: atmosphere?.ambientDeltaC ?? 0,
     throttle: state.throttle,
     rpm,
     map,
@@ -337,10 +351,10 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
     rpm: Number(rpm.toFixed(0)),
     map: Number(map.toFixed(1)),
     boost: Number((map * 0.0338639).toFixed(2)),
-    cht1: Number(cht[0].toFixed(1)),
-    cht2: Number(cht[1].toFixed(1)),
-    cht3: Number(cht[2].toFixed(1)),
-    cht4: Number(cht[3].toFixed(1)),
+    cht1: Number((cht[0] ?? 0).toFixed(1)),
+    cht2: Number((cht[1] ?? 0).toFixed(1)),
+    cht3: Number((cht[2] ?? 0).toFixed(1)),
+    cht4: Number((cht[3] ?? 0).toFixed(1)),
     egt1: Number(egt.toFixed(1)),
     egt2: Number(egt.toFixed(1)),
     egt3: Number((egt + (fs.injectorClog > 0.3 ? 68 : 0)).toFixed(1)),
@@ -360,6 +374,7 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
     vibrationRMS: vib, fftSpectrum,
     airDensity, dynamicPressure, loadVector: [Lx, Ly, Lz], componentStress,
     healthIndex,
+    ambientTemp,
     faultSmooth: fs,
     engineDecision,
     historyBuffer: updatedBuffer,
@@ -443,6 +458,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   engineDecision: null,
   selectedSubsystem: 'CYLINDER HEAD (ROTAX RED)',
   historyBuffer: [],
+  weather: null,
 
   setThrottle: (v) => set({ throttle: Math.max(0, Math.min(100, v)) }),
   setRudder: (v) => set({ rudder: Math.max(-1, Math.min(1, v)) }),
@@ -496,12 +512,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
       }];
     }
 
-    const headers = "timestamp,altitude,speed,verticalSpeed,pitch,roll,heading,throttle,engineLoad,rpm,map,boost,cht1,cht2,cht3,cht4,egt1,egt2,egt3,egt4,oilTemp,oilPressure,vibrationRMS,health,faultState\n";
-    const rows = logsToExport.map((l) =>
-      `${l.timestamp},${l.altitude.toFixed(1)},${l.speed.toFixed(1)},${l.verticalSpeed.toFixed(1)},${l.pitch.toFixed(2)},${l.roll.toFixed(2)},${l.heading.toFixed(1)},${l.throttle.toFixed(1)},${l.engineLoad.toFixed(1)},${l.rpm.toFixed(0)},${l.map.toFixed(1)},${l.boost.toFixed(2)},${l.cht1.toFixed(1)},${l.cht2.toFixed(1)},${l.cht3.toFixed(1)},${l.cht4.toFixed(1)},${l.egt1.toFixed(1)},${l.egt2.toFixed(1)},${l.egt3.toFixed(1)},${l.egt4.toFixed(1)},${l.oilTemp.toFixed(1)},${l.oilPressure.toFixed(2)},${l.vibrationRMS.toFixed(3)},${l.health.toFixed(1)},${l.faultState}`
-    ).join("\n");
-
-    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([serializeTelemetryLogs(logsToExport)], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -513,6 +524,8 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   },
   startReplay: () => set({ isReplaying: true, replayIndex: 0 }),
   stopReplay: () => set({ isReplaying: false }),
+  syncLiveWeather: (obs) => set({ weather: obs }),
+  clearLiveWeather: () => set({ weather: null }),
   setMissionPreset: (p) => {
     const mission = MISSIONS[p];
     const scenarioFaults: FaultFlags = p === 'highAltitudeFailure'

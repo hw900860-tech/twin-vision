@@ -16,6 +16,9 @@ import { JARVISExplodeStudio } from "@/features/digital-twin/JARVISExplodeStudio
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { useFlightStore } from "@/features/flight-sim/flightStore";
+import { MaydayBanner } from "@/features/telemetry/MaydayBanner";
+import { EnvironmentPanel } from "@/features/environment/EnvironmentPanel";
+import { PostFlightAnalytics } from "@/features/reports/PostFlightAnalytics";
 
 const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
 
@@ -113,6 +116,7 @@ function GcsPage() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-background">
+      <MaydayBanner />
       <div className="pointer-events-none fixed inset-0 grid-bg opacity-40" />
 
       {/* top bar */}
@@ -321,6 +325,7 @@ function GcsPage() {
 
           {tab === "LIVE TWIN" && (
             <div id="gcs-panel-live-twin" role="tabpanel" aria-label="Live engine twin" className="grid gap-4">
+              <EnvironmentPanel />
               <div className="grid gap-4 xl:grid-cols-[1fr_420px]">
                 <TelemetryDashboard fault={0.34} />
                 <Panel label="LIVE ENGINE TWIN" corner="AE-P4 / INTERACTIVE">
@@ -449,7 +454,9 @@ function GcsPage() {
                   </button>
                 </div>
 
-                <div className="space-y-2">
+                <PostFlightAnalytics />
+
+                <div className="space-y-2 pt-2">
                   {[
                     { k: "MSN-2214 MISSION TELEMETRY REPORT", v: "FULL RECORDING — CSV", p: 100 },
                     { k: "FLEET HEALTH & MAINTENANCE LOG", v: "AUTOMATIC SYNTHESIS", p: 100 },

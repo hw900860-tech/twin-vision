@@ -1,4 +1,5 @@
 import type { FaultFlags } from '../flight-sim/flightStore';
+import { chtRedlineShiftC, oilRedlineShiftC } from '@/lib/domain/engine/environment';
 
 export type SubsystemStatus = 'NOMINAL' | 'WARNING' | 'CRITICAL';
 
@@ -125,6 +126,8 @@ export interface PropGearboxMLOutput {
 export interface EngineStateInputs {
   altitude: number;
   ambientTemp: number;
+  /** OAT − ISA at flight altitude, °C — 0 when no live weather is bound */
+  ambientDeltaC: number;
   throttle: number;
   rpm: number;
   map: number;
@@ -142,14 +145,20 @@ export interface EngineStateInputs {
 
 // 1. Model 1 — CYLINDER HEAD (CylinderHeadML)
 export function runCylinderHeadModel(state: EngineStateInputs): CylinderHeadMLOutput {
-  const [c1, c2, c3, c4] = state.cht;
+  const [c1 = 0, c2 = 0, c3 = 0, c4 = 0] = state.cht;
   const maxCHT = Math.max(c1, c2, c3, c4);
   const minCHT = Math.min(c1, c2, c3, c4);
   const imbalance = maxCHT - minCHT;
 
-  const thermalStress = Math.min(100, Math.max(0, ((maxCHT - 140) / 80) * 100));
-  const overheatRisk = Math.min(100, Math.max(0, ((maxCHT - 170) / 50) * 100));
-  const status = evalStatus(maxCHT, 'cht');
+  // Environment-normalized CHT: climate moves the whole head temperature up
+  // (≈0.72 °C per ambient °C vs ISA); normalize it away so a hot/cold day never
+  // reads as thermal degradation. Cylinder-to-cylinder imbalance is preserved.
+  const envShift = chtRedlineShiftC(state.ambientDeltaC);
+  const maxCHTnorm = maxCHT - envShift;
+
+  const thermalStress = Math.min(100, Math.max(0, ((maxCHTnorm - 140) / 80) * 100));
+  const overheatRisk = Math.min(100, Math.max(0, ((maxCHTnorm - 170) / 50) * 100));
+  const status = evalStatus(maxCHTnorm, 'cht');
   const health = Math.max(0, Math.min(1, 1 - overheatRisk / 100 - (state.faults.c2Overheat ? 0.4 : 0)));
 
   return {
@@ -263,11 +272,13 @@ export function runOilModel(state: EngineStateInputs): OilSumpMLOutput {
   const oTemp = state.oilTemp;
   const oPress = state.oilPressure;
 
+  // Environment-normalized oil temperature for status/risk classification.
+  const oTempNorm = oTemp - oilRedlineShiftC(state.ambientDeltaC);
   const viscosityIndex = Math.max(30, 100 - (oTemp - 90) * 1.5);
   const filterCloggingScore = Math.min(100, Math.max(5, (100 - viscosityIndex) * 0.6));
-  const lubricationRisk = oPress < 3.0 ? 85 : oTemp > 110 ? 70 : 12;
+  const lubricationRisk = oPress < 3.0 ? 85 : oTempNorm > 110 ? 70 : 12;
 
-  const status = evalStatus(oTemp, 'oilTemp') === 'CRITICAL' || evalStatus(oPress, 'oilPressure') === 'CRITICAL' ? 'CRITICAL' : evalStatus(oTemp, 'oilTemp') === 'WARNING' || evalStatus(oPress, 'oilPressure') === 'WARNING' ? 'WARNING' : 'NOMINAL';
+  const status = evalStatus(oTempNorm, 'oilTemp') === 'CRITICAL' || evalStatus(oPress, 'oilPressure') === 'CRITICAL' ? 'CRITICAL' : evalStatus(oTempNorm, 'oilTemp') === 'WARNING' || evalStatus(oPress, 'oilPressure') === 'WARNING' ? 'WARNING' : 'NOMINAL';
   const health = Math.max(0, Math.min(1, (viscosityIndex / 100) * (oPress / 5.2)));
 
   return {
@@ -349,7 +360,7 @@ export function runEngineDecisionEngine(state: EngineStateInputs): EngineDecisio
 
   // Lowest health component is the primary fault driver
   const sortedByHealth = [...outputs].sort((a, b) => a.h - b.h);
-  const primary = sortedByHealth[0];
+  const primary = sortedByHealth[0]!;
 
   const avgHealth = (cylhead.health + exhaust.health + turbo.health + crankcase.health + oil.health + gearbox.health) / 6;
   const overallHealth = Math.round(Math.min(avgHealth * 100, primary.h * 100));
@@ -360,7 +371,7 @@ export function runEngineDecisionEngine(state: EngineStateInputs): EngineDecisio
 
   const confidence = 94.2 + (state.altitude > 15000 ? 3.5 : 0);
 
-  // Generate live telemetry alerts
+  // Generate live telemetry alerts (environment-normalized when weather is bound)
   const alerts = generateAlerts({
     cht: state.cht,
     egt: state.egt,
@@ -370,6 +381,7 @@ export function runEngineDecisionEngine(state: EngineStateInputs): EngineDecisio
     vibrationRMS: state.vibrationRMS,
     rpm: state.rpm,
     health: overallHealth / 100,
+    ...(state.ambientDeltaC !== 0 ? { envDeltaC: state.ambientDeltaC } : {}),
   });
 
   // Dynamic Explainable Diagnostics Generation
@@ -377,7 +389,10 @@ export function runEngineDecisionEngine(state: EngineStateInputs): EngineDecisio
   let recommendedAction = 'Maintain current flight profile and monitor flight instrumentation.';
 
   if (state.faults.c2Overheat || cylhead.status !== 'NOMINAL') {
-    diagnosisText = `CYLINDER HEAD WARNING — Cylinder 2 CHT elevated to ${cylhead.cht2.toFixed(0)}°C (Limit: 180°C). Localized thermal gradient detected. Altitude ${state.altitude.toFixed(0)} ft reduces air cooling density.`;
+    const envNote = state.ambientDeltaC !== 0
+      ? ` Ambient is ${state.ambientDeltaC >= 0 ? '+' : ''}${state.ambientDeltaC.toFixed(1)}°C vs ISA (environment-normalized redline ${(180 + chtRedlineShiftC(state.ambientDeltaC)).toFixed(0)}°C).`
+      : '';
+    diagnosisText = `CYLINDER HEAD WARNING — Cylinder 2 CHT elevated to ${cylhead.cht2.toFixed(0)}°C (Limit: 180°C). Localized thermal gradient detected. Altitude ${state.altitude.toFixed(0)} ft reduces air cooling density.${envNote}`;
     recommendedAction = 'Reduce throttle setting below 75%, descend to lower altitude for denser air cooling, and monitor CHT telemetry closely.';
   } else if (state.faults.turboFail || turbo.status !== 'NOMINAL') {
     diagnosisText = `TURBOCHARGER ANOMALY — Manifold boost pressure dropped to ${turbo.boostPressure.toFixed(1)} kPa. Altitude ${state.altitude.toFixed(0)} ft requires 100% turbo boost compensation. Wastegate actuator deviation detected.`;

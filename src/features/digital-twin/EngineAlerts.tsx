@@ -1,6 +1,7 @@
 import { useState, useMemo, memo } from 'react';
 import { AlertTriangle, Wrench, CheckCircle2, Activity, Thermometer, Gauge, ShieldAlert, X } from 'lucide-react';
 import { Panel } from '@/components/hud/primitives';
+import { chtRedlineShiftC, oilRedlineShiftC, sampleAtmosphere } from '@/lib/domain/engine/environment';
 
 export interface EngineAlert {
   id: string;
@@ -15,6 +16,20 @@ export interface EngineAlert {
   evidence?: string;
 }
 
+/**
+ * Environment-compensated alert thresholds.
+ *
+ * When a live weather observation is bound, the thermal redlines are shifted
+ * by the same amount the ambient delta moves the physical CHT/oil temperature
+ * (≈0.72 °C / 0.5 °C per ambient °C). A Thar-desert heat wave therefore never
+ * trips an overheat advisory on its own — the residual above the shifted
+ * redline is what indicates true mechanical degradation.
+ */
+export function environmentalThermalShifts(envDeltaC: number): { chtShiftC: number; oilShiftC: number } {
+  if (!Number.isFinite(envDeltaC) || envDeltaC === 0) return { chtShiftC: 0, oilShiftC: 0 };
+  return { chtShiftC: chtRedlineShiftC(envDeltaC), oilShiftC: oilRedlineShiftC(envDeltaC) };
+}
+
 /** Generate alerts from live telemetry & physics thresholds */
 export function generateAlerts(telemetry: {
   cht: number[];
@@ -25,37 +40,50 @@ export function generateAlerts(telemetry: {
   vibrationRMS: number;
   rpm: number;
   health: number;
+  /** OAT − ISA at the current flight altitude, °C (0 when not live) */
+  envDeltaC?: number;
 }): EngineAlert[] {
   const alerts: EngineAlert[] = [];
   const now = "LIVE STREAM";
 
+  const envDeltaC = telemetry.envDeltaC && Number.isFinite(telemetry.envDeltaC) ? telemetry.envDeltaC : 0;
+  const shifts = environmentalThermalShifts(envDeltaC);
+  const chtCrit = 210 + shifts.chtShiftC;
+  const chtWarn = 180 + shifts.chtShiftC;
+  const oilCrit = 120 + shifts.oilShiftC;
+  const oilWarn = 110 + shifts.oilShiftC;
+  const envNote = envDeltaC !== 0
+    ? ` Ambient ${envDeltaC >= 0 ? '+' : ''}${envDeltaC.toFixed(1)}°C vs ISA shifts the thermal redline by ${shifts.chtShiftC >= 0 ? '+' : ''}${shifts.chtShiftC.toFixed(1)}°C (environment-normalized).`
+    : '';
+
   // CHT alerts per cylinder (Nominal: 130-150°C)
   (telemetry.cht || [140, 140, 140, 140]).forEach((temp, i) => {
     const cylNum = i + 1;
-    if (temp > 210) {
+    if (temp > chtCrit) {
       alerts.push({
         id: `cht-${cylNum}-crit`,
         severity: 'CRITICAL',
         subsystem: `CYLINDER ${cylNum}`,
         title: `CYL ${cylNum} OVERHEAT (${temp.toFixed(0)}°C)`,
-        message: `Cylinder ${cylNum} CHT at ${temp.toFixed(0)}°C exceeds critical limit of 210°C. Initiate immediate throttle reduction.`,
+        message: `Cylinder ${cylNum} CHT at ${temp.toFixed(0)}°C exceeds critical limit of ${chtCrit.toFixed(0)}°C${envDeltaC !== 0 ? ` (environment-normalized from 210°C)` : ''}. Initiate immediate throttle reduction.`,
         value: temp,
-        threshold: 210,
+        threshold: chtCrit,
         unit: '°C',
         timestamp: now,
-        evidence: `CHT${cylNum} > 210°C — Thermal breakdown / head stress detected`,
+        evidence: `CHT${cylNum} > ${chtCrit.toFixed(0)}°C — Thermal breakdown / head stress detected.` + envNote,
       });
-    } else if (temp > 180) {
+    } else if (temp > chtWarn) {
       alerts.push({
         id: `cht-${cylNum}-warn`,
         severity: 'WARNING',
         subsystem: `CYLINDER ${cylNum}`,
         title: `CYL ${cylNum} THERMAL ELEVATION`,
-        message: `Cylinder ${cylNum} CHT at ${temp.toFixed(0)}°C approaching caution limit (180°C).`,
+        message: `Cylinder ${cylNum} CHT at ${temp.toFixed(0)}°C approaching caution limit (${chtWarn.toFixed(0)}°C).`,
         value: temp,
-        threshold: 180,
+        threshold: chtWarn,
         unit: '°C',
         timestamp: now,
+        ...(envNote ? { evidence: envNote } : {}),
       });
     }
   });
@@ -145,20 +173,20 @@ export function generateAlerts(telemetry: {
   }
 
   // Oil Temperature (Nominal: 85-100°C)
-  if (telemetry.oilTemp > 120) {
+  if (telemetry.oilTemp > oilCrit) {
     alerts.push({
       id: 'oilt-crit',
       severity: 'CRITICAL',
       subsystem: 'LUBRICATION',
       title: `OIL OVERHEAT (${telemetry.oilTemp.toFixed(0)}°C)`,
-      message: `Oil temperature at ${telemetry.oilTemp.toFixed(0)}°C exceeds maximum allowable limit of 120°C.`,
+      message: `Oil temperature at ${telemetry.oilTemp.toFixed(0)}°C exceeds maximum allowable limit of ${oilCrit.toFixed(0)}°C${envDeltaC !== 0 ? ' (environment-normalized)' : ''}.`,
       value: telemetry.oilTemp,
-      threshold: 120,
+      threshold: oilCrit,
       unit: '°C',
       timestamp: now,
-      evidence: `Viscosity degradation imminent`,
+      evidence: `Viscosity degradation imminent.` + envNote,
     });
-  } else if (telemetry.oilTemp > 110) {
+  } else if (telemetry.oilTemp > oilWarn) {
     alerts.push({
       id: 'oilt-warn',
       severity: 'WARNING',
@@ -166,7 +194,7 @@ export function generateAlerts(telemetry: {
       title: 'OIL TEMP ELEVATED',
       message: `Oil temperature at ${telemetry.oilTemp.toFixed(0)}°C approaching thermal limit.`,
       value: telemetry.oilTemp,
-      threshold: 110,
+      threshold: oilWarn,
       unit: '°C',
       timestamp: now,
     });
@@ -304,6 +332,9 @@ export const EngineAlertsPanel = memo(function EngineAlertsPanel({ telemetry: pr
   const storeVib = useFlightStore((s) => s.vibrationRMS);
   const storeRpm = useFlightStore((s) => s.rpm);
   const storeHealth = useFlightStore((s) => s.healthIndex);
+  const storeWeather = useFlightStore((s) => s.weather);
+  const storeAltitude = useFlightStore((s) => s.altitude);
+  const storeAmbient = useFlightStore((s) => s.ambientTemp);
 
   const cht = propTelemetry?.cht ?? storeCht ?? [140, 140, 140, 140];
   const egtVal = propTelemetry?.egt ?? storeEgt ?? 680;
@@ -314,10 +345,17 @@ export const EngineAlertsPanel = memo(function EngineAlertsPanel({ telemetry: pr
   const rpmVal = propTelemetry?.rpm ?? storeRpm ?? 2400;
   const healthVal = propTelemetry?.health ?? storeHealth ?? 0.96;
 
+  // Environment-compensated thermal thresholds when live weather is bound
+  const liveEnv = storeWeather ? sampleAtmosphere(storeAltitude ?? 6000, storeWeather) : null;
+  const envDeltaC = liveEnv?.ambientDeltaC ?? 0;
+
   // Latching Alert Engine: Once an alert is issued, it is latched into state and never removed automatically
   const activeNowList = useMemo(
-    () => generateAlerts({ cht, egt: egtVal, map: mapVal, oilPressure: oilPVal, oilTemp: oilTVal, vibrationRMS: vibVal, rpm: rpmVal, health: healthVal }),
-    [cht?.[0], cht?.[1], cht?.[2], cht?.[3], egtVal, mapVal, oilPVal, oilTVal, vibVal, healthVal]
+    () => generateAlerts({
+      cht, egt: egtVal, map: mapVal, oilPressure: oilPVal, oilTemp: oilTVal, vibrationRMS: vibVal, rpm: rpmVal, health: healthVal,
+      ...(envDeltaC !== 0 ? { envDeltaC } : {}),
+    }),
+    [cht?.[0], cht?.[1], cht?.[2], cht?.[3], egtVal, mapVal, oilPVal, oilTVal, vibVal, healthVal, envDeltaC]
   );
 
   // Sync active triggers into persistent alertStore
