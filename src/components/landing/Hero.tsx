@@ -95,17 +95,20 @@ const ENGINE_MODULE_WARM_MS = 600;
  * silhouette's centre (bbox ≈ 46%w, left-heavy), then eases into the existing
  * resting overview scale/position as it glides right.
  */
-const DESKTOP_REST_SCALE = 1.05;
+const DESKTOP_REST_SCALE = 1.15;
 const DESKTOP_MACRO_SCALE = 2.45;
 /**
  * Resting stance. With macroPose.blend === 0 the twin is perfectly axis-aligned
  * (pure side profile) while it idles — which reads as "not oriented". Blend a
- * small persistent yaw/pitch into the resting pose so the engine presents a
- * clean 3/4 front view at rest, then rotates inside that stance.
+ * persistent yaw/pitch into the resting pose so the engine presents a strong
+ * 3/4 front view at rest (both red rocker banks readable), then rotates inside
+ * that stance. Values tuned against the desktop right-frame composition: the
+ * projected box ≈ 29vw × 37vh sits centred at ≈79vw / 50vh, clear of the HUD
+ * cluster (band top-left) and the bottom telemetry strip.
  */
-const REST_YAW_DEG = -32;
-const REST_PITCH_DEG = -4;
-const REST_BLEND = 0.35;
+const REST_YAW_DEG = -55;
+const REST_PITCH_DEG = -5;
+const REST_BLEND = 0.5;
 /**
  * Handoff stance. Measured against the actual clip (7.4–7.65s frames, before
  * the dashboard tail): the video camera looks DOWN on the engine's front from
@@ -423,7 +426,7 @@ export function Hero() {
   // Memoized so the canvas gets a stable reference once the choreography settles
   // (React.memo shallow-compares props — a fresh array every frame would defeat it).
   const modelPosition = useMemo<[number, number, number]>(
-    () => (isDesktop ? [0, -0.25 + 0.23 * (1 - handoffEase), 0] : [0, -0.2, 0]),
+    () => (isDesktop ? [0, -0.26 + 0.23 * (1 - handoffEase), 0] : [0, -0.2, 0]),
     [isDesktop, handoffEase],
   );
 
