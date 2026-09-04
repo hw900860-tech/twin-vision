@@ -1,18 +1,24 @@
 import { useCallback, useRef, useState } from "react";
-import { CheckCircle2, Database, Download, FileUp, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Database, Download, FileUp, Loader2, Sparkles, TriangleAlert } from "lucide-react";
 import { useFlightStore } from "@/features/flight-sim/flightStore";
 import { serializeTelemetryLogs } from "@/lib/flight-analysis/sessionCsv";
 import { buildDebrief, parseFlightCsv, type PostFlightDebrief } from "@/lib/flight-analysis/csvToJson";
+import { generateAiDebrief, type RulEstimate } from "@/lib/flight-analysis/groqDebrief";
 
 /**
  * Post-flight CSV → JSON analytics (Feature C).
  *
- * The entire pipeline is offline and air-gap safe: CSV (uploaded or the
+ * Default path is fully offline and air-gap safe: CSV (uploaded or the
  * current session) is parsed into a standardized `aeris-postflight-debrief-v1`
- * JSON packet — stats, exceedances, fault activity, rule-based findings and a
- * deterministic maintenance work order. Nothing leaves the ground station;
- * there is no cloud LLM or external API in this path. Deep engine "AI"
- * lives on-GCS in the physics-informed subsystem models (engineMlService).
+ * JSON packet — stats, exceedances, fault activity, rule-based findings, a
+ * deterministic maintenance work order and a rule-based RUL band. Nothing
+ * leaves the ground station.
+ *
+ * Optional: the operator can push that deterministic packet to a Groq-hosted
+ * open-weights model for a plain-language engineering report (sortie overview,
+ * key stats, anomalies, RUL translation, care items). The key is read only in
+ * the server function — never in the browser — and the call fires only on an
+ * explicit button click, never in a live loop.
  */
 export function PostFlightAnalytics() {
   const recordedLogs = useFlightStore((s) => s.recordedLogs);
@@ -22,6 +28,29 @@ export function PostFlightAnalytics() {
   const [debrief, setDebrief] = useState<PostFlightDebrief | null>(null);
   const [sourceName, setSourceName] = useState<string>("");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  const [aiReport, setAiReport] = useState<string | null>(null);
+  const [aiRul, setAiRul] = useState<RulEstimate | null>(null);
+  const [aiModel, setAiModel] = useState<string>("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const runAiReport = useCallback(async () => {
+    if (!debrief) return;
+    setAiBusy(true);
+    setAiError(null);
+    setAiReport(null);
+    try {
+      const result = await generateAiDebrief({ data: { debrief } });
+      setAiReport(result.report);
+      setAiRul(result.rul);
+      setAiModel(result.model);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "The AI report request failed — check the GROQ_API_KEY and try again.");
+    } finally {
+      setAiBusy(false);
+    }
+  }, [debrief]);
 
   const analyzeCsv = useCallback((csvText: string, label: string) => {
     try {
@@ -80,7 +109,7 @@ export function PostFlightAnalytics() {
         <div>
           <div className="label-xs text-cyan font-bold text-[11px]">POST-FLIGHT CSV → JSON ANALYTICS</div>
           <div className="text-[10px] text-muted-foreground mt-0.5">
-            Offline conversion of raw flight logs into standardized debrief packets · rule-based work orders · no external API — air-gap safe
+            Offline conversion of raw flight logs into standardized debrief packets · rule-based work orders · optional on-demand AI engineering report
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -140,6 +169,53 @@ export function PostFlightAnalytics() {
               </div>
             ))}
           </div>
+
+          {/* AI engineering report (Groq · server-side key · explicit click only) */}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-cyan/25 bg-cyan/[0.04] px-3 py-2.5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <Sparkles className="h-4 w-4 shrink-0 text-cyan" />
+              <div className="min-w-0">
+                <div className="label-xs font-bold text-cyan text-[10px]">AI ENGINEERING REPORT</div>
+                <div className="text-[9px] text-muted-foreground">
+                  Groq open-weights model reads the debrief + GCS RUL band · key stays server-side · fires only on click
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={runAiReport}
+              disabled={aiBusy}
+              className="flex items-center gap-1.5 border border-cyan/60 bg-cyan/10 px-3 py-1.5 font-mono text-[10px] font-bold tracking-wider text-cyan transition-colors hover:bg-cyan/20 disabled:cursor-wait disabled:opacity-50"
+            >
+              {aiBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {aiBusy ? "GENERATING…" : aiReport ? "REGENERATE" : "GENERATE REPORT"}
+            </button>
+          </div>
+
+          {aiError && (
+            <div className="mt-2 flex items-center gap-2 border border-[#e2523f]/50 bg-[#2b0d0a]/70 px-3 py-2 font-mono text-[10px] font-bold text-[#e2523f]">
+              <TriangleAlert className="h-3.5 w-3.5" /> {aiError}
+            </div>
+          )}
+
+          {aiReport && aiRul && (
+            <div className="mt-3 border border-cyan/20 bg-panel/70">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="label-xs font-bold text-cyan text-[10px]">ENGINEERING REPORT — SORTIE {sourceName}</span>
+                  <span className="flex items-center gap-1 border border-cyan/50 bg-cyan/10 px-1.5 py-0.5 font-mono text-[8px] font-black text-cyan">
+                    RUL {aiRul.label} · {aiRul.bandHours} · CONSUMED {aiRul.consumed}/100
+                  </span>
+                </div>
+                <span className="font-mono text-[8px] text-muted-foreground">MODEL {aiModel}</span>
+              </div>
+              {aiRul.basis.length > 0 && (
+                <div className="border-b border-border/40 bg-panel/40 px-3 py-1.5">
+                  <span className="label-xs text-[8px] opacity-60">RUL BASIS · {aiRul.basis.join(" · ")}</span>
+                </div>
+              )}
+              <pre className="whitespace-pre-wrap px-4 py-3 font-mono text-[10px] leading-relaxed text-foreground/90">{aiReport}</pre>
+            </div>
+          )}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {/* Maintenance work order + findings */}

@@ -39,14 +39,12 @@ export interface PlaceCandidate {
   lon: number;
 }
 
+// Server functions execute in the Node runtime, so process.env is always the
+// correct (and only sanctioned) source for secrets. Dynamic import.meta.env
+// access is forbidden by the Vite module runner — never fall back to it.
 function readApiKey(): string | undefined {
   const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
-  const direct = proc?.env?.["OPENWEATHERMAP_API_KEY"];
-  if (direct) return direct;
-  const meta = import.meta as unknown as { env?: Record<string, string | undefined> };
-  // Vite exposes only VITE_-prefixed keys to import.meta.env; accept both so
-  // the dev server (import.meta.env) and the prod runtime (process.env) work.
-  return meta.env?.["VITE_OPENWEATHERMAP_API_KEY"] ?? meta.env?.["OPENWEATHERMAP_API_KEY"];
+  return proc?.env?.["OPENWEATHERMAP_API_KEY"];
 }
 
 async function owmFetchJson(path: string, timeoutMs = 9000): Promise<unknown> {
