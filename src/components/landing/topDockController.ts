@@ -52,7 +52,7 @@ export function createTopDockController(
       state.element.style.width = "";
       state.element.style.height = "";
       state.element.style.transform = "";
-      state.element.dataset.dockNear = "false";
+      state.element.dataset['dockNear'] = "false";
     }
     for (const state of items) {
       const rect = state.element.getBoundingClientRect();
@@ -66,8 +66,8 @@ export function createTopDockController(
     dirty = false;
     if (getOptions().distribute) applyLayout();
     if (getOptions().lockTrack) root.style.width = `${root.getBoundingClientRect().width.toFixed(2)}px`;
-    root.dataset.dockState = enabled ? "idle" : "static";
-    root.dataset.dockMax = "0.00";
+    root.dataset['dockState'] = enabled ? "idle" : "static";
+    root.dataset['dockMax'] = "0.00";
   };
 
   const setTargets = (clientX: number, clientY: number) => {
@@ -77,16 +77,17 @@ export function createTopDockController(
     const pointer = vertical ? clientY : clientX;
     const rects = items.map((state) => state.element.getBoundingClientRect());
     for (let index = 0; index < items.length; index += 1) {
-      const rect = rects[index];
+      const rect = rects[index]!;
       const center = vertical ? rect.top + rect.height * 0.5 : rect.left + rect.width * 0.5;
       const proximity = clamp(1 - Math.abs(pointer - center) / Math.max(1, options.proximity), 0, 1);
       const influence = proximity * proximity * (3 - 2 * proximity);
-      items[index].target = influence;
-      items[index].element.dataset.dockNear = influence > 0.08 ? "true" : "false";
+      const item = items[index]!;
+      item.target = influence;
+      item.element.dataset['dockNear'] = influence > 0.08 ? "true" : "false";
     }
     pointerActive = true;
     dirty = true;
-    root.dataset.dockState = "active";
+    root.dataset['dockState'] = "active";
   };
 
   const focusItem = (item: HTMLElement) => {
@@ -95,11 +96,11 @@ export function createTopDockController(
     if (index < 0) return;
     items.forEach((state, itemIndex) => {
       state.target = itemIndex === index ? 1 : Math.abs(itemIndex - index) === 1 ? 0.24 : 0;
-      state.element.dataset.dockNear = state.target > 0.08 ? "true" : "false";
+      state.element.dataset['dockNear'] = state.target > 0.08 ? "true" : "false";
     });
     pointerActive = false;
     dirty = true;
-    root.dataset.dockState = "focus";
+    root.dataset['dockState'] = "focus";
   };
 
   const reset = () => {
@@ -107,7 +108,7 @@ export function createTopDockController(
     dirty = true;
     items.forEach((state) => {
       state.target = 0;
-      state.element.dataset.dockNear = "false";
+      state.element.dataset['dockNear'] = "false";
     });
   };
 
@@ -119,7 +120,7 @@ export function createTopDockController(
       const natural = items.reduce((sum, state) => sum + state.baseWidth, 0);
       const track = root.clientWidth >= natural ? root.clientWidth : 0;
       items.forEach((state, index) => {
-        state.element.style.width = track ? `${(track * weights[index] / total).toFixed(2)}px` : "";
+        state.element.style.width = track ? `${(track * weights[index]! / total).toFixed(2)}px` : "";
         state.element.style.height = "";
         state.element.style.transform = "";
       });
@@ -160,10 +161,10 @@ export function createTopDockController(
         maxValue = Math.max(maxValue, clamp(state.value, 0, 1.08));
       }
       applyLayout();
-      root.dataset.dockMax = maxValue.toFixed(2);
+      root.dataset['dockMax'] = maxValue.toFixed(2);
       if (!moving) {
         dirty = false;
-        if (items.every((state) => state.target === 0)) root.dataset.dockState = "idle";
+        if (items.every((state) => state.target === 0)) root.dataset['dockState'] = "idle";
       }
     }
     frame = requestAnimationFrame(draw);

@@ -255,7 +255,9 @@ export function AerisLandingHero() {
   useEffect(() => {
     if (phase === "cinematic") {
       setBlend(1.0);
-    } else if (phase === "reveal") {
+      return;
+    }
+    if (phase === "reveal") {
       let animId = 0;
       const start = performance.now();
       const duration = 1400;
@@ -273,9 +275,9 @@ export function AerisLandingHero() {
       };
       animId = requestAnimationFrame(tick);
       return () => cancelAnimationFrame(animId);
-    } else {
-      setBlend(0);
     }
+    setBlend(0);
+    return;
   }, [phase]);
 
   const simulation = useMemo(
