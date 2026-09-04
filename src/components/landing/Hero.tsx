@@ -118,16 +118,19 @@ const REST_BLEND = 0.5;
 /**
  * Handoff stance. Measured against the actual clip (7.4–7.65s frames, before
  * the dashboard tail): the video camera looks DOWN on the engine's front from
- * slightly right of its axis — its bright case centre reads at ≈(58%w, 52–56%h)
- * and the engine band spans ≈21→90%h. Raster-projecting engine.glb through the
+ * its left — in the final frame the red ROTAX covers sit on the RIGHT of the
+ * frame (≈55%w, mid-height band) with the intake piping on the LEFT, and the
+ * bright case body spans ≈10→92%w. Raster-projecting engine.glb through the
  * app's macro transform shows the same composition only when the twin holds a
- * yaw +10° / pitch −18° stance, so the macro opens TILTED like the clip and
- * then rights itself as it glides centre → right into the upright hero pose.
+ * yaw −18° / pitch −20° stance (covers project ≈(56%w, 33%h), intake flank
+ * left, engine bbox ≈56%w/50%h) so the macro opens facing the SAME way as the
+ * clip and then rights itself as it glides centre → right into the upright
+ * hero pose.
  */
-const HANDOFF_YAW_DEG = 10;
-const HANDOFF_PITCH_DEG = -18;
+const HANDOFF_YAW_DEG = -18;
+const HANDOFF_PITCH_DEG = -20;
 /** Horizontal hold offset (vw) so the macro twin overlaps the video's engine. */
-const DESKTOP_MACRO_X_OFFSET_VW = -2;
+const DESKTOP_MACRO_X_OFFSET_VW = -5;
 /** Downward hold offset (vh) so the macro twin overlaps the video's engine vertically. */
 const DESKTOP_MACRO_Y_OFFSET_VH = 0;
 const MOBILE_REST_SCALE = 1.02;

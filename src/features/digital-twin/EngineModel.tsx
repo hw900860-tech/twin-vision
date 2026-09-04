@@ -114,13 +114,68 @@ export const ZONES = [
   },
 ];
 
-type Zone6Mesh = {
-  geometry: THREE.BufferGeometry;
-  material: THREE.MeshStandardMaterial;
-  zone: typeof ZONES[number];
+/* ------------------------------------------------------------------ */
+/* REAL-ENGINE MATERIAL SYSTEM                                         */
+/*                                                                     */
+/* The GLB ships as ONE merged mesh with a single flat white material, */
+/* so components are recovered by classifying every triangle by where  */
+/* it sits on the engine and how its face points, then painting it     */
+/* with the physical material that part would carry (Rotax 914 look):  */
+/*                                                                     */
+/*   red       — glossy powder-coated rocker-cover lumps on top        */
+/*   head      — machined darker alloy between/below the covers        */
+/*   crankcase — cast aluminium core (machined top decks)              */
+/*   intake    — brighter machined silver (carbs / turbo / plenum)     */
+/*   exhaust   — heat-darkened powder-coated steel                     */
+/*   sump      — dark graphite cast                                    */
+/*   prop      — black gearbox housing + machined flange (Rotax front) */
+/*                                                                     */
+/* Surface classes (top / wall / shade, from the face normal) pick the */
+/* roughness and base brightness: up-facing machined decks read        */
+/* brighter & smoother, vertical cast walls mid, down-facing/under     */
+/* surfaces darker & rougher — like a real engine under workshop light.*/
+/* Baked per-face vertex tinting adds jitter, crevice darkening (faces */
+/* sitting deep under the local top surface are pre-shadowed) and      */
+/* underside occlusion, giving manufactured texture without textures.  */
+/* ------------------------------------------------------------------ */
+
+type FaceClass = 'top' | 'wall' | 'shade';
+
+interface FamilySpec {
+  color: string;
+  metalness: number;
+  env: number;
+  rough: Record<FaceClass, number>;
+}
+
+const MAT_FAMILIES: Record<string, FamilySpec> = {
+  red:       { color: '#bf1624', metalness: 0.10, env: 0.5,  rough: { top: 0.30, wall: 0.38, shade: 0.55 } }, // glossy ROTAX covers
+  head:      { color: '#767d84', metalness: 0.85, env: 0.55, rough: { top: 0.42, wall: 0.52, shade: 0.70 } }, // machined head/deck alloy
+  crankcase: { color: '#8c939a', metalness: 0.90, env: 0.55, rough: { top: 0.30, wall: 0.46, shade: 0.66 } }, // cast aluminium case
+  intake:    { color: '#aeb4bb', metalness: 0.95, env: 0.75, rough: { top: 0.24, wall: 0.38, shade: 0.58 } }, // bright alloy intake/carbs
+  exhaust:   { color: '#474c53', metalness: 0.85, env: 0.5,  rough: { top: 0.50, wall: 0.62, shade: 0.78 } }, // heat-darkened steel
+  sump:      { color: '#30343a', metalness: 0.45, env: 0.35, rough: { top: 0.60, wall: 0.72, shade: 0.84 } }, // graphite sump
+  prop:      { color: '#3b4047', metalness: 0.80, env: 0.6,  rough: { top: 0.26, wall: 0.40, shade: 0.58 } }, // black gearbox / machined flange
 };
 
-function create6SeparateSubAssemblies(scene: THREE.Group): Zone6Mesh[] {
+const ZONE_FAMILY: Record<string, string> = {
+  crankcase: 'crankcase',
+  exhaust: 'exhaust',
+  turbo: 'intake',
+  oilsump: 'sump',
+  propflange: 'prop',
+};
+
+type BuiltItem = { geometry: THREE.BufferGeometry; material: THREE.MeshStandardMaterial };
+type BuiltZone = { zone: typeof ZONES[number]; items: BuiltItem[] };
+
+/** Deterministic per-face tonal jitter (no visible pattern, breaks up flat paint). */
+function triJitter(i: number): number {
+  const s = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+function buildEngineAssemblies(scene: THREE.Group): BuiltZone[] {
   const meshes: THREE.Mesh[] = [];
   scene.traverse((child) => { if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh); });
   if (meshes.length === 0) return [];
@@ -132,104 +187,173 @@ function create6SeparateSubAssemblies(scene: THREE.Group): Zone6Mesh[] {
 
   const bounds = new THREE.Box3().setFromBufferAttribute(pos as THREE.BufferAttribute);
   const size = bounds.getSize(new THREE.Vector3());
+  const minX = bounds.min.x, minY = bounds.min.y, minZ = bounds.min.z;
+  const sx = Math.max(size.x, 1e-3), sy = Math.max(size.y, 1e-3), sz = Math.max(size.z, 1e-3);
 
-  const buckets: Record<string, number[]> = {
-    cylhead: [],
-    turbo: [],
-    exhaust: [],
-    propflange: [],
-    oilsump: [],
-    crankcase: [],
+  // Top-surface height field: tallest up-facing surface per (x,z) cell. Used to
+  // (a) find the cover lumps that get the red paint and (b) bake crevice
+  // shading — faces sitting well below the local ceiling are pre-shadowed.
+  const GW = 110, GZ = 160;
+  const ceilH = new Float32Array(GW * GZ).fill(-1e9);
+  const cellOf = (cx: number, cz: number) => {
+    const gx = Math.min(GW - 1, Math.max(0, (((cx - minX) / sx) * GW) | 0));
+    const gz = Math.min(GZ - 1, Math.max(0, (((cz - minZ) / sz) * GZ) | 0));
+    return gz * GW + gx;
   };
 
-  for (let i = 0; i < pos.count; i += 3) {
-    let cx = 0, cy = 0, cz = 0;
-    for (let v = 0; v < 3; v++) {
-      cx += pos.getX(i + v);
-      cy += pos.getY(i + v);
-      cz += pos.getZ(i + v);
-    }
-    cx /= 3; cy /= 3; cz /= 3;
+  const nTri = pos.count / 3;
 
-    const ny = (cy - bounds.min.y) / Math.max(size.y, 0.001);
-    const nx = (cx - bounds.min.x) / Math.max(size.x, 0.001) - 0.5;
-    const nz = (cz - bounds.min.z) / Math.max(size.z, 0.001) - 0.5;
-
-    let targetZone = 'crankcase';
-    if (ny > 0.62 && nx < 0.15) {
-      targetZone = 'cylhead';
-    } else if (ny < 0.22) {
-      targetZone = 'oilsump';
-    } else if (nz > 0.35) {
-      targetZone = 'propflange';
-    } else if (nx > 0.28) {
-      targetZone = 'turbo';
-    } else if (nx < -0.28 || nz < -0.32) {
-      targetZone = 'exhaust';
-    } else {
-      targetZone = 'crankcase';
-    }
-
-    for (let v = 0; v < 3; v++) {
-      const idx = i + v;
-      buckets[targetZone]!.push(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
+  // Pass 1 — face normals + ceiling field.
+  for (let i = 0; i < nTri; i++) {
+    const i0 = i * 3;
+    const ax = pos.getX(i0), ay = pos.getY(i0), az = pos.getZ(i0);
+    const bx = pos.getX(i0 + 1), by = pos.getY(i0 + 1), bz = pos.getZ(i0 + 1);
+    const dx = pos.getX(i0 + 2), dy = pos.getY(i0 + 2), dz = pos.getZ(i0 + 2);
+    const ex = bx - ax, ey = by - ay, ez = bz - az;
+    const fx = dx - ax, fy = dy - ay, fz = dz - az;
+    let nyN = ez * fx - ex * fz;
+    const L = Math.hypot(ey * fz - ez * fy, nyN, ex * fy - ey * fx);
+    if (L < 1e-12) continue;
+    nyN /= L;
+    if (nyN > 0.18) {
+      const fcy = (ay + by + dy) / 3;
+      const ci = cellOf((ax + bx + dx) / 3, (az + bz + dz) / 3);
+      if (fcy > (ceilH[ci] ?? -1e9)) ceilH[ci] = fcy;
     }
   }
 
-  return ZONES.map((zone) => {
-    const verts = buckets[zone.id] || [];
-    if (verts.length === 0) return null;
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-    geometry.computeVertexNormals();
-
-    // Physical Rotax 914 palette — reads as the real engine (bright red valve
-    // covers, cast/silver aluminium, dark gunmetal exhaust), not a cyber mass.
-    let colorHex = '#a7acb3'; // crankcase: cast aluminium
-    let roughness = 0.55;
-    let metalness = 0.60;
-
-    if (zone.id === 'cylhead') {
-      colorHex = '#c8131f'; // Rotax valve-cover red
-      roughness = 0.24;
-      metalness = 0.32;
-    } else if (zone.id === 'oilsump') {
-      colorHex = '#26292e'; // graphite sump
-      roughness = 0.60;
-      metalness = 0.35;
-    } else if (zone.id === 'propflange') {
-      colorHex = '#d9dee4'; // machined gearbox & prop flange
-      roughness = 0.18;
-      metalness = 0.92;
-    } else if (zone.id === 'turbo') {
-      colorHex = '#c8cdd5'; // silver aluminium manifold / carbs
-      roughness = 0.28;
-      metalness = 0.85;
-    } else if (zone.id === 'exhaust') {
-      colorHex = '#43484f'; // heat-darkened steel exhaust
-      roughness = 0.50;
-      metalness = 0.80;
+  // Crown map: cells whose surface is near the very top of the engine — the
+  // red valve-cover lumps. Dilate one cell (still ≥ 0.80 height) to catch the
+  // cover walls/slopes; deep valleys between parts stay unpainted metal.
+  const crown = new Uint8Array(GW * GZ);
+  const crownD = new Uint8Array(GW * GZ);
+  for (let ci = 0; ci < GW * GZ; ci++) {
+    const ch = ceilH[ci] ?? -1e9;
+    if ((ch - minY) / sy >= 0.865) crown[ci] = 1;
+  }
+  for (let gz = 0; gz < GZ; gz++) {
+    for (let gx = 0; gx < GW; gx++) {
+      const ci = gz * GW + gx;
+      if (crown[ci]) { crownD[ci] = 1; continue; }
+      const ch = ceilH[ci] ?? -1e9;
+      if ((ch - minY) / sy < 0.83) continue;
+      let near = false;
+      for (let dz = -1; dz <= 1 && !near; dz++) {
+        for (let dg = -1; dg <= 1; dg++) {
+          const gxx = gx + dg, gzz = gz + dz;
+          if (gxx < 0 || gxx >= GW || gzz < 0 || gzz >= GZ) continue;
+          if (crown[gzz * GW + gxx]) { near = true; break; }
+        }
+      }
+      if (near) crownD[ci] = 1;
     }
+  }
 
-    const material = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(colorHex),
-      roughness,
-      metalness,
-      side: THREE.DoubleSide,
-      // Opaque by default — translucency is switched on only for X-ray /
-      // selection-dimming states. Always-transparent meshes render as a glassy
-      // wireframe-ish mass and hide the physical colours underneath.
-      transparent: false,
-      opacity: 1.0,
-      emissive: new THREE.Color('#000000'),
-      emissiveIntensity: 0,
-    });
-    // Physical base colour, kept for the X-ray → physical resolution blend.
-    material.userData['baseColor'] = new THREE.Color(colorHex);
+  // Pass 2 — classify every face into (zone, family, surface class) and
+  // accumulate its vertices + a baked relative-tone per vertex.
+  const buckets: Record<string, Record<string, { v: number[]; r: number[] }>> = {};
+  const zoneIdOf: Record<string, string> = {};
+  ZONES.forEach((z) => { zoneIdOf[z.name] = z.id; });
 
-    return { geometry, material, zone };
-  }).filter(Boolean) as Zone6Mesh[];
+  for (let i = 0; i < nTri; i++) {
+    const i0 = i * 3;
+    const ax = pos.getX(i0), ay = pos.getY(i0), az = pos.getZ(i0);
+    const bx = pos.getX(i0 + 1), by = pos.getY(i0 + 1), bz = pos.getZ(i0 + 1);
+    const dx = pos.getX(i0 + 2), dy = pos.getY(i0 + 2), dz = pos.getZ(i0 + 2);
+    const fcx = (ax + bx + dx) / 3, fcy = (ay + by + dy) / 3, fcz = (az + bz + dz) / 3;
+    const ex = bx - ax, ey = by - ay, ez = bz - az;
+    const fx = dx - ax, fy = dy - ay, fz = dz - az;
+    let nxN = ey * fz - ez * fy;
+    let nyN = ez * fx - ex * fz;
+    let nzN = ex * fy - ey * fx;
+    const L = Math.hypot(nxN, nyN, nzN);
+    if (L < 1e-12) continue;
+    nxN /= L; nyN /= L; nzN /= L;
+
+    const nx = (fcx - minX) / sx - 0.5;
+    const ny = (fcy - minY) / sy;
+    const nz = (fcz - minZ) / sz - 0.5;
+
+    // Zone boundaries are identical to the legacy 6-subassembly split, so
+    // EXPLODE / ASSEMBLE, JARVIS picking and per-zone highlighting are
+    // unchanged — only the surfaces inside each zone gained real materials.
+    let zoneId = 'crankcase';
+    if (ny > 0.62 && nx < 0.15) zoneId = 'cylhead';
+    else if (ny < 0.22) zoneId = 'oilsump';
+    else if (nz > 0.35) zoneId = 'propflange';
+    else if (nx > 0.28) zoneId = 'turbo';
+    else if (nx < -0.28 || nz < -0.32) zoneId = 'exhaust';
+
+    let family: string;
+    if (zoneId === 'cylhead') family = crownD[cellOf(fcx, fcz)] ? 'red' : 'head';
+    else family = ZONE_FAMILY[zoneId]!;
+
+    const cls: FaceClass = nyN > 0.35 ? 'top' : nyN < -0.3 ? 'shade' : 'wall';
+
+    // Relative tone: surface class + crevice pre-shadow + subtle jitter.
+    let rel = cls === 'top' ? 1.0 : cls === 'wall' ? 0.95 : 0.89;
+    const ceiling = ceilH[cellOf(fcx, fcz)] ?? -1e9;
+    if (ceiling > -1e8) {
+      const depth = Math.max(0, ceiling - fcy);
+      rel *= 1 - Math.min(0.22, 0.22 * (depth / (sy * 0.55)));
+    }
+    rel *= 0.985 + 0.03 * triJitter(i);
+    if (rel < 0.7) rel = 0.7;
+    if (rel > 1.05) rel = 1.05;
+
+    const key = `${family}|${cls}`;
+    let zoneBucket = buckets[zoneId];
+    if (!zoneBucket) { zoneBucket = {}; buckets[zoneId] = zoneBucket; }
+    let group = zoneBucket[key];
+    if (!group) { group = { v: [], r: [] }; zoneBucket[key] = group; }
+    for (let v = 0; v < 3; v++) {
+      const idx = i0 + v;
+      group.v.push(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
+      group.r.push(rel, rel, rel);
+    }
+  }
+
+  const out: BuiltZone[] = [];
+  for (const zone of ZONES) {
+    const zoneBucket = buckets[zone.id];
+    if (!zoneBucket) continue;
+    const items: BuiltItem[] = [];
+    for (const [key, group] of Object.entries(zoneBucket)) {
+      const idx = key.indexOf('|');
+      const family = key.slice(0, idx);
+      const cls = key.slice(idx + 1) as FaceClass;
+      const spec = MAT_FAMILIES[family];
+      if (!spec) continue;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(group.v, 3));
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(group.r, 3));
+      geometry.computeVertexNormals();
+      const material = new THREE.MeshStandardMaterial({
+        // Base albedo lives on material.color; the baked per-vertex 'color'
+        // attribute is a RELATIVE multiplier (±roughly 5%, crevices −22%),
+        // so dynamic colour blends (X-ray etc.) stay proportional.
+        color: new THREE.Color(spec.color),
+        roughness: spec.rough[cls],
+        metalness: spec.metalness,
+        envMapIntensity: spec.env,
+        vertexColors: true,
+        side: THREE.DoubleSide,
+        // Opaque by default — translucency is switched on only for X-ray /
+        // selection-dimming states. Always-transparent meshes render as a
+        // glassy wireframe-ish mass and hide the physical colours underneath.
+        transparent: false,
+        opacity: 1.0,
+        emissive: new THREE.Color('#000000'),
+        emissiveIntensity: 0,
+      });
+      // Physical base colour, kept for the X-ray → physical resolution blend.
+      material.userData['baseColor'] = new THREE.Color(spec.color);
+      material.userData['family'] = family;
+      items.push({ geometry, material });
+    }
+    if (items.length) out.push({ zone, items });
+  }
+  return out;
 }
 
 export function EngineModel({
@@ -284,7 +408,7 @@ export function EngineModel({
   const group = useRef<THREE.Group>(null);
   const motorRef = useRef<THREE.Group>(null);
   const macroPose = _macroPose;
-  const meshRefs = useRef<Map<string, THREE.Mesh>>(new Map());
+  const zoneRefs = useRef<Map<string, THREE.Group>>(new Map());
   const explodeP = useRef(0);
   const [hoveredZone, setHoveredZone] = useState<string | null>(null);
   const { scene } = useGLTF('/engine.glb') as { scene: THREE.Group };
@@ -309,14 +433,16 @@ export function EngineModel({
     ];
   }, [macroPose?.pitchDeg, macroPose?.yawDeg, macroPose?.blend]);
 
-  const subAssemblies = useMemo(() => create6SeparateSubAssemblies(scene), [scene]);
+  const zoneAssemblies = useMemo(() => buildEngineAssemblies(scene), [scene]);
 
   useEffect(() => () => {
-    subAssemblies.forEach((zm) => {
-      zm.geometry.dispose();
-      zm.material.dispose();
+    zoneAssemblies.forEach((za) => {
+      za.items.forEach((it) => {
+        it.geometry.dispose();
+        it.material.dispose();
+      });
     });
-  }, [subAssemblies]);
+  }, [zoneAssemblies]);
 
   // Smooth 60 FPS animation loop — dynamic pressure/thermal/vibration heatmaps & bearing vibration
   useFrame((_, delta) => {
@@ -340,66 +466,68 @@ export function EngineModel({
 
     const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
 
-    subAssemblies.forEach((zm) => {
-      const mesh = meshRefs.current.get(zm.zone.name);
-      if (!mesh) return;
-
-      zm.material.wireframe = wireframe || vizMode === 'XRAY';
+    zoneAssemblies.forEach((za) => {
+      const zgroup = zoneRefs.current.get(za.zone.name);
+      if (!zgroup) return;
+      const mats = za.items.map((it) => it.material);
 
       // Position lerping for Exploded / Dismantle mode
-      const dir = new THREE.Vector3(...zm.zone.dir);
-      mesh.position.copy(dir).multiplyScalar(ease);
+      const dir = new THREE.Vector3(...za.zone.dir);
+      zgroup.position.copy(dir).multiplyScalar(ease);
 
       // Localized Bearing Spall Vibration Pulse
-      if (zm.zone.id === 'crankcase' && faults.bearingFail) {
+      if (za.zone.id === 'crankcase' && faults.bearingFail) {
         const pulse = Math.sin(t * 30) * 0.025;
-        mesh.position.x += pulse;
-        mesh.position.y += pulse;
+        zgroup.position.x += pulse;
+        zgroup.position.y += pulse;
       }
 
       // Compute stress value for this component
       let stress = 0.2;
       let mlRisk = 0;
-      if (zm.zone.id === 'cylhead') {
+      if (za.zone.id === 'cylhead') {
         stress = Math.max(...componentStress.cylinders);
         mlRisk = engineDecision?.subsystems?.cylinderHead ? 1 - engineDecision.subsystems.cylinderHead.health / 100 : 0;
-      } else if (zm.zone.id === 'exhaust') {
+      } else if (za.zone.id === 'exhaust') {
         stress = Math.max(...componentStress.exhaustRunners);
         mlRisk = engineDecision?.subsystems?.exhaust ? 1 - engineDecision.subsystems.exhaust.health / 100 : 0;
-      } else if (zm.zone.id === 'turbo') {
+      } else if (za.zone.id === 'turbo') {
         stress = componentStress.turbo;
         mlRisk = engineDecision?.subsystems?.turboIntake ? 1 - engineDecision.subsystems.turboIntake.health / 100 : 0;
-      } else if (zm.zone.id === 'crankcase') {
+      } else if (za.zone.id === 'crankcase') {
         stress = componentStress.crankcase;
         mlRisk = engineDecision?.subsystems?.crankcase ? 1 - engineDecision.subsystems.crankcase.health / 100 : 0;
-      } else if (zm.zone.id === 'oilsump') {
+      } else if (za.zone.id === 'oilsump') {
         stress = componentStress.oilSystem;
         mlRisk = engineDecision?.subsystems?.oilSump ? 1 - engineDecision.subsystems.oilSump.health / 100 : 0;
-      } else if (zm.zone.id === 'propflange') {
+      } else if (za.zone.id === 'propflange') {
         stress = componentStress.gearbox;
         mlRisk = engineDecision?.subsystems?.propGearbox ? 1 - engineDecision.subsystems.propGearbox.health / 100 : 0;
       }
 
-      const isHovered = hoveredZone === zm.zone.name;
-      const isSelected = selectedZone === zm.zone.name;
+      const isHovered = hoveredZone === za.zone.name;
+      const isSelected = selectedZone === za.zone.name;
 
       if (vizMode === 'XRAY') {
-        zm.material.opacity = isSelected || isHovered ? 0.85 : 0.22;
-        zm.material.emissive.set(isSelected || isHovered ? '#06b6d4' : '#38bdf8');
-        zm.material.emissiveIntensity = isSelected || isHovered ? 0.8 : 0.25;
+        for (const m of mats) {
+          m.wireframe = wireframe || true;
+          m.opacity = isSelected || isHovered ? 0.85 : 0.22;
+          m.emissive.set(isSelected || isHovered ? '#06b6d4' : '#38bdf8');
+          m.emissiveIntensity = isSelected || isHovered ? 0.8 : 0.25;
+        }
       } else if (vizMode === 'PRESSURE' || vizMode === 'THERMAL' || vizMode === 'VIBRATION' || vizMode === 'ML_RISK') {
         const valueToMap = vizMode === 'ML_RISK' ? mlRisk : stress;
         const heatColor = getStressColor(valueToMap);
-        zm.material.opacity = selectedZone ? (isSelected ? 1.0 : 0.25) : 1.0;
-        zm.material.emissive.copy(heatColor);
-        zm.material.emissiveIntensity = 0.35 + valueToMap * 0.55 + (isHovered ? 0.2 : 0);
+        for (const m of mats) {
+          m.wireframe = wireframe;
+          m.opacity = selectedZone ? (isSelected ? 1.0 : 0.25) : 1.0;
+          m.emissive.copy(heatColor);
+          m.emissiveIntensity = 0.35 + valueToMap * 0.55 + (isHovered ? 0.2 : 0);
+        }
       } else if (physicalTone) {
         // PHYSICAL-TONE (landing twin) — real Rotax colours; emissive is
         // reserved for hover/selection and genuinely extreme load.
         const heatColor = getStressColor(stress);
-        const baseColor =
-          (zm.material.userData['baseColor'] as THREE.Color | undefined) ??
-          new THREE.Color('#a7acb3');
         let physOpacity = selectedZone ? (isSelected ? 1.0 : 0.3) : 1.0;
         physGlow.set('#000000');
         let glowIntensity = 0;
@@ -421,50 +549,60 @@ export function EngineModel({
         // physical. Wireframe switches off at the half point while opacity +
         // emissive keep blending, so the resolve reads as a solidification.
         const k = Math.min(1, Math.max(0, xrayReveal));
-        if (k > 0.0001) {
-          blendTmp.copy(baseColor).lerp(XRAY_LINE, k);
-          zm.material.color.copy(blendTmp);
-          zm.material.opacity = physOpacity * (1 - k) + 0.5 * k;
-          zm.material.wireframe = k > 0.5;
-          blendTmp.copy(physGlow).lerp(XRAY_GLOW, k);
-          zm.material.emissive.copy(blendTmp);
-          zm.material.emissiveIntensity = glowIntensity * (1 - k) + 1.15 * k;
-        } else {
-          zm.material.color.copy(baseColor);
-          zm.material.opacity = physOpacity;
-          zm.material.wireframe = false;
-          zm.material.emissive.copy(physGlow);
-          zm.material.emissiveIntensity = glowIntensity;
+        for (const m of mats) {
+          const baseColor =
+            (m.userData['baseColor'] as THREE.Color | undefined) ??
+            new THREE.Color('#8c939a');
+          if (k > 0.0001) {
+            blendTmp.copy(baseColor).lerp(XRAY_LINE, k);
+            m.color.copy(blendTmp);
+            m.opacity = physOpacity * (1 - k) + 0.5 * k;
+            m.wireframe = k > 0.5;
+            blendTmp.copy(physGlow).lerp(XRAY_GLOW, k);
+            m.emissive.copy(blendTmp);
+            m.emissiveIntensity = glowIntensity * (1 - k) + 1.15 * k;
+          } else {
+            m.color.copy(baseColor);
+            m.opacity = physOpacity;
+            m.wireframe = false;
+            m.emissive.copy(physGlow);
+            m.emissiveIntensity = glowIntensity;
+          }
         }
       } else {
         // NORMAL mode — Dynamic stress highlight driven by Throttle, Rudder & Flight Physics
         const heatColor = getStressColor(stress);
-        zm.material.opacity = selectedZone ? (isSelected ? 1.0 : 0.3) : 1.0;
-        if (isSelected) {
-          zm.material.emissive.set('#06b6d4');
-          zm.material.emissiveIntensity = 0.5;
-        } else if (isHovered) {
-          zm.material.emissive.set('#06b6d4');
-          zm.material.emissiveIntensity = 0.35;
-        } else if (stress > 0.22) {
-          // Dynamically glow to visually highlight parts experiencing high load from Throttle & Rudder!
-          zm.material.emissive.copy(heatColor);
-          zm.material.emissiveIntensity = Math.min(0.95, (stress - 0.18) * 1.15);
-        } else {
-          zm.material.emissive.set('#000000');
-          zm.material.emissiveIntensity = 0;
+        for (const m of mats) {
+          m.wireframe = wireframe;
+          m.opacity = selectedZone ? (isSelected ? 1.0 : 0.3) : 1.0;
+          if (isSelected) {
+            m.emissive.set('#06b6d4');
+            m.emissiveIntensity = 0.5;
+          } else if (isHovered) {
+            m.emissive.set('#06b6d4');
+            m.emissiveIntensity = 0.35;
+          } else if (stress > 0.22) {
+            // Dynamically glow to visually highlight parts experiencing high load from Throttle & Rudder!
+            m.emissive.copy(heatColor);
+            m.emissiveIntensity = Math.min(0.95, (stress - 0.18) * 1.15);
+          } else {
+            m.emissive.set('#000000');
+            m.emissiveIntensity = 0;
+          }
         }
       }
 
-      // Follow opacity with real transparency. Opaque by default — only the
-      // translucent X-ray / selection-dimming states should alpha-blend (this
-      // also stops internal geometry ghosting through and washing out colour).
-      const wantTransparent = zm.material.opacity < 0.999;
-      if (zm.material.transparent !== wantTransparent) {
-        zm.material.transparent = wantTransparent;
-        zm.material.needsUpdate = true;
+      for (const m of mats) {
+        // Follow opacity with real transparency. Opaque by default — only the
+        // translucent X-ray / selection-dimming states should alpha-blend (this
+        // also stops internal geometry ghosting through and washing out colour).
+        const wantTransparent = m.opacity < 0.999;
+        if (m.transparent !== wantTransparent) {
+          m.transparent = wantTransparent;
+          m.needsUpdate = true;
+        }
+        m.depthWrite = !wantTransparent;
       }
-      zm.material.depthWrite = !wantTransparent;
     });
 
     motorRef.current?.scale.setScalar(3 + p * 0.08);
@@ -473,33 +611,40 @@ export function EngineModel({
   return (
     <group ref={group} position={modelPosition} scale={modelScale} rotation={poseRotation}>
       <group ref={motorRef} scale={[3, 3, 3]} position={[0, 0.1, 0.5]}>
-        {/* Render 6 separate physical sub-mesh objects */}
-        {subAssemblies.map((zm) => (
-          <mesh
-            key={zm.zone.name}
-            ref={(m) => {
-              if (m) meshRefs.current.set(zm.zone.name, m);
+        {/* Render 6 physical sub-assemblies, each split into the real material
+            surfaces that make up that component. */}
+        {zoneAssemblies.map((za) => (
+          <group
+            key={za.zone.name}
+            ref={(g) => {
+              if (g) zoneRefs.current.set(za.zone.name, g);
             }}
-            geometry={zm.geometry}
-            material={zm.material}
-            castShadow
-            receiveShadow
-            onPointerOver={(e: ThreeEvent<PointerEvent>) => {
-              e.stopPropagation();
-              setHoveredZone(zm.zone.name);
-              document.body.style.cursor = 'pointer';
-            }}
-            onPointerOut={(e: ThreeEvent<PointerEvent>) => {
-              e.stopPropagation();
-              setHoveredZone(null);
-              document.body.style.cursor = 'auto';
-            }}
-            onClick={(e: ThreeEvent<MouseEvent>) => {
-              e.stopPropagation();
-              onSelectZone?.(zm.zone.name);
-              setFocusedComponent(zm.zone.name);
-            }}
-          />
+          >
+            {za.items.map((it, k) => (
+              <mesh
+                key={k}
+                geometry={it.geometry}
+                material={it.material}
+                castShadow
+                receiveShadow
+                onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+                  e.stopPropagation();
+                  setHoveredZone(za.zone.name);
+                  document.body.style.cursor = 'pointer';
+                }}
+                onPointerOut={(e: ThreeEvent<PointerEvent>) => {
+                  e.stopPropagation();
+                  setHoveredZone(null);
+                  document.body.style.cursor = 'auto';
+                }}
+                onClick={(e: ThreeEvent<MouseEvent>) => {
+                  e.stopPropagation();
+                  onSelectZone?.(za.zone.name);
+                  setFocusedComponent(za.zone.name);
+                }}
+              />
+            ))}
+          </group>
         ))}
       </group>
 
