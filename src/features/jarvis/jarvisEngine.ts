@@ -99,10 +99,50 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
 
   // Strip conversational openers
   const cleanQ = q
-    .replace(/^(can you please|could you please|please|jarvis|hey jarvis|ok jarvis|okay jarvis|can you|could you|i want to|let's|lets|show me how to|take me to the|take me to|navigate to the|navigate to|go to the|go to|open the|open up the|open up|open|switch to the|switch to|show the|show)\s+/gi, "")
+    .replace(
+      /^(can you please|could you please|would you please|please|jarvis|hey jarvis|ok jarvis|okay jarvis|can you|could you|i want to go to|i want to see|i want to|let's go to|let's|lets go to|lets|show me how to|take me to the|take me to|take us to|bring me to|bring us to|navigate to the|navigate to|navigate|go to the|go to|go|head to|jump to|open up the|open up|open the|open|switch to the|switch to|switch|show the|show|load the|load|view the|view)\s+/gi,
+      ""
+    )
     .trim();
 
-  // 1. Home / Landing Page / Homepage
+  // 1. 3D Flight Simulator (/sim) — Prioritize before GCS tabs
+  if (
+    q.includes("flight sim") ||
+    q.includes("flight simulator") ||
+    q.includes("3d simulator") ||
+    q.includes("3d flight") ||
+    q.includes("cockpit") ||
+    q.includes("take control") ||
+    q.includes("fly the plane") ||
+    q.includes("fly plane") ||
+    q.includes("take flight") ||
+    q.includes("open flight") ||
+    q.includes("go to flight") ||
+    q.includes("take me to flight") ||
+    q.includes("open sim") ||
+    q.includes("go to sim") ||
+    q.includes("take me to sim") ||
+    q.includes("flight deck") ||
+    cleanQ === "simulator" ||
+    cleanQ === "sim" ||
+    cleanQ === "cockpit" ||
+    cleanQ === "flight" ||
+    cleanQ === "fly" ||
+    cleanQ === "pilot" ||
+    cleanQ === "airplane" ||
+    cleanQ === "plane" ||
+    q === "fly" ||
+    q === "flying"
+  ) {
+    return {
+      intent: "NAVIGATION",
+      spokenText: "Opening the 3D Flight Simulator cockpit now, Commander.",
+      displayText: "Navigating to **3D Flight Simulator** (`/sim`).",
+      actions: [{ type: "NAVIGATE", route: "/sim" }],
+    };
+  }
+
+  // 2. Home / Landing Page / Homepage (/)
   if (
     q.includes("homepage") ||
     cleanQ === "homepage" ||
@@ -112,11 +152,13 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
     cleanQ === "main page" ||
     cleanQ === "front page" ||
     cleanQ === "top" ||
+    cleanQ === "hero" ||
     q.includes("go to home") ||
     q.includes("take me home") ||
     q.includes("back to home") ||
     q.includes("go home") ||
-    q.includes("scroll to top")
+    q.includes("scroll to top") ||
+    q.includes("main screen")
   ) {
     return {
       intent: "NAVIGATION",
@@ -129,7 +171,7 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
     };
   }
 
-  // 2. Exploded View / Component Inspection / Explore Parts
+  // 3. Exploded View / Component Inspection / Explore Parts
   if (
     q.includes("explore the parts") ||
     q.includes("explore parts") ||
@@ -138,7 +180,10 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
     q.includes("inspection page") ||
     q.includes("inspection section") ||
     cleanQ === "inspection" ||
+    cleanQ === "inspect" ||
     cleanQ === "parts" ||
+    cleanQ === "components" ||
+    cleanQ === "engine parts" ||
     q.includes("explode engine") ||
     q.includes("explode the engine") ||
     q.includes("exploded view") ||
@@ -156,7 +201,7 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
     };
   }
 
-  // 3. Assemble Engine
+  // 4. Assemble Engine
   if (q.includes("assemble") || q.includes("put together") || q.includes("reset engine")) {
     return {
       intent: "UI_ACTION",
@@ -169,7 +214,7 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
     };
   }
 
-  // 4. Guided Mission Demo Commands
+  // 5. Guided Mission Demo Commands
   if (q.includes("demo") && (q.includes("start") || q.includes("launch") || q.includes("run") || q.includes("begin"))) {
     return {
       intent: "UI_ACTION",
@@ -206,7 +251,7 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
     };
   }
 
-  // 5. Fault Injections
+  // 6. Fault Injections
   if (q.includes("misfire")) {
     return {
       intent: "UI_ACTION",
@@ -261,7 +306,7 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
     };
   }
 
-  // 6. Mission Context Section
+  // 7. Mission Context Section
   if (
     q.includes("mission context") ||
     cleanQ === "mission context" ||
@@ -278,7 +323,7 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
     };
   }
 
-  // 7. Foresight Section
+  // 8. Foresight Section
   if (q.includes("foresight") || cleanQ === "foresight" || q.includes("future tech") || q.includes("roadmap")) {
     return {
       intent: "NAVIGATION",
@@ -291,7 +336,7 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
     };
   }
 
-  // 8. Engine Intelligence Section
+  // 9. Engine Intelligence Section
   if (q.includes("engine intelligence") || cleanQ === "engine intelligence" || (q.includes("predictive") && q.includes("landing"))) {
     return {
       intent: "NAVIGATION",
@@ -301,28 +346,6 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
         { type: "NAVIGATE", route: "/" },
         { type: "SCROLL_TO", sectionId: "intelligence" },
       ],
-    };
-  }
-
-  // 9. 3D Flight Simulator (/sim)
-  if (
-    q.includes("flight sim") ||
-    q.includes("flight simulator") ||
-    q.includes("3d simulator") ||
-    q.includes("3d flight") ||
-    q.includes("cockpit") ||
-    cleanQ === "simulator" ||
-    cleanQ === "sim" ||
-    cleanQ === "cockpit" ||
-    q.includes("take control") ||
-    q.includes("fly the plane") ||
-    q === "fly"
-  ) {
-    return {
-      intent: "NAVIGATION",
-      spokenText: "Opening the 3D Flight Simulator cockpit.",
-      displayText: "Navigating to **3D Flight Simulator** (`/sim`).",
-      actions: [{ type: "NAVIGATE", route: "/sim" }],
     };
   }
 
@@ -898,9 +921,14 @@ export async function executeJarvisQuery(
 
   // 1. FAST-PATH: If this is an explicit navigation/action command, execute it immediately in 0ms
   const preNav = detectNavigationFromQuery(query);
-  let preActions: string[] = [];
   if (preNav) {
-    preActions = executeActions(preNav.actions);
+    const executed = executeActions(preNav.actions);
+    return {
+      spokenText: preNav.spokenText,
+      displayText: preNav.displayText,
+      intent: preNav.intent,
+      actionsExecuted: executed,
+    };
   }
 
   // 2. FAST-PATH: If this is a specific flight telemetry or SIH PS 26054 inquiry, answer instantly in <1ms
@@ -909,8 +937,8 @@ export async function executeJarvisQuery(
     return {
       spokenText: instantAnswer.spokenText,
       displayText: instantAnswer.displayText,
-      intent: instantAnswer.intent || (preNav ? preNav.intent : "QUESTION"),
-      actionsExecuted: preActions,
+      intent: instantAnswer.intent || "QUESTION",
+      actionsExecuted: [],
     };
   }
 
@@ -997,23 +1025,12 @@ export async function executeJarvisQuery(
   if (parsed) {
     const rawActions = Array.isArray(parsed.actions) ? parsed.actions : [];
     const postActions = executeActions(rawActions);
-    const combinedActions = Array.from(new Set([...preActions, ...postActions]));
 
     return {
-      spokenText: parsed.spokenText || preNav?.spokenText || "Standing by, Commander.",
-      displayText: parsed.displayText || preNav?.displayText || "Understood.",
-      intent: parsed.intent || (preNav ? preNav.intent : "QUESTION"),
-      actionsExecuted: combinedActions,
-    };
-  }
-
-  // 5. FALLBACK IF OFFLINE:
-  if (preNav) {
-    return {
-      spokenText: preNav.spokenText,
-      displayText: preNav.displayText,
-      intent: preNav.intent,
-      actionsExecuted: preActions,
+      spokenText: parsed.spokenText || "Standing by, Commander.",
+      displayText: parsed.displayText || "Understood.",
+      intent: parsed.intent || "QUESTION",
+      actionsExecuted: postActions,
     };
   }
 

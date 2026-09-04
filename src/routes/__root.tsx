@@ -131,7 +131,18 @@ function RootComponent() {
   useEffect(() => {
     registerHandlers({
       nav: (path: string) => {
-        navigate({ to: path as any });
+        try {
+          if (path.includes("#")) {
+            const [baseRoute, hash] = path.split("#");
+            navigate({ to: (baseRoute || "/") as any, hash });
+          } else {
+            navigate({ to: path as any });
+          }
+        } catch {
+          if (typeof window !== "undefined") {
+            window.location.href = path;
+          }
+        }
       },
     });
   }, [navigate, registerHandlers]);

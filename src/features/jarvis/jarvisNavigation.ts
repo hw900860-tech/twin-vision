@@ -98,10 +98,14 @@ export function scrollToLandingSection(
     let attempts = 0;
     const timer = setInterval(() => {
       attempts++;
-      if (performScroll() || attempts >= 25) {
+      if (typeof window !== "undefined" && (window.location.pathname === "/" || window.location.pathname === "")) {
+        if (performScroll() || attempts >= 30) {
+          clearInterval(timer);
+        }
+      } else if (attempts >= 30) {
         clearInterval(timer);
       }
-    }, 45);
+    }, 50);
   } else {
     performScroll();
   }

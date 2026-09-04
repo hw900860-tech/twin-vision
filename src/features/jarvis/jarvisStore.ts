@@ -321,30 +321,26 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
             jarvisWakeWord.pause();
           },
           onEnd: () => {
-            set({ isSpeaking: false });
-            // Seamless continuous conversation:
-            // If the operator has the HUD open, arm listening so they can speak continuous follow-ups naturally!
-            if (get().isOpen && get().voiceEnabled) {
-              setTimeout(() => {
-                if (!get().isSpeaking && !get().isListening && !get().isThinking && get().isOpen) {
-                  get().startListening();
-                }
-              }, 450);
-            } else if (get().wakeWordEnabled) {
+            set({ isSpeaking: false, isListening: false });
+            // Once the conversation is finished, listening goes completely OFF.
+            // JARVIS returns to standby, waking ONLY when "Jarvis" is spoken again.
+            if (get().wakeWordEnabled) {
               setTimeout(() => {
                 if (get().wakeWordEnabled && !get().isSpeaking && !get().isListening) {
                   jarvisWakeWord.resume();
                 }
-              }, 450);
+              }, 400);
             }
           },
           onError: () => {
-            set({ isSpeaking: false });
-            setTimeout(() => {
-              if (get().wakeWordEnabled && !get().isSpeaking && !get().isListening) {
-                jarvisWakeWord.resume();
-              }
-            }, 450);
+            set({ isSpeaking: false, isListening: false });
+            if (get().wakeWordEnabled) {
+              setTimeout(() => {
+                if (get().wakeWordEnabled && !get().isSpeaking && !get().isListening) {
+                  jarvisWakeWord.resume();
+                }
+              }, 400);
+            }
           },
         });
       } else {
