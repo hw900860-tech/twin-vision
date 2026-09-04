@@ -25,7 +25,6 @@ import { ClientOnly } from "@/components/ClientOnly";
 import { CinematicIntro } from "./CinematicIntro";
 import { JARVISExplodeStudio } from "@/features/digital-twin/JARVISExplodeStudio";
 import { JARVISPartInspector } from "@/features/digital-twin/JARVISPartInspector";
-import heroBgImage from "../../../../../../.gemini/antigravity/brain/2d616611-0521-4be1-8b59-3533b99f2adf/media__1788537086097.jpg";
 import type { PartHighlights } from "@/features/digital-twin/EngineModel";
 import { ENGINE_SPIN_RATE, engineSpinAngle } from "@/features/digital-twin/EngineModel";
 import { engineViewerAudio } from "@/features/digital-twin/engineViewerAudio";
@@ -307,11 +306,6 @@ export function AerisLandingHero() {
 function SpaceStationLabBackground() {
   return (
     <div className="aeris-spacestation-bg" aria-hidden="true">
-      <img
-        src={heroBgImage}
-        alt="Aeris Space Lab Hangar Background"
-        className="lab-chamber-img"
-      />
       <div className="lab-light-pillar lab-pillar-left" />
       <div className="lab-light-pillar lab-pillar-right" />
       <div className="lab-center-chamber-glow" />

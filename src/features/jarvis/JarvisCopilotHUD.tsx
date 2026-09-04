@@ -61,9 +61,20 @@ export function JarvisCopilotHUD() {
 
   // Initialize Wake Word listener ("Jarvis")
   useEffect(() => {
+    const handleGesture = () => {
+      if (wakeWordEnabled) {
+        initWakeWord();
+      }
+    };
     if (wakeWordEnabled) {
       initWakeWord();
     }
+    window.addEventListener("pointerdown", handleGesture, { once: true });
+    window.addEventListener("keydown", handleGesture, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", handleGesture);
+      window.removeEventListener("keydown", handleGesture);
+    };
   }, [wakeWordEnabled, initWakeWord]);
 
   // Live telemetry summary for HUD header

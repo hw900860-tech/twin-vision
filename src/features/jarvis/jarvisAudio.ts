@@ -320,9 +320,9 @@ export class JarvisWakeWordDetector {
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const transcript = event.results[i][0].transcript.toLowerCase();
 
-        // Wake pattern: "hey jarvis", "ok jarvis", "hi jarvis", "jarvis", "jaarvis"
+        // Extended wake pattern: "hey jarvis", "ok jarvis", "hi jarvis", "jarvis", "jaarvis", "wake up jarvis", etc.
         const wakeRegex =
-          /\b(hey\s+jarvis|ok\s+jarvis|okay\s+jarvis|hi\s+jarvis|hello\s+jarvis|jarvis|jaarvis|jarves)\b/i;
+          /\b(hey\s+jarvis|ok\s+jarvis|okay\s+jarvis|hi\s+jarvis|hello\s+jarvis|wake\s+up\s+jarvis|jarvis\s+wake\s+up|wake\s+up|jarvis|jaarvis|javis|jarves|j\.a\.r\.v\.i\.s)\b/i;
         const match = wakeRegex.exec(transcript);
 
         if (match) {
@@ -343,6 +343,21 @@ export class JarvisWakeWordDetector {
     };
 
     this.recognition.onerror = (event: any) => {
+      // If mic permission blocked before user gesture, listen for next click
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        if (typeof window !== "undefined") {
+          const tryStartOnInteraction = () => {
+            if (this.isRunning && !this.isPaused) {
+              try {
+                this.recognition.start();
+              } catch {}
+            }
+          };
+          window.addEventListener("pointerdown", tryStartOnInteraction, { once: true });
+        }
+        return;
+      }
+
       // Don't kill background listener on typical timeouts
       if (
         event.error === "no-speech" ||
