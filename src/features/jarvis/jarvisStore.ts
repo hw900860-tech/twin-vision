@@ -122,19 +122,20 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
   },
   initWakeWord: () => {
     if (!jarvisWakeWord.isSupported()) return;
+    if (get().isWakeWordActive) return;
+
+    set({ isWakeWordActive: true });
 
     jarvisWakeWord.start((spokenCommand) => {
-      // 1. Tactical chime
-      jarvisAudio.playChime("activate");
-
-      // 2. Reveal HUD
+      // Reveal HUD
       set({ isOpen: true });
 
       if (spokenCommand && spokenCommand.trim().length > 2) {
-        // User said command along with wake-word: e.g. "Jarvis why is the engine health low?"
+        // User said command along with wake-word: e.g. "Jarvis open Sensor matrix"
         get().submitQuery(spokenCommand.trim());
       } else {
         // User just summoned: "Jarvis!"
+        jarvisAudio.playChime("activate");
         const ackPhrases = [
           "Online, Commander. Listening.",
           "Yes Commander, ready for instructions.",
@@ -163,8 +164,6 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
         }
       }
     });
-
-    set({ isWakeWordActive: true });
   },
   setTranscriptInput: (text) => set({ transcriptInput: text }),
   setActiveGcsTab: (tab) => set({ activeGcsTab: tab }),
@@ -252,10 +251,13 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
     const query = (queryText ?? get().transcriptInput).trim();
     if (!query || get().isThinking) return;
 
+    // Immediately stop any currently playing speech and pause all listening
+    jarvisSpeaker.stop();
     jarvisWakeWord.pause();
+    jarvisRecognizer.stop();
 
     // Reset input
-    set({ transcriptInput: "", isThinking: true });
+    set({ transcriptInput: "", isThinking: true, isSpeaking: false, isListening: false });
     jarvisAudio.playChime("ack");
 
     // Add user message to history
@@ -290,23 +292,34 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
       // Speak response if voice is enabled
       if (get().voiceEnabled && result.spokenText) {
         set({ isSpeaking: true });
+        jarvisWakeWord.pause();
+
         jarvisSpeaker.speak(result.spokenText, {
-          onStart: () => set({ isSpeaking: true }),
+          onStart: () => {
+            set({ isSpeaking: true });
+            jarvisWakeWord.pause();
+          },
           onEnd: () => {
             set({ isSpeaking: false });
-            if (get().wakeWordEnabled) {
-              jarvisWakeWord.resume();
-            }
+            // Add a 600ms room-silence buffer before resuming wake word to prevent self-triggering
+            setTimeout(() => {
+              if (get().wakeWordEnabled && !get().isSpeaking && !get().isListening) {
+                jarvisWakeWord.resume();
+              }
+            }, 600);
           },
           onError: () => {
             set({ isSpeaking: false });
-            if (get().wakeWordEnabled) {
-              jarvisWakeWord.resume();
-            }
+            setTimeout(() => {
+              if (get().wakeWordEnabled && !get().isSpeaking && !get().isListening) {
+                jarvisWakeWord.resume();
+              }
+            }, 600);
           },
         });
       } else {
-        if (get().wakeWordEnabled) {
+        set({ isSpeaking: false });
+        if (get().wakeWordEnabled && !get().isListening) {
           jarvisWakeWord.resume();
         }
       }
@@ -320,8 +333,8 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
         intent: "QUESTION",
         timestamp: Date.now(),
       };
-      set((s) => ({ messages: [...s.messages, errorMsg], isThinking: false }));
-      if (get().wakeWordEnabled) {
+      set((s) => ({ messages: [...s.messages, errorMsg], isThinking: false, isSpeaking: false }));
+      if (get().wakeWordEnabled && !get().isListening) {
         jarvisWakeWord.resume();
       }
     }

@@ -89,6 +89,7 @@ export interface SpeechRecognitionHandlers {
 export class JarvisSpeechRecognizer {
   private recognition: any = null;
   private isListening = false;
+  private silenceTimer: any = null;
 
   constructor() {
     if (typeof window !== "undefined") {
@@ -110,6 +111,11 @@ export class JarvisSpeechRecognizer {
   start(handlers: SpeechRecognitionHandlers) {
     if (!this.recognition || this.isListening) return;
 
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
+
     this.recognition.onstart = () => {
       this.isListening = true;
       jarvisAudio.playChime("activate");
@@ -128,16 +134,43 @@ export class JarvisSpeechRecognizer {
         }
       }
 
-      const text = finalTranscript || interimTranscript;
-      handlers.onResult?.(text, Boolean(finalTranscript));
+      if (finalTranscript) {
+        if (this.silenceTimer) {
+          clearTimeout(this.silenceTimer);
+          this.silenceTimer = null;
+        }
+        handlers.onResult?.(finalTranscript, true);
+        return;
+      }
+
+      if (interimTranscript) {
+        handlers.onResult?.(interimTranscript, false);
+
+        // Fast auto-commit: If user pauses speech for 650ms, auto-commit as final
+        if (this.silenceTimer) clearTimeout(this.silenceTimer);
+        this.silenceTimer = setTimeout(() => {
+          if (this.isListening && interimTranscript.trim().length > 1) {
+            this.silenceTimer = null;
+            handlers.onResult?.(interimTranscript.trim(), true);
+          }
+        }, 650);
+      }
     };
 
     this.recognition.onerror = (event: any) => {
+      if (this.silenceTimer) {
+        clearTimeout(this.silenceTimer);
+        this.silenceTimer = null;
+      }
       this.isListening = false;
       handlers.onError?.(event.error || "Speech recognition error");
     };
 
     this.recognition.onend = () => {
+      if (this.silenceTimer) {
+        clearTimeout(this.silenceTimer);
+        this.silenceTimer = null;
+      }
       this.isListening = false;
       jarvisAudio.playChime("deactivate");
       handlers.onEnd?.();
@@ -152,6 +185,10 @@ export class JarvisSpeechRecognizer {
   }
 
   stop() {
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
     if (this.recognition && this.isListening) {
       try {
         this.recognition.stop();
@@ -163,14 +200,30 @@ export class JarvisSpeechRecognizer {
 
 // --- Text to Speech (TTS) ---
 export class JarvisSpeechSynthesizer {
-  private currentUtterance: SpeechSynthesisUtterance | null = null;
+  private activeToken = 0;
   private cachedVoice: SpeechSynthesisVoice | null = null;
+  private speakTimeout: any = null;
+  private channel: BroadcastChannel | null = null;
 
   constructor() {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.onvoiceschanged = () => {
-        this.resolveVoice();
-      };
+    if (typeof window !== "undefined") {
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.onvoiceschanged = () => {
+          this.cachedVoice = null;
+          this.resolveVoice();
+        };
+      }
+      if ("BroadcastChannel" in window) {
+        try {
+          this.channel = new BroadcastChannel("aeris_jarvis_speech_channel");
+          this.channel.onmessage = (e) => {
+            if (e.data?.type === "SILENCE_SPEECH") {
+              // Another tab started speaking, stop this tab immediately
+              this.stop(false);
+            }
+          };
+        } catch {}
+      }
     }
   }
 
@@ -209,7 +262,9 @@ export class JarvisSpeechSynthesizer {
       return;
     }
 
-    this.stop();
+    // Immediately cancel previous utterance and increment token to invalidate stale callbacks
+    this.stop(true);
+    const token = ++this.activeToken;
 
     // Clean markdown symbols from spoken text
     let cleanText = text
@@ -233,44 +288,65 @@ export class JarvisSpeechSynthesizer {
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = JARVIS_CONFIG.speechRate;
-    utterance.pitch = JARVIS_CONFIG.speechPitch;
+    // Broadcast silence to any other tabs
+    try {
+      this.channel?.postMessage({ type: "SILENCE_SPEECH" });
+    } catch {}
 
-    const preferredVoice = this.resolveVoice();
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
-    }
+    // 40ms micro-delay gives Chromium audio thread time to settle cancel() before queuing
+    this.speakTimeout = setTimeout(() => {
+      if (this.activeToken !== token) return;
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
-    utterance.onstart = () => {
-      options?.onStart?.();
-    };
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = JARVIS_CONFIG.speechRate;
+      utterance.pitch = JARVIS_CONFIG.speechPitch;
 
-    utterance.onend = () => {
-      this.currentUtterance = null;
-      setTimeout(() => {
+      const preferredVoice = this.resolveVoice();
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      utterance.onstart = () => {
+        if (this.activeToken !== token) return;
+        options?.onStart?.();
+      };
+
+      utterance.onend = () => {
+        if (this.activeToken !== token) return;
+        this.activeToken = 0;
         options?.onEnd?.();
-      }, 100);
-    };
+      };
 
-    utterance.onerror = (e) => {
-      this.currentUtterance = null;
-      options?.onError?.(e);
-      setTimeout(() => {
-        options?.onEnd?.();
-      }, 100);
-    };
+      utterance.onerror = (e) => {
+        if (this.activeToken !== token) return;
+        // Do not propagate intentional cancellations or interrupts
+        if (e.error === "canceled" || e.error === "interrupted") {
+          return;
+        }
+        this.activeToken = 0;
+        options?.onError?.(e);
+      };
 
-    this.currentUtterance = utterance;
-    window.speechSynthesis.speak(utterance);
+      window.speechSynthesis.speak(utterance);
+    }, 40);
   }
 
-  stop() {
+  stop(broadcast = true) {
+    if (this.speakTimeout) {
+      clearTimeout(this.speakTimeout);
+      this.speakTimeout = null;
+    }
+    this.activeToken++;
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       try {
         window.speechSynthesis.cancel();
       } catch {}
-      this.currentUtterance = null;
+    }
+    if (broadcast) {
+      try {
+        this.channel?.postMessage({ type: "SILENCE_SPEECH" });
+      } catch {}
     }
   }
 }
@@ -284,6 +360,7 @@ export class JarvisWakeWordDetector {
   private isPaused = false;
   private onWakeCallback: WakeWordCallback | null = null;
   private restartTimeout: any = null;
+  private lastWakeTimestamp = 0;
 
   constructor() {
     if (typeof window !== "undefined") {
@@ -315,12 +392,16 @@ export class JarvisWakeWordDetector {
     try {
       this.recognition.start();
     } catch {
-      // Already running or waiting for interaction
+      // Already running or waiting for user interaction
     }
   }
 
   pause() {
     this.isPaused = true;
+    if (this.restartTimeout) {
+      clearTimeout(this.restartTimeout);
+      this.restartTimeout = null;
+    }
     if (this.recognition && this.isRunning) {
       try {
         this.recognition.stop();
@@ -331,6 +412,10 @@ export class JarvisWakeWordDetector {
   resume() {
     if (!this.isRunning) return;
     this.isPaused = false;
+    if (this.restartTimeout) {
+      clearTimeout(this.restartTimeout);
+      this.restartTimeout = null;
+    }
     try {
       this.recognition.start();
     } catch {}
@@ -339,7 +424,10 @@ export class JarvisWakeWordDetector {
   stop() {
     this.isRunning = false;
     this.isPaused = false;
-    if (this.restartTimeout) clearTimeout(this.restartTimeout);
+    if (this.restartTimeout) {
+      clearTimeout(this.restartTimeout);
+      this.restartTimeout = null;
+    }
     if (this.recognition) {
       try {
         this.recognition.stop();
@@ -353,21 +441,26 @@ export class JarvisWakeWordDetector {
     this.recognition.onresult = (event: any) => {
       if (this.isPaused) return;
 
+      const now = Date.now();
+      // Debounce wake events by at least 2500ms to eliminate multi-triggers
+      if (now - this.lastWakeTimestamp < 2500) return;
+
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const transcript = event.results[i][0].transcript.toLowerCase();
 
-        // Extended wake pattern: "hey jarvis", "ok jarvis", "hi jarvis", "jarvis", "jaarvis", "wake up jarvis", etc.
+        // Extended wake pattern: "hey jarvis", "ok jarvis", "hi jarvis", "jarvis", "wake up jarvis"
         const wakeRegex =
           /\b(hey\s+jarvis|ok\s+jarvis|okay\s+jarvis|hi\s+jarvis|hello\s+jarvis|wake\s+up\s+jarvis|jarvis\s+wake\s+up|wake\s+up|jarvis|jaarvis|javis|jarves|j\.a\.r\.v\.i\.s)\b/i;
         const match = wakeRegex.exec(transcript);
 
         if (match) {
+          this.lastWakeTimestamp = now;
           const afterWake = transcript
             .slice(match.index + match[0].length)
             .replace(/^[,.\s]+/, "")
             .trim();
 
-          // Temporarily pause wake detection to handle command
+          // Immediately pause wake detection so speaker playback isn't heard by microphone
           this.pause();
 
           if (this.onWakeCallback) {
@@ -394,12 +487,13 @@ export class JarvisWakeWordDetector {
         return;
       }
 
-      // Don't kill background listener on typical timeouts
-      if (
-        event.error === "no-speech" ||
-        event.error === "network" ||
-        event.error === "aborted"
-      ) {
+      // Do NOT restart if intentionally paused or aborted
+      if (this.isPaused || event.error === "aborted") {
+        return;
+      }
+
+      // Don't kill background listener on typical silence timeouts
+      if (event.error === "no-speech" || event.error === "network") {
         this.scheduleRestart();
       }
     };
@@ -412,6 +506,7 @@ export class JarvisWakeWordDetector {
   }
 
   private scheduleRestart() {
+    if (this.isPaused || !this.isRunning) return;
     if (this.restartTimeout) clearTimeout(this.restartTimeout);
     this.restartTimeout = setTimeout(() => {
       if (this.isRunning && !this.isPaused) {

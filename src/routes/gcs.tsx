@@ -81,7 +81,15 @@ function GcsPage() {
     return () => stopGroundLink();
   }, []);
 
-  const [tab, setTab] = useState<NavKey>("LIVE TWIN");
+  const [tab, setTab] = useState<NavKey>(() => {
+    const jarvisTab = useJarvisStore.getState().activeGcsTab as NavKey;
+    const validKeys: NavKey[] = [
+      "FLEET", "LIVE TWIN", "DIAGNOSTICS", "MISSION REPLAY",
+      "SORTIE REPLAY", "REGION LOG", "SIMULATION LAB", "SENSOR MATRIX",
+      "MAINTENANCE", "REPORTS"
+    ];
+    return validKeys.includes(jarvisTab) ? jarvisTab : "LIVE TWIN";
+  });
   const [exploded, setExploded] = useState(false);
   const [showLabels, setShowLabels] = useState(true);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
@@ -94,6 +102,17 @@ function GcsPage() {
     useJarvisStore.getState().setIsExploded(exploded);
     useJarvisStore.getState().setIsStudioOpen(isStudioOpen);
   }, [tab, selectedZone, exploded, isStudioOpen]);
+
+  // Subscribe to JARVIS copilot tab updates
+  useEffect(() => {
+    const unsubscribe = useJarvisStore.subscribe((state) => {
+      const target = state.activeGcsTab as NavKey;
+      if (target && target !== tab) {
+        setTab(target);
+      }
+    });
+    return () => unsubscribe();
+  }, [tab]);
 
   useEffect(() => {
     useJarvisStore.getState().registerHandlers({

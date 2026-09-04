@@ -1,7 +1,9 @@
 /**
  * JARVIS Reasoning & Action Engine.
- * Powered by Google Gemini with multi-model fallback and local reasoning resilience.
- * Performs multi-system causal reasoning, screen understanding, and dynamic action dispatching.
+ * Dual-core architecture:
+ * 1. Immediate local pre-navigation & flight command dispatcher for instantaneous (0ms) execution.
+ * 2. Primary Google Gemini (gemini-3.1-flash-lite) LLM for rich, natural, conversational chatbot intelligence.
+ * 3. Guided mission demo, RTB, CAN telemetry faults, and graceful local fallback.
  */
 
 import { JARVIS_CONFIG } from "./jarvisConfig";
@@ -23,154 +25,435 @@ export interface JarvisExecutionResult {
   actionsExecuted: string[];
 }
 
-const FALLBACK_MODELS = [
-  "gemini-3.1-flash-lite",
-];
+export function normalizeGcsTab(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const s = raw.toLowerCase().replace(/[_-]/g, " ").trim();
 
-export async function executeJarvisQuery(
-  query: string,
-  history: JarvisMessage[]
-): Promise<JarvisExecutionResult> {
-  const snapshot = captureSystemSnapshot();
+  // Sensor Matrix
+  if (s.includes("sensor") || s.includes("matrix") || s.includes("gauge") || s.includes("transducer")) {
+    return "SENSOR MATRIX";
+  }
+  // Fleet
+  if (s.includes("fleet") || s.includes("uav") || s.includes("aircraft") || s.includes("drone") || s.includes("planes")) {
+    return "FLEET";
+  }
+  // Live Twin
+  if (s.includes("live twin") || (s.includes("live") && s.includes("engine")) || (s.includes("3d") && s.includes("engine")) || s === "twin" || s === "live") {
+    return "LIVE TWIN";
+  }
+  // Diagnostics
+  if (s.includes("diagnostic") || s.includes("residual") || s.includes("health panel") || s.includes("anomaly")) {
+    return "DIAGNOSTICS";
+  }
+  // Mission Replay
+  if (s.includes("mission") || s.includes("blackbox") || s.includes("playback") || (s.includes("flight") && s.includes("record"))) {
+    return "MISSION REPLAY";
+  }
+  // Sortie Replay
+  if (s.includes("sortie") || s.includes("flight log") || s.includes("logs")) {
+    return "SORTIE REPLAY";
+  }
+  // Region Log
+  if (s.includes("region") || s.includes("geo") || s.includes("excursion") || s.includes("biome") || s.includes("terrain")) {
+    return "REGION LOG";
+  }
+  // Simulation Lab
+  if (
+    (s.includes("sim") && (s.includes("lab") || s.includes("what") || s.includes("scenario") || s.includes("experiment") || s.includes("test") || s.includes("inject"))) ||
+    s === "simulation" ||
+    s === "simulation lab" ||
+    s === "sim lab" ||
+    s === "scenarios"
+  ) {
+    return "SIMULATION LAB";
+  }
+  // Maintenance
+  if (s.includes("maint") || s.includes("repair") || s.includes("service") || s.includes("advisory") || s.includes("work order") || s.includes("depot") || s.includes("overhaul")) {
+    return "MAINTENANCE";
+  }
+  // Reports
+  if (s.includes("report") || s.includes("post flight") || s.includes("debrief") || s.includes("analytics") || s.includes("summary")) {
+    return "REPORTS";
+  }
 
-  // Format past turns for conversational context
-  const recentTurns = history.slice(-6).map((m) => ({
-    role: m.role === "user" ? "user" : "model",
-    parts: [
-      {
-        text:
-          m.role === "user"
-            ? m.content
-            : JSON.stringify({ spokenText: m.spokenText, displayText: m.content }),
-      },
-    ],
-  }));
+  return null;
+}
 
-  const currentContextPrompt = `
-CURRENT LIVE SYSTEM SNAPSHOT:
-\`\`\`json
-${JSON.stringify(snapshot, null, 2)}
-\`\`\`
+export interface DetectedNavigation {
+  actions: any[];
+  spokenText: string;
+  displayText: string;
+  intent: "NAVIGATION" | "UI_ACTION";
+}
 
-USER INQUIRY / COMMAND:
-"${query}"
+/**
+ * Instant local parser for navigation and UI commands.
+ * Identifies explicit commands and runs them in 0ms.
+ */
+export function detectNavigationFromQuery(query: string): DetectedNavigation | null {
+  const q = query.toLowerCase().trim();
 
-Inspect the CURRENT state, correlate cross-system telemetry, ML anomaly scores, environmental conditions, and screen status.
-Emit your JSON response matching the required format.
-`.trim();
+  // Strip conversational openers
+  const cleanQ = q
+    .replace(/^(can you please|could you please|please|jarvis|hey jarvis|ok jarvis|okay jarvis|can you|could you|i want to|let's|lets|show me how to|take me to the|take me to|navigate to the|navigate to|go to the|go to|open the|open up the|open up|open|switch to the|switch to|show the|show)\s+/gi, "")
+    .trim();
 
-  const payload = {
-    contents: [
-      ...recentTurns,
-      {
-        role: "user",
-        parts: [{ text: currentContextPrompt }],
-      },
-    ],
-    systemInstruction: {
-      parts: [{ text: JARVIS_SYSTEM_PROMPT }],
-    },
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.25,
-    },
-  };
+  // 1. Home / Landing Page / Homepage
+  if (
+    q.includes("homepage") ||
+    cleanQ === "homepage" ||
+    cleanQ === "home" ||
+    cleanQ === "landing" ||
+    cleanQ === "landing page" ||
+    cleanQ === "main page" ||
+    cleanQ === "front page" ||
+    cleanQ === "top" ||
+    q.includes("go to home") ||
+    q.includes("take me home") ||
+    q.includes("back to home") ||
+    q.includes("go home") ||
+    q.includes("scroll to top")
+  ) {
+    return {
+      intent: "NAVIGATION",
+      spokenText: "Navigating to the Home overview.",
+      displayText: "Navigating to **Home** (`/`) and scrolling to top hero stage.",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "top" },
+      ],
+    };
+  }
 
-  let rawText: string | null = null;
-  let lastError: any = null;
+  // 2. Exploded View / Component Inspection / Explore Parts
+  if (
+    q.includes("explore the parts") ||
+    q.includes("explore parts") ||
+    q.includes("inspect the parts") ||
+    q.includes("inspect parts") ||
+    q.includes("inspection page") ||
+    q.includes("inspection section") ||
+    cleanQ === "inspection" ||
+    cleanQ === "parts" ||
+    q.includes("explode engine") ||
+    q.includes("explode the engine") ||
+    q.includes("exploded view") ||
+    (q.includes("dismantle") && !q.includes("close"))
+  ) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "Navigating to 3D Component Inspection and expanding engine layers.",
+      displayText: "Navigating to **Digital Twin Inspection** (`#inspection`) and activating exploded view.",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "inspection" },
+        { type: "SET_EXPLODED", exploded: true },
+      ],
+    };
+  }
 
-  // Try candidate models with resilience
-  for (const model of FALLBACK_MODELS) {
-    try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": JARVIS_CONFIG.apiKey,
-        },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(2000),
-      });
+  // 3. Assemble Engine
+  if (q.includes("assemble") || q.includes("put together") || q.includes("reset engine")) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "Reassembling 3D engine model to flight configuration.",
+      displayText: "Assembling Rotax 914 back into nominal flight enclosure.",
+      actions: [
+        { type: "SET_EXPLODED", exploded: false },
+        { type: "OPEN_STUDIO", open: false },
+      ],
+    };
+  }
 
-      if (response.ok) {
-        const data = await response.json();
-        rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (rawText) break;
-      } else {
-        const errText = await response.text();
-        lastError = new Error(`${model} HTTP ${response.status}: ${errText}`);
-        // If 503 or 429, continue to next fallback model
-        if (response.status === 503 || response.status === 429 || response.status === 404) {
-          continue;
-        }
-      }
-    } catch (e) {
-      lastError = e;
+  // 4. Guided Mission Demo Commands
+  if (q.includes("demo") && (q.includes("start") || q.includes("launch") || q.includes("run") || q.includes("begin"))) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "Initiating the guided mission demo. Launching the Himalaya region transect now.",
+      displayText: "**GUIDED DEMO LAUNCH** — running the full value chain: launch → transect → turbo fault → GCS alert → MAYDAY → RTB → mission report.",
+      actions: [{ type: "START_DEMO" }],
+    };
+  }
+
+  if (q.includes("demo") && (q.includes("stop") || q.includes("abort") || q.includes("cancel") || q.includes("halt"))) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "Guided demo stopped.",
+      displayText: "**GUIDED DEMO STOPPED**.",
+      actions: [{ type: "STOP_DEMO" }],
+    };
+  }
+
+  if (q.includes("return to base") || q.includes(" rtb") || q.startsWith("rtb") || q.includes("come home") || q.includes("head home") || q.includes("fly home")) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "Return to base engaged. Reducing power to 55 percent and routing home.",
+      displayText: "**RTB ENGAGED** — return-to-base navigation active at reduced power. Remaining waypoints will be skipped.",
+      actions: [{ type: "RTB" }],
+    };
+  }
+
+  if (q.includes("dismiss") && (q.includes("report") || q.includes("debrief"))) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "Mission report dismissed.",
+      displayText: "**MISSION REPORT CLOSED**.",
+      actions: [{ type: "CLOSE_DEMO_REPORT" }],
+    };
+  }
+
+  // 5. Fault Injections
+  if (q.includes("misfire")) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "Injecting misfire on cylinder 3. Expect rough running, EGT 3 collapse, and erratic injection timing.",
+      displayText: "**FAULT INJECTED: MISFIRE CYL 3** — combustion loss on C3: EGT3 collapse ~55°C, knock vibration, timing hunting.",
+      actions: [{ type: "INJECT_FAULT", fault: "misfire3" }],
+    };
+  }
+
+  if (q.includes("overheat") || (q.includes("cylinder 2") && (q.includes("hot") || q.includes("heat")))) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "Injecting cylinder 2 overheat. Cooling airflow blocked, CHT 2 will spike past 220 degrees.",
+      displayText: "**FAULT INJECTED: CYLINDER 2 OVERHEAT** — CHT2 rising >220°C, thermal stress climbing.",
+      actions: [{ type: "INJECT_FAULT", fault: "c2Overheat" }],
+    };
+  }
+
+  if (q.includes("wastegate") || (q.includes("turbo") && (q.includes("fail") || q.includes("inject")))) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "Injecting wastegate turbo failure. Manifold pressure will collapse with a power loss.",
+      displayText: "**FAULT INJECTED: WASTEGATE / TURBO FAILURE** — MAP collapse, power loss, turbo spool shortfall.",
+      actions: [{ type: "INJECT_FAULT", fault: "turboFail" }],
+    };
+  }
+
+  if (q.includes("bearing") && (q.includes("fail") || q.includes("inject") || q.includes("spall"))) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "Injecting bearing fatigue spall. Expect a high amplitude 140 hertz vibration peak in the FFT.",
+      displayText: "**FAULT INJECTED: BEARING FATIGUE SPALL** — BPFO 140 Hz peak injected into the vibration spectrum.",
+      actions: [{ type: "INJECT_FAULT", fault: "bearingFail" }],
+    };
+  }
+
+  if (q.includes("clog") || (q.includes("fuel") && q.includes("inject") && q.includes("fail"))) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "Injecting fuel injector clog. Expect EGT imbalance and cylinder knock.",
+      displayText: "**FAULT INJECTED: FUEL INJECTOR CLOG** — EGT runner imbalance >40°C, combustion instability.",
+      actions: [{ type: "INJECT_FAULT", fault: "injectorClog" }],
+    };
+  }
+
+  if (q.includes("clear") && (q.includes("fault") || q.includes("injection"))) {
+    return {
+      intent: "UI_ACTION",
+      spokenText: "All fault injections cleared.",
+      displayText: "**ALL FAULT INJECTIONS CLEARED** — engine returned to nominal baseline.",
+      actions: [{ type: "CLEAR_FAULTS" }],
+    };
+  }
+
+  // 6. Mission Context Section
+  if (
+    q.includes("mission context") ||
+    cleanQ === "mission context" ||
+    (q.includes("tapas") && (q.includes("mission") || q.includes("context") || q.includes("airframe")))
+  ) {
+    return {
+      intent: "NAVIGATION",
+      spokenText: "Navigating to TAPAS BH-201 Mission Context.",
+      displayText: "Navigating to Home and scrolling to **03 / MISSION CONTEXT** (`#mission`).",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "mission" },
+      ],
+    };
+  }
+
+  // 7. Foresight Section
+  if (q.includes("foresight") || cleanQ === "foresight" || q.includes("future tech") || q.includes("roadmap")) {
+    return {
+      intent: "NAVIGATION",
+      spokenText: "Scrolling to Architectural Foresight.",
+      displayText: "Navigating to Home and scrolling to **02 / ARCHITECTURAL FORESIGHT** (`#foresight`).",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "foresight" },
+      ],
+    };
+  }
+
+  // 8. Engine Intelligence Section
+  if (q.includes("engine intelligence") || cleanQ === "engine intelligence" || (q.includes("predictive") && q.includes("landing"))) {
+    return {
+      intent: "NAVIGATION",
+      spokenText: "Scrolling to Engine Intelligence on the landing overview.",
+      displayText: "Navigating to Home and scrolling to **04 / ENGINE INTELLIGENCE** (`#intelligence`).",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "intelligence" },
+      ],
+    };
+  }
+
+  // 9. 3D Flight Simulator (/sim)
+  if (
+    q.includes("flight sim") ||
+    q.includes("flight simulator") ||
+    q.includes("3d simulator") ||
+    q.includes("3d flight") ||
+    q.includes("cockpit") ||
+    cleanQ === "simulator" ||
+    cleanQ === "sim" ||
+    cleanQ === "cockpit" ||
+    q.includes("take control") ||
+    q.includes("fly the plane") ||
+    q === "fly"
+  ) {
+    return {
+      intent: "NAVIGATION",
+      spokenText: "Opening the 3D Flight Simulator cockpit.",
+      displayText: "Navigating to **3D Flight Simulator** (`/sim`).",
+      actions: [{ type: "NAVIGATE", route: "/sim" }],
+    };
+  }
+
+  // 10. Ground Control Station Tabs
+  const tab = normalizeGcsTab(cleanQ) || normalizeGcsTab(q);
+  if (tab) {
+    return {
+      intent: "NAVIGATION",
+      spokenText: `Opening the ${tab.toLowerCase()} panel now.`,
+      displayText: `Navigating to GCS **${tab}** panel.`,
+      actions: [
+        { type: "NAVIGATE", route: "/gcs" },
+        { type: "SET_GCS_TAB", tab },
+      ],
+    };
+  }
+
+  // 11. GCS General Dashboard
+  if (
+    q.includes("gcs") ||
+    q.includes("ground control") ||
+    q.includes("ground station") ||
+    cleanQ === "dashboard" ||
+    q.includes("control station")
+  ) {
+    return {
+      intent: "NAVIGATION",
+      spokenText: "Navigating to the Ground Control Station.",
+      displayText: "Opening **Ground Control Station** (`/gcs`).",
+      actions: [{ type: "NAVIGATE", route: "/gcs" }],
+    };
+  }
+
+  // 12. Auth Routes
+  if (q.includes("login") || q.includes("sign in") || q.includes("auth")) {
+    const isAdmin = q.includes("admin");
+    const route = isAdmin ? "/admin/login" : "/login";
+    return {
+      intent: "NAVIGATION",
+      spokenText: `Opening ${isAdmin ? "Administrator" : "Operator"} login.`,
+      displayText: `Navigating to **${isAdmin ? "Admin Login" : "Operator Login"}** (\`${route}\`).`,
+      actions: [{ type: "NAVIGATE", route }],
+    };
+  }
+
+  return null;
+}
+
+function normalizeAction(act: any): any {
+  if (!act) return null;
+  const rawType = (act.type || act.name || act.action || "").toUpperCase().trim();
+
+  if (
+    rawType === "SET_GCS_TAB" ||
+    rawType === "OPEN_SCREEN" ||
+    rawType === "SWITCH_TAB" ||
+    rawType === "NAVIGATE_TAB" ||
+    rawType === "SELECT_TAB" ||
+    rawType === "OPEN_TAB"
+  ) {
+    const rawTab = act.tab || act.screen || act.parameters?.screen || act.parameters?.tab || act.target;
+    return { type: "SET_GCS_TAB", tab: normalizeGcsTab(rawTab) || rawTab };
+  }
+
+  if (rawType === "NAVIGATE" || rawType === "GO_TO" || rawType === "OPEN_PAGE" || rawType === "ROUTE") {
+    const rawRoute = act.route || act.path || act.parameters?.route || act.parameters?.path;
+    const detectedTab = normalizeGcsTab(rawRoute);
+    if (detectedTab) {
+      return { type: "SET_GCS_TAB", tab: detectedTab };
     }
+    return {
+      type: "NAVIGATE",
+      route: rawRoute || act.route,
+      sectionId: act.sectionId || act.section,
+      tab: act.tab ? normalizeGcsTab(act.tab) : undefined,
+    };
   }
 
-  let parsed: any;
-  if (rawText) {
-    try {
-      parsed = JSON.parse(rawText);
-    } catch {
-      const match = rawText.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          parsed = JSON.parse(match[0]);
-        } catch {
-          parsed = null;
-        }
-      }
-    }
+  if (rawType === "SCROLL_TO" || rawType === "SCROLL") {
+    return {
+      type: "SCROLL_TO",
+      sectionId: act.sectionId || act.section || act.id || act.parameters?.sectionId,
+    };
   }
 
-  // Fallback to local rule-based intelligence if Gemini API was temporarily unreachable
-  if (!parsed) {
-    parsed = generateLocalIntelligenceResponse(query, snapshot, lastError);
-  }
+  return act;
+}
 
-  const spokenText: string = parsed.spokenText || parsed.spoken || "Standing by.";
-  const displayText: string = parsed.displayText || parsed.display || parsed.text || spokenText;
-  const intent = parsed.intent || "ANALYSIS";
-  const actions: any[] = Array.isArray(parsed.actions) ? parsed.actions : [];
-
-  // Execute actions
+/**
+ * Synchronous action execution across GCS, Simulator, 3D Twin, and Guided Demo.
+ */
+export function executeActions(rawActions: any[]): string[] {
   const actionsExecuted: string[] = [];
   const jarvisState = useJarvisStore.getState();
   const flightState = useFlightStore.getState();
 
-  for (const act of actions) {
+  for (const rawAct of rawActions) {
+    const act = normalizeAction(rawAct);
     if (!act || !act.type) continue;
 
     switch (act.type) {
       case "NAVIGATE": {
-        if (act.route) {
-          if (act.route.includes("#") || act.route.startsWith("#")) {
-            const [path, hash] = act.route.split("#");
+        const targetRoute = act.route;
+        if (targetRoute) {
+          if (targetRoute.includes("#") || targetRoute.startsWith("#")) {
+            const [path, hash] = targetRoute.split("#");
             const targetPath = path || "/";
-            if (targetPath && window.location.pathname !== targetPath && jarvisState.navHandler) {
+            if (targetPath && typeof window !== "undefined" && window.location.pathname !== targetPath && jarvisState.navHandler) {
               jarvisState.navHandler(targetPath);
             }
             if (hash) {
               scrollToLandingSection(hash, jarvisState.navHandler);
-              actionsExecuted.push(`Navigated to ${act.route}`);
+              actionsExecuted.push(`Navigated to ${targetRoute}`);
               break;
             }
           }
           if (jarvisState.navHandler) {
-            jarvisState.navHandler(act.route);
-            actionsExecuted.push(`Navigated to ${act.route}`);
+            jarvisState.navHandler(targetRoute);
+            actionsExecuted.push(`Navigated to ${targetRoute}`);
+          } else if (typeof window !== "undefined") {
+            window.location.href = targetRoute;
+            actionsExecuted.push(`Navigated to ${targetRoute}`);
           }
         }
         if (act.sectionId) {
           scrollToLandingSection(act.sectionId, jarvisState.navHandler);
           actionsExecuted.push(`Scrolled to section: ${act.sectionId}`);
         }
-        if (act.tab && jarvisState.gcsTabHandler) {
-          jarvisState.gcsTabHandler(act.tab);
-          actionsExecuted.push(`Switched tab to ${act.tab}`);
+        if (act.tab) {
+          const tabKey = normalizeGcsTab(act.tab);
+          if (tabKey) {
+            jarvisState.setActiveGcsTab(tabKey);
+            if (jarvisState.gcsTabHandler) jarvisState.gcsTabHandler(tabKey);
+            actionsExecuted.push(`Switched tab to ${tabKey}`);
+          }
         }
         break;
       }
@@ -185,10 +468,20 @@ Emit your JSON response matching the required format.
       }
 
       case "SET_GCS_TAB": {
-        if (act.tab) {
-          if (jarvisState.gcsTabHandler) jarvisState.gcsTabHandler(act.tab);
-          jarvisState.setActiveGcsTab(act.tab);
-          actionsExecuted.push(`Opened ${act.tab} tab`);
+        const tabKey = normalizeGcsTab(act.tab || act.screen);
+        if (tabKey) {
+          if (typeof window !== "undefined" && window.location.pathname !== "/gcs") {
+            if (jarvisState.navHandler) {
+              jarvisState.navHandler("/gcs");
+            } else {
+              window.location.href = "/gcs";
+            }
+          }
+          jarvisState.setActiveGcsTab(tabKey);
+          if (jarvisState.gcsTabHandler) {
+            jarvisState.gcsTabHandler(tabKey);
+          }
+          actionsExecuted.push(`Opened ${tabKey} tab`);
         }
         break;
       }
@@ -211,14 +504,6 @@ Emit your JSON response matching the required format.
         break;
       }
 
-      case "TOGGLE_FAULT": {
-        if (act.fault) {
-          flightState.toggleFault(act.fault);
-          actionsExecuted.push(`Toggled fault: ${act.fault}`);
-        }
-        break;
-      }
-
       case "INJECT_FAULT": {
         const key = act.fault as keyof typeof flightState.faults;
         if (key in flightState.faults) {
@@ -228,6 +513,14 @@ Emit your JSON response matching the required format.
             flightState.toggleFault(key);
             actionsExecuted.push(`Injected fault: ${key}`);
           }
+        }
+        break;
+      }
+
+      case "TOGGLE_FAULT": {
+        if (act.fault) {
+          flightState.toggleFault(act.fault);
+          actionsExecuted.push(`Toggled fault: ${act.fault}`);
         }
         break;
       }
@@ -262,7 +555,7 @@ Emit your JSON response matching the required format.
         if (curFaults.turboFail) flightState.toggleFault("turboFail");
         if (curFaults.bearingFail) flightState.toggleFault("bearingFail");
         if (curFaults.injectorClog) flightState.toggleFault("injectorClog");
-        if (curFaults.misfire3) flightState.toggleFault("misfire3");
+        if ((curFaults as any).misfire3) flightState.toggleFault("misfire3" as any);
         actionsExecuted.push("All engine fault injections cleared");
         break;
       }
@@ -305,644 +598,215 @@ Emit your JSON response matching the required format.
         actionsExecuted.push("Exported telemetry CSV");
         break;
       }
-
-      default:
-        console.warn("Unrecognized JARVIS action:", act);
     }
   }
 
+  return actionsExecuted;
+}
+
+/**
+ * Main query execution entry point.
+ * 1. Executes navigation & UI commands immediately in 0ms.
+ * 2. Queries Gemini (gemini-3.1-flash-lite) for natural conversational chatbot intelligence.
+ * 3. Falls back gracefully to rich local intelligence if offline.
+ */
+export async function executeJarvisQuery(
+  query: string,
+  history: JarvisMessage[]
+): Promise<JarvisExecutionResult> {
+  const snapshot = captureSystemSnapshot();
+
+  // 1. FAST-PATH: If this is an explicit navigation/action command, execute it immediately in 0ms
+  const preNav = detectNavigationFromQuery(query);
+  let preActions: string[] = [];
+  if (preNav) {
+    preActions = executeActions(preNav.actions);
+  }
+
+  // 2. QUERY GEMINI (gemini-3.1-flash-lite) FOR NATURAL CONVERSATIONAL INTELLIGENCE
+  const apiKey = JARVIS_CONFIG.apiKey;
+  let parsed: any = null;
+
+  if (apiKey) {
+    try {
+      const recentTurns = history.slice(-6).map((m) => ({
+        role: m.role === "user" ? "user" : "model",
+        parts: [
+          {
+            text:
+              m.role === "user"
+                ? m.content
+                : JSON.stringify({ spokenText: m.spokenText, displayText: m.content }),
+          },
+        ],
+      }));
+
+      const payload = {
+        contents: [
+          ...recentTurns,
+          {
+            role: "user",
+            parts: [
+              {
+                text: `CURRENT FLIGHT SNAPSHOT:\n${JSON.stringify({
+                  route: snapshot.screen.route,
+                  gcsTab: snapshot.screen.gcsTab,
+                  altitude: `${Math.round(snapshot.flight.altitude_ft)} FT`,
+                  airspeed: `${Math.round(snapshot.flight.airspeed_knots)} KT`,
+                  health: `${snapshot.telemetry.healthIndex_pct}%`,
+                  rpm: Math.round(snapshot.telemetry.rpm),
+                  chtMax: `${snapshot.telemetry.chtMax_C}°C`,
+                  oilPress: `${snapshot.telemetry.oilPressure_bar} bar`,
+                  vib: `${snapshot.telemetry.vibrationRMS_G} G`,
+                  faults: Object.keys(snapshot.faults).filter((k) => (snapshot.faults as any)[k]),
+                })}\n\nUSER INQUIRY / COMMAND:\n"${query}"`,
+              },
+            ],
+          },
+        ],
+        systemInstruction: {
+          parts: [{ text: JARVIS_SYSTEM_PROMPT }],
+        },
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.6,
+        },
+      };
+
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(6000),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (rawText) {
+          try {
+            parsed = JSON.parse(rawText);
+          } catch {
+            const match = rawText.match(/\{[\s\S]*\}/);
+            if (match) parsed = JSON.parse(match[0]);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Gemini query exception:", err);
+    }
+  }
+
+  // 3. IF GEMINI SUCCEEDED:
+  if (parsed) {
+    const rawActions = Array.isArray(parsed.actions) ? parsed.actions : [];
+    const postActions = executeActions(rawActions);
+    const combinedActions = Array.from(new Set([...preActions, ...postActions]));
+
+    return {
+      spokenText: parsed.spokenText || preNav?.spokenText || "Standing by, Commander.",
+      displayText: parsed.displayText || preNav?.displayText || "Understood.",
+      intent: parsed.intent || (preNav ? preNav.intent : "QUESTION"),
+      actionsExecuted: combinedActions,
+    };
+  }
+
+  // 4. FALLBACK IF OFFLINE:
+  if (preNav) {
+    return {
+      spokenText: preNav.spokenText,
+      displayText: preNav.displayText,
+      intent: preNav.intent,
+      actionsExecuted: preActions,
+    };
+  }
+
+  const localAnswer = generateLocalIntelligenceResponse(query, snapshot);
   return {
-    spokenText,
-    displayText,
-    intent,
-    actionsExecuted,
+    spokenText: localAnswer.spokenText,
+    displayText: localAnswer.displayText,
+    intent: localAnswer.intent || "QUESTION",
+    actionsExecuted: [],
   };
 }
 
 /**
- * Local deterministic intelligence engine.
- * Generates particular, interactive, technical answers tailored directly to the operator's specific inquiry.
+ * Rich local fallback response when offline.
  */
 function generateLocalIntelligenceResponse(
   query: string,
-  s: SystemSnapshot,
-  _error: any
+  s: SystemSnapshot
 ) {
   const q = query.toLowerCase().trim();
 
-  // 1. ESTIMATED LIFETIME / RUL / OVERHAUL
-  if (
-    q.includes("lifetime") ||
-    q.includes("rul") ||
-    q.includes("life") ||
-    q.includes("how long") ||
-    q.includes("hours") ||
-    q.includes("useful life") ||
-    q.includes("time left") ||
-    q.includes("longevity") ||
-    q.includes("durability") ||
-    q.includes("wear")
-  ) {
-    const rul = s.telemetry.rul_hours || 479;
-    const health = s.telemetry.healthIndex_pct || 65;
-    const healthFloat = (health / 100);
-    const wearSpeed = healthFloat < 0.6 ? "accelerated due to current thermal/vibration stress" : "nominal along baseline Weibull distribution";
-
+  // All pages / navigation directory
+  if (q.includes("page") || q.includes("where can i go") || q.includes("tabs")) {
     return {
-      spokenText: `Based on current flight conditions and ML diagnostics, our Rotax 914 has an estimated Remaining Useful Life of ${rul.toFixed(1)} operating hours. Composite health index is currently at ${health} percent.`,
-      displayText: `### ESTIMATED ENGINE LIFETIME & RUL PROGNOSIS
+      spokenText: "I can navigate to any view across AERIS-TWIN, including all ten Ground Control panels, the 3D Flight Simulator, and the digital twin landing overview. Where would you like to go?",
+      displayText: `### 🧭 AERIS-TWIN NAVIGATION DIRECTORY
 
-- **Estimated Remaining Useful Life (RUL)**: **${rul.toFixed(1)} Operational Hours**
-- **Composite Health Index**: **${health}%** (TBO Rating: 1,200 Total Hours)
-- **Wear Velocity**: Current wear progression is **${wearSpeed}**.
-- **Anomaly Score**: **${s.mlIntelligence.anomalyScore}** (${s.mlIntelligence.overallStatus} STATUS)
+You can command me to navigate to any of the following views:
 
-#### Key Subsystem Wear Indicators:
-- **Cylinder Thermal Fatigue**: Max CHT **${s.telemetry.chtMax_C}°C** (C2: ${s.telemetry.cht_C[1]}°C)
-- **Bearing Mechanical Fatigue**: 140Hz BPFO Vibration **${s.telemetry.vibrationRMS_G} G** (Safe < 1.2 G)
-- **Turbocharger Life Factor**: Manifold boost **${s.telemetry.manifoldAirPressure_kPa} kPa** at altitude **${s.flight.altitude_ft} FT**
+#### 📡 Ground Control Station (\`/gcs\`)
+- **Sensor Matrix**: Live sensor calibration, signal redundancy, and variance bounds.
+- **Fleet**: Fleet tracking, multi-UAV map, and platform readiness status.
+- **Live Twin**: Primary real-time 3D engine model and critical telemetry dials.
+- **Diagnostics**: Predictive maintenance, RUL estimation, and physics anomaly residuals.
+- **Mission Replay**: Historical flight telemetry blackbox playback.
+- **Sortie Replay**: Individual sortie logs and aircraft mission records.
+- **Region Log**: Geographic biome telemetry and environmental excursion logs.
+- **Simulation Lab**: What-if scenario testing and multi-failure injection.
+- **Maintenance**: Maintenance advisories, depot service schedules, and work orders.
+- **Reports**: Post-flight analytics, flight debriefs, and automated reports.
 
-*Recommendation: To preserve remaining useful life, avoid sustained full-throttle climb above 22,000 FT where thermal cooling efficiency degrades.*`,
-      intent: "ANALYSIS",
+#### ✈️ 3D Flight Simulator (\`/sim\`)
+- Interactive cockpit controls, throttle response, altitude climbs, and real-time aerodynamics.
+
+#### 🏛️ Home & Digital Twin Hero (\`/\`)
+- **Live Engine & 3D Explorer** (\`#top\`)
+- **Architectural Foresight** (\`#foresight\`)
+- **TAPAS BH-201 Mission Context** (\`#mission\`)
+- **Engine Intelligence & RUL** (\`#intelligence\`)
+- **Explainable Diagnostics** (\`#diagnostics\`)
+- **Component Inspection Breakdown** (\`#inspection\`)`,
+      intent: "QUESTION" as const,
       actions: [],
     };
   }
 
-  // 2. HEALTH DROP & DEGRADATION REASONING
-  if (q.includes("health") || q.includes("drop") || q.includes("degrad") || q.includes("deteriorat")) {
-    const isC2Hot = s.telemetry.cht_C[1] > 180 || s.faults.c2Overheat;
-    const isBearingBad = s.faults.bearingFail || s.telemetry.vibrationRMS_G > 1.2;
-    const isTurboBad = s.faults.turboFail;
-    const isInjectorBad = s.faults.injectorClog;
-
-    let primaryCause = "Nominal mechanical wear across baseline parameters.";
-    if (isC2Hot) {
-      primaryCause = `Cylinder 2 CHT thermal excursion (${s.telemetry.cht_C[1]}°C) exceeding safe cooling bounds due to nacelle airflow shadowing.`;
-    } else if (isBearingBad) {
-      primaryCause = `Elevated structural vibration (${s.telemetry.vibrationRMS_G} G) indicating 140Hz outer-race bearing fatigue.`;
-    } else if (isTurboBad) {
-      primaryCause = `Turbocharger TCU boost shortfall (${s.telemetry.manifoldAirPressure_kPa} kPa) causing high thermal load and power loss.`;
-    } else if (isInjectorBad) {
-      primaryCause = `Injector spray pattern imbalance across cylinder runners creating combustion asymmetry.`;
-    }
-
+  // Greetings
+  if (q.includes("hello") || q.includes("hi") || q.includes("hey") || q.includes("good morning") || q.includes("who are you")) {
     return {
-      spokenText: `Engine health index is currently at ${s.telemetry.healthIndex_pct} percent. Primary finding is ${primaryCause}`,
-      displayText: `### TELEMETRY HEALTH DEGRADATION ANALYSIS
+      spokenText: "Good day, Commander! All telemetry channels are connected, and I am standing by. How can I assist you today?",
+      displayText: `### J.A.R.V.I.S. ONLINE // TACTICAL COPILOT
 
-- **Composite Health Index**: **${s.telemetry.healthIndex_pct}%** (RUL: **${s.telemetry.rul_hours} Hours**)
-- **Anomaly Score**: **${s.mlIntelligence.anomalyScore}** (${s.mlIntelligence.overallStatus} STATUS)
-- **Primary Cause**: ${primaryCause}
+Hello! I am **J.A.R.V.I.S.** (Joint Aerospace Real-time Virtual Intelligence System), your AI copilot for the AERIS-TWIN platform.
 
-#### Cross-System Correlates:
-- **Cylinder Head Temp (CHT)**: C1: ${s.telemetry.cht_C[0]}°C | **C2: ${s.telemetry.cht_C[1]}°C** | C3: ${s.telemetry.cht_C[2]}°C | C4: ${s.telemetry.cht_C[3]}°C
-- **Vibration RMS**: **${s.telemetry.vibrationRMS_G} G** (Warning threshold: >1.2 G)
-- **Manifold Air Pressure**: **${s.telemetry.manifoldAirPressure_kPa} kPa** (Boost: ${s.telemetry.boost_bar} bar)
-- **Oil System**: ${s.telemetry.oilTemp_C}°C / ${s.telemetry.oilPressure_bar} bar
-- **Recent Delta**: Health Δ ${(s.recentTrends.healthDelta * 100).toFixed(1)}% | CHT Δ ${s.recentTrends.chtMaxDelta > 0 ? "+" : ""}${s.recentTrends.chtMaxDelta}°C`,
-      intent: "ANALYSIS",
+I can assist you with:
+- **Universal Navigation**: Command me to open any tab (e.g. *Sensor Matrix*, *Diagnostics*, *Simulation Lab*, *Fleet*, *Reports*) or fly in the *3D Flight Simulator*.
+- **Live Engine Intelligence**: Ask about composite health, Remaining Useful Life (RUL), cylinder temperatures, or vibration harmonics.
+- **Causal Fault Diagnosis**: Ask *"Why is the health dropping?"* or *"Is the oil pressure nominal?"*
+- **3D Digital Twin Interaction**: Command me to *"Explode the engine"*, *"Inspect the cylinder head"*, or *"Assemble the twin"*.
+- **General & Aerospace Theory**: Feel free to ask general questions about aviation, science, or technology!`,
+      intent: "QUESTION" as const,
       actions: [],
     };
   }
 
-  // 3. OIL SYSTEM & LUBRICATION
-  if (q.includes("oil") || q.includes("lubric") || (q.includes("pressure") && !q.includes("manifold"))) {
-    const press = s.telemetry.oilPressure_bar;
-    const temp = s.telemetry.oilTemp_C;
-    const isPressOk = press >= 3.0 && press <= 6.0;
-    const isTempOk = temp <= 110;
-    const verdict = isPressOk && isTempOk
-      ? "Oil pressure and temperature are fully nominal within safe operating margins."
-      : "Oil telemetry indicates parameters are trending towards warning thresholds.";
-
-    return {
-      spokenText: `Oil pressure is currently ${press.toFixed(2)} bar with oil temperature at ${temp.toFixed(1)} degrees Celsius. ${verdict}`,
-      displayText: `### LUBRICATION & OIL SYSTEM TELEMETRY
-
-- **Oil Pressure**: **${press.toFixed(2)} bar** (Nominal: 3.5 – 5.5 bar | Min: 3.0 bar)
-- **Oil Temperature**: **${temp.toFixed(1)}°C** (Nominal: 80 – 100°C | Max Limit: 110°C)
-- **Viscosity Shear Index**: ${temp > 105 ? "Elevated thermal thinning risk detected" : "Stable hydrodynamic film"}
-- **Recent Delta**: Pressure Δ ${s.recentTrends.oilPressureDelta > 0 ? "+" : ""}${s.recentTrends.oilPressureDelta.toFixed(2)} bar | Temp Δ ${s.recentTrends.oilTempDelta > 0 ? "+" : ""}${s.recentTrends.oilTempDelta.toFixed(1)}°C
-
-*Assessment: ${verdict}*`,
-      intent: "QUESTION",
-      actions: [],
-    };
-  }
-
-  // 4. VIBRATION & BEARING HEALTH
-  if (q.includes("vibrat") || q.includes("bearing") || q.includes("harmonic") || q.includes("shake") || q.includes("smooth")) {
-    const vib = s.telemetry.vibrationRMS_G;
-    const vibStatus = vib > 1.4 ? "CRITICAL" : vib > 1.0 ? "WARNING / ELEVATED" : "NOMINAL";
-
-    return {
-      spokenText: `Vibration RMS is currently reading ${vib.toFixed(2)} G, rated ${vibStatus}. Spectral analysis reveals dominant harmonics at 140 Hz.`,
-      displayText: `### VIBRATION & BEARING SPECTRAL ANALYSIS
-
-- **Vibration RMS**: **${vib.toFixed(2)} G** (Baseline: <0.80 G | Warning: >1.20 G)
-- **Status Classification**: **${vibStatus}**
-- **Dominant Frequency**: **140 Hz** (BPFO — Ball Pass Frequency Outer Race)
-- **Mechanical Integrity**: ${vib > 1.2 ? "Micro-spalling detected on bearing outer race track." : "Dynamic balancing within aerospace flight tolerances."}
-- **20s Drift**: Vibration Δ ${s.recentTrends.vibrationDelta > 0 ? "+" : ""}${s.recentTrends.vibrationDelta.toFixed(2)} G`,
-      intent: "QUESTION",
-      actions: [],
-    };
-  }
-
-  // 5. CYLINDERS & CHT (THERMAL MONITORING)
-  if (
-    q.includes("cht") ||
-    q.includes("cylinder") ||
-    (q.includes("temp") && !q.includes("oil")) ||
-    q.includes("cooling") ||
-    q.includes("heat") ||
-    q.includes("hot")
-  ) {
-    const cht = s.telemetry.cht_C;
-    const maxCht = Math.max(...cht);
-    const hottestIdx = cht.indexOf(maxCht) + 1;
-
-    return {
-      spokenText: `Cylinder head temperatures are peaking at ${maxCht.toFixed(1)} degrees Celsius on Cylinder ${hottestIdx}. Cylinder 2 runs naturally warmer due to nacelle air distribution.`,
-      displayText: `### CYLINDER HEAD TEMPERATURE (CHT) MATRIX
-
-- **Max Cylinder Temp**: **${maxCht.toFixed(1)}°C** (Cylinder ${hottestIdx})
-- **Per-Cylinder Distribution**:
-  * **Cylinder 1**: ${cht[0].toFixed(1)}°C
-  * **Cylinder 2**: **${cht[1].toFixed(1)}°C** ${cht[1] > 175 ? "⚠️ [ELEVATED]" : "✓"}
-  * **Cylinder 3**: ${cht[2].toFixed(1)}°C
-  * **Cylinder 4**: ${cht[3].toFixed(1)}°C
-- **Max Limit**: 180.0°C (Warning at 170°C)
-- **Convective Airflow Status**: ${s.environment.densityRatio < 0.7 ? "Reduced mass flow cooling due to high density altitude" : "Adequate cooling flow"}`,
-      intent: "QUESTION",
-      actions: [],
-    };
-  }
-
-  // 6. EGT, EXHAUST & FUEL INJECTORS
-  if (q.includes("egt") || q.includes("exhaust") || q.includes("inject") || q.includes("spray") || q.includes("combust") || q.includes("mixture") || q.includes("fuel")) {
-    const egt = s.telemetry.egt_C;
-    const status = egt > 720 ? "ELEVATED" : "OPTIMAL";
-
-    return {
-      spokenText: `Exhaust Gas Temperature is measured at ${egt.toFixed(1)} degrees Celsius, currently rated ${status}. Air-fuel mixture distribution across cylinder runners is balanced.`,
-      displayText: `### EXHAUST GAS TEMPERATURE (EGT) & COMBUSTION
-
-- **Current EGT**: **${egt.toFixed(1)}°C** (Nominal: 550 – 700°C | Warning: >720°C)
-- **Combustion State**: **${status}**
-- **Injector Spray Uniformity**: ${s.faults.injectorClog ? "Clogged injector nozzle causing asymmetric lean runner" : "Symmetric spray distribution"}
-- **Recent EGT Drift**: ${s.recentTrends.egtDelta > 0 ? "+" : ""}${s.recentTrends.egtDelta.toFixed(1)}°C`,
-      intent: "QUESTION",
-      actions: [],
-    };
-  }
-
-  // 7. RPM, THROTTLE, TURBOCHARGER & BOOST
-  if (q.includes("rpm") || q.includes("throttle") || q.includes("power") || q.includes("boost") || q.includes("turbo") || q.includes("manifold") || q.includes("speed") || q.includes("fast")) {
-    return {
-      spokenText: `The Rotax 914 engine is turning at ${s.telemetry.rpm.toFixed(0)} RPM at ${s.telemetry.throttle_pct.toFixed(0)} percent throttle, producing ${s.telemetry.manifoldAirPressure_kPa.toFixed(1)} kPa manifold air pressure.`,
-      displayText: `### POWERPLANT & TURBOCHARGER TELEMETRY
-
-- **Engine Speed**: **${s.telemetry.rpm.toFixed(0)} RPM** (Redline: 5,800 RPM)
-- **Throttle Command**: **${s.telemetry.throttle_pct.toFixed(0)}%**
-- **Manifold Absolute Pressure (MAP)**: **${s.telemetry.manifoldAirPressure_kPa.toFixed(1)} kPa**
-- **Turbo Boost Pressure**: **${s.telemetry.boost_bar.toFixed(2)} bar**
-- **Power Output**: Nominal 115 HP rating under Garrett TCU electronic wastegate regulation`,
-      intent: "QUESTION",
-      actions: [],
-    };
-  }
-
-  // 8. ALTITUDE, CLIMB & AERODYNAMIC ENVELOPE
-  if (q.includes("alt") || q.includes("height") || q.includes("climb") || q.includes("ceiling") || q.includes("density") || q.includes("atmosphere") || q.includes("thin air")) {
-    const alt = s.flight.altitude_ft;
-    const density = s.environment.densityRatio;
-
-    return {
-      spokenText: `Current flight altitude is ${alt.toFixed(0)} feet with an air density ratio of ${density.toFixed(2)}. TAPAS BH-201 ceiling envelope is limited above 24,000 feet due to reduced cooling mass flow.`,
-      displayText: `### FLIGHT ALTITUDE & ATMOSPHERIC ENVELOPE
-
-- **Current Altitude**: **${alt.toFixed(0)} FT**
-- **Air Density Ratio (ρ/ρ0)**: **${density.toFixed(2)}** (Air mass density reduced by ${((1 - density) * 100).toFixed(0)}%)
-- **Ambient Temperature**: **${s.environment.ambientTemperature_C.toFixed(1)}°C** (${s.environment.biome.toUpperCase()} Biome)
-- **Cowl Radiator Cooling**: Diminished convective cooling capacity by **${((1 - density) * 45).toFixed(0)}%**.
-- **Turbocharger TCU**: Actively compressing thin air to preserve manifold pressure.`,
-      intent: "ANALYSIS",
-      actions: [],
-    };
-  }
-
-  // 9. ACTIVE SCREEN CONTEXT
-  if (q.includes("looking at") || q.includes("screen") || q.includes("what is this") || q.includes("view")) {
-    return {
-      spokenText: `You are on the Ground Control Station viewing the ${s.screen.gcsTab} panel with live aircraft telemetry linked.`,
-      displayText: `### ACTIVE SCREEN CONTEXT: GCS // ${s.screen.gcsTab}
-
-You are viewing the **AERIS-TWIN Ground Control Station** monitoring the Rotax 914 AE-P4 engine.
-
-- **Active Route**: \`${s.screen.route}\`
-- **Current Tab**: \`${s.screen.gcsTab}\`
-- **Flight Vector**: Altitude **${s.flight.altitude_ft.toFixed(0)} FT**, Speed **${s.flight.airspeed_knots.toFixed(0)} KT**, Throttle **${s.telemetry.throttle_pct.toFixed(0)}%**
-- **3D Engine State**: ${s.screen.isEngineExploded ? "Exploded Inspection View" : "Assembled Flight View"} ${s.screen.inspectedPart ? `(Inspecting ${s.screen.inspectedPart})` : ""}
-- **Mission Readiness**: Composite Health **${s.telemetry.healthIndex_pct}%**`,
-      intent: "QUESTION",
-      actions: [],
-    };
-  }
-
-  // 10. RECENT 20-SECOND TREND AUDIT
-  if (q.includes("what changed") || q.includes("change") || q.includes("trend") || q.includes("recent")) {
-    return {
-      spokenText: `Over the past 20 seconds, CHT changed by ${s.recentTrends.chtMaxDelta.toFixed(1)} degrees, vibration changed by ${s.recentTrends.vibrationDelta.toFixed(2)} G, and composite health shifted by ${(s.recentTrends.healthDelta * 100).toFixed(1)} percent.`,
-      displayText: `### 20-SECOND TELEMETRY DELTA AUDIT
-
-- **Health Index Drift**: **${(s.recentTrends.healthDelta * 100).toFixed(1)}%**
-- **Max CHT Drift**: **${s.recentTrends.chtMaxDelta > 0 ? "+" : ""}${s.recentTrends.chtMaxDelta.toFixed(1)}°C**
-- **EGT Drift**: **${s.recentTrends.egtDelta > 0 ? "+" : ""}${s.recentTrends.egtDelta.toFixed(1)}°C**
-- **Vibration Drift**: **${s.recentTrends.vibrationDelta > 0 ? "+" : ""}${s.recentTrends.vibrationDelta.toFixed(2)} G**
-- **Oil Pressure Drift**: **${s.recentTrends.oilPressureDelta > 0 ? "+" : ""}${s.recentTrends.oilPressureDelta.toFixed(2)} bar**
-- **Oil Temperature Drift**: **${s.recentTrends.oilTempDelta > 0 ? "+" : ""}${s.recentTrends.oilTempDelta.toFixed(1)}°C**`,
-      intent: "ANALYSIS",
-      actions: [],
-    };
-  }
-
-  // 11. RECOMMENDATIONS & "WHAT SHOULD I DO?"
-  if (q.includes("should i") || q.includes("recommend") || q.includes("action") || q.includes("what next") || q.includes("advice") || q.includes("plan")) {
-    const health = s.telemetry.healthIndex_pct;
-    let advice = "All primary parameters remain within normal flight limits. Maintain current cruise power setting.";
-    if (health < 60) {
-      advice = "Health index is below 60%. Recommend reducing throttle to 55%, initiating gentle descent to denser air, and preparing for depot inspection.";
-    } else if (s.telemetry.chtMax_C > 175) {
-      advice = "Cylinder Head Temperature is approaching the 180°C threshold. Recommend increasing airspeed by 10 KT to improve cowl convective airflow or reducing climb angle.";
-    }
-
-    return {
-      spokenText: `${advice}`,
-      displayText: `### TACTICAL FLIGHT RECOMMENDATIONS
-
-- **Current Health State**: **${health}%** (RUL: **${s.telemetry.rul_hours} Hours**)
-- **Operational Advice**: ${advice}
-- **Throttle Optimization**: Set throttle to 60-65% for maximum fuel economy and lowest thermal wear.
-- **Flight Profile**: Monitor CHT on Cylinder 2 if maintaining cruise above 15,000 FT.`,
-      intent: "ANALYSIS",
-      actions: [],
-    };
-  }
-
-  // 12. FLIGHT COMMANDS — guided demo, RTB, fault injection (offline)
-  if (q.includes("demo") && (q.includes("start") || q.includes("launch") || q.includes("run") || q.includes("begin"))) {
-    return {
-      spokenText: "Initiating the guided mission demo. Launching the Himalaya region transect now.",
-      displayText: "**GUIDED DEMO LAUNCH** — running the full value chain: launch → transect → turbo fault → GCS alert → MAYDAY → RTB → mission report.",
-      intent: "UI_ACTION",
-      actions: [{ type: "START_DEMO" }],
-    };
-  }
-
-  if (q.includes("demo") && (q.includes("stop") || q.includes("abort") || q.includes("cancel") || q.includes("halt"))) {
-    return {
-      spokenText: "Guided demo stopped.",
-      displayText: "**GUIDED DEMO STOPPED**.",
-      intent: "UI_ACTION",
-      actions: [{ type: "STOP_DEMO" }],
-    };
-  }
-
-  if (q.includes("return to base") || q.includes(" rtb") || q.startsWith("rtb") || q.includes("come home") || q.includes("head home") || q.includes("go home") || q.includes("fly home")) {
-    return {
-      spokenText: "Return to base engaged. Reducing power to 55 percent and routing home.",
-      displayText: "**RTB ENGAGED** — return-to-base navigation active at reduced power. Remaining waypoints will be skipped.",
-      intent: "UI_ACTION",
-      actions: [{ type: "RTB" }],
-    };
-  }
-
-  if (q.includes("dismiss") && (q.includes("report") || q.includes("debrief"))) {
-    return {
-      spokenText: "Mission report dismissed.",
-      displayText: "**MISSION REPORT CLOSED**.",
-      intent: "UI_ACTION",
-      actions: [{ type: "CLOSE_DEMO_REPORT" }],
-    };
-  }
-
-  if (q.includes("misfire")) {
-    return {
-      spokenText: "Injecting misfire on cylinder 3. Expect rough running, EGT 3 collapse, and erratic injection timing.",
-      displayText: "**FAULT INJECTED: MISFIRE CYL 3** — combustion loss on C3: EGT3 collapse ~55°C, knock vibration, timing hunting.",
-      intent: "UI_ACTION",
-      actions: [{ type: "INJECT_FAULT", fault: "misfire3" }],
-    };
-  }
-
-  if (q.includes("overheat") || (q.includes("cylinder 2") && (q.includes("hot") || q.includes("heat")))) {
-    return {
-      spokenText: "Injecting cylinder 2 overheat. Cooling airflow blocked, CHT 2 will spike past 220 degrees.",
-      displayText: "**FAULT INJECTED: CYLINDER 2 OVERHEAT** — CHT2 rising >220°C, thermal stress climbing.",
-      intent: "UI_ACTION",
-      actions: [{ type: "INJECT_FAULT", fault: "c2Overheat" }],
-    };
-  }
-
-  if (q.includes("wastegate") || (q.includes("turbo") && (q.includes("fail") || q.includes("inject")))) {
-    return {
-      spokenText: "Injecting wastegate turbo failure. Manifold pressure will collapse with a power loss.",
-      displayText: "**FAULT INJECTED: WASTEGATE / TURBO FAILURE** — MAP collapse, power loss, turbo spool shortfall.",
-      intent: "UI_ACTION",
-      actions: [{ type: "INJECT_FAULT", fault: "turboFail" }],
-    };
-  }
-
-  if (q.includes("bearing")) {
-    return {
-      spokenText: "Injecting bearing fatigue spall. Expect a high amplitude 140 hertz vibration peak in the FFT.",
-      displayText: "**FAULT INJECTED: BEARING FATIGUE SPALL** — BPFO 140 Hz peak injected into the vibration spectrum.",
-      intent: "UI_ACTION",
-      actions: [{ type: "INJECT_FAULT", fault: "bearingFail" }],
-    };
-  }
-
-  if (q.includes("injector") || q.includes("clog") || (q.includes("fuel") && q.includes("inject"))) {
-    return {
-      spokenText: "Injecting fuel injector clog. Expect EGT imbalance and cylinder knock.",
-      displayText: "**FAULT INJECTED: FUEL INJECTOR CLOG** — EGT runner imbalance >40°C, combustion instability.",
-      intent: "UI_ACTION",
-      actions: [{ type: "INJECT_FAULT", fault: "injectorClog" }],
-    };
-  }
-
-  if (q.includes("clear") && (q.includes("fault") || q.includes("injection"))) {
-    return {
-      spokenText: "All fault injections cleared.",
-      displayText: "**ALL FAULT INJECTIONS CLEARED** — engine returned to nominal baseline.",
-      intent: "UI_ACTION",
-      actions: [{ type: "CLEAR_FAULTS" }],
-    };
-  }
-
-  // 5. Navigation commands
-  // 13. FAULTS, ALARMS & DIAGNOSTICS
-  if (q.includes("fault") || q.includes("alarm") || q.includes("warn") || q.includes("fail") || q.includes("error") || q.includes("broken") || q.includes("issue") || q.includes("wrong") || q.includes("problem")) {
-    const activeFaults: string[] = [];
-    if (s.faults.c2Overheat) activeFaults.push("CYLINDER 2 OVERHEAT (CHT > 180°C)");
-    if (s.faults.bearingFail) activeFaults.push("MAIN CRANK BEARING FAULT (140Hz BPFO)");
-    if (s.faults.turboFail) activeFaults.push("TURBOCHARGER TCU BOOST FAULT");
-    if (s.faults.injectorClog) activeFaults.push("INJECTOR SPRAY IMBALANCE");
-
-    const faultStr = activeFaults.length > 0 ? activeFaults.join(", ") : "No active critical hardware faults detected in telemetry stream.";
-
-    return {
-      spokenText: `${faultStr}`,
-      displayText: `### FAULT & ANOMALY DIAGNOSTIC SUMMARY
-
-- **Active Fault Conditions**: ${activeFaults.length > 0 ? activeFaults.map(f => `\n  * ⚠️ **${f}**`).join("") : "**None (All telemetry nominal)**"}
-- **ML Anomaly Score**: **${s.mlIntelligence.anomalyScore}** (${s.mlIntelligence.overallStatus} STATUS)
-- **Physics Residuals**: Normal deviation bounds across pressure and temperature sensors.`,
-      intent: "ANALYSIS",
-      actions: [],
-    };
-  }
-
-  // 13. EXPLORER BUTTON & 3D MODEL CONTROLS
-  if (
-    q.includes("explorer") ||
-    q.includes("explore button") ||
-    q.includes("explode button") ||
-    q.includes("on the explorer") ||
-    q.includes("open explorer") ||
-    q.includes("turn on explorer") ||
-    q.includes("explode") ||
-    q.includes("dismantle")
-  ) {
-    const isStudio = q.includes("studio") || q.includes("twin") || q.includes("dismantle");
-
-    return {
-      spokenText: "Scrolling to 3D engine stage and activating the exploded view.",
-      displayText: `### 3D ENGINE EXPLORER ACTIVATED
-
-- **Target Assembly**: Rotax 914 AE-P4 Powerplant
-- **View Mode**: **Exploded Subsystem Inspection**
-- **Action**: Auto-scrolled to Hero Engine Canvas and expanded 3D component layers.
-- **Controls**: Orbit 360°, inspect individual hot-spots, or say *"Assemble the engine"* to restore flight configuration.`,
-      intent: "UI_ACTION",
-      actions: [
-        { type: "NAVIGATE", route: "/" },
-        { type: "SCROLL_TO", sectionId: "top" },
-        { type: "SET_EXPLODED", exploded: true },
-        ...(isStudio ? [{ type: "OPEN_STUDIO", open: true }] : []),
-      ],
-    };
-  }
-
-  if (q.includes("assemble") || q.includes("put together") || q.includes("close explode")) {
-    return {
-      spokenText: "Reassembling 3D engine model to flight configuration.",
-      displayText: "Assembling Rotax 914 3D twin back into nominal flight enclosure.",
-      intent: "UI_ACTION",
-      actions: [
-        { type: "NAVIGATE", route: "/" },
-        { type: "SCROLL_TO", sectionId: "top" },
-        { type: "SET_EXPLODED", exploded: false },
-        { type: "OPEN_STUDIO", open: false },
-      ],
-    };
-  }
-
-  // 14. DOCK TAB NAVIGATION COMMANDS (HOME, LIVE ENGINE, PREDICTIVE, MISSION, INSPECTION)
-  if (
-    q === "home" ||
-    q.includes("go to home") ||
-    q.includes("open home") ||
-    q.includes("take me home") ||
-    q.includes("back to home") ||
-    q.includes("landing") ||
-    q.includes("home tab") ||
-    q.includes("scroll to top") ||
-    q.includes("scroll up")
-  ) {
-    return {
-      spokenText: "Navigating to Home and scrolling directly to the engine overview.",
-      displayText: "Navigating to **HOME** (`/`) and auto-scrolling to Hero section.",
-      intent: "NAVIGATION",
-      actions: [
-        { type: "NAVIGATE", route: "/" },
-        { type: "SCROLL_TO", sectionId: "top" },
-      ],
-    };
-  }
-
-  if (
-    q.includes("live engine") ||
-    q.includes("engine tab") ||
-    q.includes("3d engine") ||
-    (q.includes("engine") && (q.includes("show") || q.includes("open") || q.includes("go to")))
-  ) {
-    return {
-      spokenText: "Scrolling directly to the 3D Live Engine Digital Twin.",
-      displayText: "Focusing on **LIVE ENGINE** digital twin stage on Home page.",
-      intent: "NAVIGATION",
-      actions: [
-        { type: "NAVIGATE", route: "/" },
-        { type: "SCROLL_TO", sectionId: "top" },
-      ],
-    };
-  }
-
-  if (
-    q.includes("predictive") ||
-    q.includes("intelligence") ||
-    q.includes("predictive tab") ||
-    q.includes("rul tab") ||
-    q.includes("predictive section")
-  ) {
-    const isGcs = typeof window !== "undefined" && window.location.pathname === "/gcs";
-    if (isGcs && !q.includes("home") && !q.includes("page")) {
-      return {
-        spokenText: "Switching to Predictive Diagnostics panel and Remaining Useful Life analysis.",
-        displayText: "Navigating to GCS **DIAGNOSTICS** tab.",
-        intent: "NAVIGATION",
-        actions: [{ type: "SET_GCS_TAB", tab: "DIAGNOSTICS" }],
-      };
-    }
-
-    return {
-      spokenText: "Navigating to Home and scrolling directly to Predictive Engine Intelligence.",
-      displayText: "Navigating to Home and auto-scrolling to **04 / ENGINE INTELLIGENCE** (`#intelligence`).",
-      intent: "NAVIGATION",
-      actions: [
-        { type: "NAVIGATE", route: "/" },
-        { type: "SCROLL_TO", sectionId: "intelligence" },
-      ],
-    };
-  }
-
-  if (
-    q.includes("mission") ||
-    q.includes("tapas") ||
-    q.includes("platform") ||
-    q.includes("airframe") ||
-    q.includes("mission tab") ||
-    q.includes("mission context")
-  ) {
-    const isGcsReplay = q.includes("replay") || q.includes("sortie");
-    if (isGcsReplay) {
-      return {
-        spokenText: "Opening Mission Replay console in Ground Control Station.",
-        displayText: "Navigating to **MISSION REPLAY** console.",
-        intent: "NAVIGATION",
-        actions: [
-          { type: "NAVIGATE", route: "/gcs" },
-          { type: "SET_GCS_TAB", tab: "MISSION REPLAY" },
-        ],
-      };
-    }
-
-    return {
-      spokenText: "Navigating to Home and scrolling directly to the TAPAS BH-201 Mission Context.",
-      displayText: "Navigating to Home and auto-scrolling to **03 / MISSION CONTEXT** (`#mission`).",
-      intent: "NAVIGATION",
-      actions: [
-        { type: "NAVIGATE", route: "/" },
-        { type: "SCROLL_TO", sectionId: "mission" },
-      ],
-    };
-  }
-
-  if (
-    q.includes("inspection") ||
-    q.includes("inspect tab") ||
-    q.includes("component inspection") ||
-    q.includes("inspect section")
-  ) {
-    return {
-      spokenText: "Navigating to Home and scrolling directly to Digital Twin Component Inspection.",
-      displayText: "Navigating to Home and auto-scrolling to **05 / DIGITAL TWIN INSPECTION** (`#inspection`).",
-      intent: "NAVIGATION",
-      actions: [
-        { type: "NAVIGATE", route: "/" },
-        { type: "SCROLL_TO", sectionId: "inspection" },
-      ],
-    };
-  }
-
-  if (q.includes("diagnostics") || q.includes("residuals")) {
-    return {
-      spokenText: "Scrolling directly to Explainable Diagnostics and physics residuals.",
-      displayText: "Navigating to **AI / EXPLAINABLE DIAGNOSTICS** (`#diagnostics`).",
-      intent: "NAVIGATION",
-      actions: [
-        { type: "NAVIGATE", route: "/" },
-        { type: "SCROLL_TO", sectionId: "diagnostics" },
-      ],
-    };
-  }
-
-  if (q.includes("sim") || q.includes("simulator") || q.includes("fly") || q.includes("flight sim")) {
-    return {
-      spokenText: "Opening 3D Flight Simulator console.",
-      displayText: "Navigating to **3D Flight Simulator** console (`/sim`).",
-      intent: "NAVIGATION",
-      actions: [{ type: "NAVIGATE", route: "/sim" }],
-    };
-  }
-
-  if (q.includes("gcs") || q.includes("ground control") || q.includes("station")) {
-    return {
-      spokenText: "Opening Ground Control Station interface.",
-      displayText: "Navigating to **Ground Control Station** (`/gcs`).",
-      intent: "NAVIGATION",
-      actions: [{ type: "NAVIGATE", route: "/gcs" }],
-    };
-  }
-
-  if (q.includes("cylinder head")) {
-    return {
-      spokenText: "Isolating and inspecting Cylinder Head assembly.",
-      displayText: "Highlighting **CYLINDER HEAD ASSEMBLY**.",
-      intent: "UI_ACTION",
-      actions: [
-        { type: "NAVIGATE", route: "/" },
-        { type: "SCROLL_TO", sectionId: "top" },
-        { type: "INSPECT_PART", partName: "CYLINDER HEAD" },
-      ],
-    };
-  }
-
-  // 15. GREETINGS & INTRODUCTIONS
-  if (q.includes("hello") || q.includes("hi") || q.includes("who are you") || (q.includes("jarvis") && q.split(" ").length <= 2) || q.includes("thanks") || q.includes("thank you")) {
-    return {
-      spokenText: "Online and standing by, Commander. What aspect of the engine or telemetry would you like to inspect?",
-      displayText: `### J.A.R.V.I.S. TACTICAL COPILOT ONLINE
-
-I am connected directly to the **Rotax 914 AE-P4 digital twin** with real-time 20Hz telemetry correlation.
-
-You can ask me:
-- *"What is the estimated lifetime of our engine?"*
-- *"Why is the engine health dropping?"*
-- *"Is the oil pressure okay?"*
-- *"What is the current vibration?"*
-- *"What am I looking at right now?"*
-- *"Take me to predictive diagnostics."*
-- *"Explode the 3D engine model."*`,
-      intent: "QUESTION",
-      actions: [],
-    };
-  }
-
-  // 14. DYNAMIC INTERACTIVE CONVERSATIONAL FALLBACK (NEVER A CANNED STATIC REPORT!)
+  // General fallback
   return {
-    spokenText: `Engine speed is currently ${s.telemetry.rpm.toFixed(0)} RPM with health at ${s.telemetry.healthIndex_pct} percent and ${s.telemetry.rul_hours.toFixed(0)} hours remaining useful life. What specific system would you like me to inspect?`,
-    displayText: `### ROTAX 914 TELEMETRY SYNTHESIS // "${query}"
+    spokenText: `All systems are nominal with engine health at ${s.telemetry.healthIndex_pct} percent, Commander. How can I assist you with the aircraft or general flight operations?`,
+    displayText: `### J.A.R.V.I.S. COPILOT ONLINE
 
-Regarding your inquiry:
-- **Composite Health Index**: **${s.telemetry.healthIndex_pct}%** | **RUL**: **${s.telemetry.rul_hours} Hours**
-- **Operating Envelope**: Altitude **${s.flight.altitude_ft.toFixed(0)} FT** at **${s.telemetry.rpm.toFixed(0)} RPM** (Throttle: **${s.telemetry.throttle_pct}%**)
-- **Thermal Status**: Max CHT **${s.telemetry.chtMax_C}°C** | EGT **${s.telemetry.egt_C}°C**
-- **Mechanical Dynamics**: Vibration **${s.telemetry.vibrationRMS_G} G** | Oil: **${s.telemetry.oilPressure_bar} bar** / **${s.telemetry.oilTemp_C}°C**
+I am standing by and monitoring the Rotax 914 AE-P4 digital twin.
 
-*You can ask me specific questions regarding lifetime, oil pressure, cylinder temperatures, vibration, flight altitude, or command me to navigate across tabs.*`,
-    intent: "QUESTION",
+- **Current Engine Health**: **${s.telemetry.healthIndex_pct}%**
+- **Altitude / Speed**: **${Math.round(s.flight.altitude_ft)} FT** | **${Math.round(s.flight.airspeed_knots)} KT**
+- **Active Tab**: \`${s.screen.gcsTab}\` on \`${s.screen.route}\`
+
+You can command me to navigate to any panel (*"open Sensor matrix"*, *"go to fleet"*, *"open flight simulator"*, *"go to homepage"*, *"explore the parts"*), or ask any question about the engine, flight physics, or general topics!`,
+    intent: "QUESTION" as const,
     actions: [],
   };
 }
