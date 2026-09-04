@@ -15,6 +15,13 @@ import type { FlightState } from "./flightStore";
 import { MISSIONS, useFlightStore } from "./flightStore";
 import type { SortieEndReason, SortieRecord, SortieSample } from "@/lib/datalink/sortie";
 
+/** Fault bit order — matches the CAN fault bitmap and FAULT_KEYS (protocol). */
+const FAULT_NAMES = ["c2Overheat", "turboFail", "bearingFail", "injectorClog", "misfire3"] as const;
+
+function faultBitmaskOf(s: FlightState): number {
+  return FAULT_NAMES.reduce((acc, key, i) => acc + (s.faultSmooth[key] > 0.3 ? 1 << i : 0), 0);
+}
+
 const SAMPLE_INTERVAL = 1.0; // seconds of mission clock between samples
 const MAX_SAMPLES = 900;
 
@@ -51,6 +58,13 @@ function sampleOf(s: FlightState, t: number): SortieSample {
     egt: s.egt,
     map: s.map,
     thr: s.throttle,
+    cht: [s.cht[0] ?? 0, s.cht[1] ?? 0, s.cht[2] ?? 0, s.cht[3] ?? 0],
+    oilT: s.oilTemp,
+    oilP: s.oilPressure,
+    vib: s.vibrationRMS,
+    health: s.healthIndex * 100,
+    flt: faultBitmaskOf(s),
+    inside: [...(s.regionsInside ?? [])],
   };
 }
 
@@ -70,6 +84,16 @@ function finalizeAndQueue(): void {
   const st = useFlightStore.getState();
   rec.endReason = finalizeReason(st);
   rec.duration = st.missionElapsed;
+  rec.rulEndH = st.rul;
+  // Latch every fault that was active at any sampled instant.
+  const seen = new Set<string>(rec.faultsSeen ?? []);
+  for (const sample of rec.samples) {
+    const mask = sample.flt ?? 0;
+    FAULT_NAMES.forEach((name, i) => {
+      if (mask & (1 << i)) seen.add(name);
+    });
+  }
+  rec.faultsSeen = [...seen];
   // Always keep a final sample so the replay ends exactly where the UAV is.
   const last = rec.samples[rec.samples.length - 1];
   if (!last || st.missionElapsed - last.t > 0.25) {
@@ -96,6 +120,8 @@ function observe(prev: FlightState, next: FlightState): void {
         waypoints: next.waypoints.map((w) => ({ ...w })),
         captures: [],
         samples: [],
+        rulStartH: next.rul,
+        faultsSeen: [],
       },
       lastSampleT: next.missionElapsed,
     };

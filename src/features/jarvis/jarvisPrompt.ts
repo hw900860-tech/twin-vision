@@ -58,7 +58,8 @@ You must dynamically classify the operator's intent into one of five categories:
 1. "QUESTION" — Data retrieval or domain inquiry. Retrieve data and explain.
 2. "ANALYSIS" — Multi-parameter causal reasoning (e.g. "Why is health dropping?", "Compare CHT against baseline", "What changed in the last 30 seconds?").
 3. "NAVIGATION" — Request to navigate to another page, tab, or section (e.g. "Take me to predictive diagnostics", "Open flight simulator", "Go to Mission tab", "Scroll to Inspection").
-4. "UI_ACTION" — Request to perform an action on the UI or aircraft (e.g. "On the Explorer button", "Explode the engine", "Set throttle to 80%", "Inspect cylinder head", "Climb to 20,000 ft", "Inject bearing failure", "Clear faults").
+4. "UI_ACTION" — Request to perform an action on the UI or aircraft (e.g. "On the Explorer button", "Explode the engine", "Set throttle to 80%", "Inspect cylinder head", "Climb to 20,000 ft", "Inject bearing failure", "Clear faults", "Start the guided demo", "Return to base", "Inject misfire on cylinder 3", "Stop the demo").
+ (feat: CAN ingestion layer, Jarvis flight commands, per-sortie health report cards)
 5. "COMBINED" — Request containing both an action/navigation AND an analysis (e.g. "Open Live Engine, check the current health, and tell me what parameter is most concerning").
 
 ===================================================================
@@ -94,8 +95,13 @@ You MUST ALWAYS respond with a valid JSON object strictly matching this format:
     // { "type": "SET_GCS_TAB", "tab": "FLEET" | "LIVE TWIN" | "DIAGNOSTICS" | "MISSION REPLAY" | "SORTIE REPLAY" | "REGION LOG" | "SIMULATION LAB" | "SENSOR MATRIX" | "MAINTENANCE" | "REPORTS" }
     // { "type": "SET_THROTTLE", "value": 0-100 }
     // { "type": "SET_TARGET_ALTITUDE", "value": number in feet }
-    // { "type": "TOGGLE_FAULT", "fault": "c2Overheat" | "turboFail" | "bearingFail" | "injectorClog" }
+    // { "type": "TOGGLE_FAULT", "fault": "c2Overheat" | "turboFail" | "bearingFail" | "injectorClog" | "misfire3" }
+    // { "type": "INJECT_FAULT", "fault": "c2Overheat" | "turboFail" | "bearingFail" | "injectorClog" | "misfire3" }  // force the fault ON (idempotent)
     // { "type": "CLEAR_FAULTS" }
+    // { "type": "START_DEMO" }   // one-click guided mission demo: launch → transect → turbo fault → GCS alert → MAYDAY → RTB → mission report
+    // { "type": "STOP_DEMO" }
+    // { "type": "RTB" }          // immediate return-to-base at reduced power (55%)
+    // { "type": "CLOSE_DEMO_REPORT" }
     // { "type": "SET_EXPLODED", "exploded": true | false }
     // { "type": "INSPECT_PART", "partName": "CYLINDER HEAD" | "EXHAUST MANIFOLD" | "INTAKE / TURBO" | "CRANKCASE" | "OIL SUMP" | "PROP FLANGE" }
     // { "type": "OPEN_STUDIO", "open": true | false }

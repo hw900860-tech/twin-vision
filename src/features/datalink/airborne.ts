@@ -31,6 +31,7 @@ import {
 } from "@/lib/datalink/codec";
 import type { WeatherObservation } from "@/lib/domain/engine/environment";
 import { useLinkStore } from "./linkStore";
+import { buildCanTelemetrySnapshot, useCanBusStore } from "@/lib/datalink/can/gateway";
 
 const TX_INTERVAL_MS = 50; // 20 Hz sampling — matches the authoritative sim cadence
 
@@ -55,6 +56,17 @@ const RING_MAX_REPLAY = 900; // max frames burst per GAP_REQ
 const ring: { seq: number; buf: ArrayBuffer }[] = [];
 
 function snapshot(): TelemetrySnapshot {
+  // CAN INGESTION PATH — when the simulated socketCAN layer is enabled, the
+  // telemetry sent to the GCS is built from frames decoded off the CAN bus
+  // (the values the ECU broadcast as scaled integers) rather than the raw
+  // physics model outputs. This is the exact code path a real socketCAN
+  // adapter feeds once the hardware swap point is wired (see can/bus.ts).
+  if (useCanBusStore.getState().enabled) {
+    const canSnap = buildCanTelemetrySnapshot();
+    if (canSnap) return canSnap;
+    // Fall back to the direct path until the first telegram completes.
+  }
+
   const s = useFlightStore.getState();
   const injectorActive = s.faultSmooth.injectorClog > 0.3;
   const egt = s.egt;

@@ -36,6 +36,16 @@ export interface SortieSample {
   egt: number; // °C
   map: number; // kPa
   thr: number; // %
+  // --- health-report fields (optional: older recordings omit them) ---
+  cht?: [number, number, number, number]; // °C per cylinder
+  oilT?: number; // °C
+  oilP?: number; // bar
+  vib?: number; // m/s²
+  health?: number; // 0-100 composite
+  /** Fault bitmask active at this sample: bit0 c2Overheat … bit4 misfire3. */
+  flt?: number;
+  /** Region ids the UAV is inside at this sample (derives ENTER/EXIT events). */
+  inside?: string[];
 }
 
 export type SortieEndReason = "COMPLETE" | "CRASHED" | "FORCED LANDING" | "RECOVERED" | "ABORTED";
@@ -50,6 +60,12 @@ export interface SortieRecord {
   waypoints: SortieWaypoint[];
   captures: SortieCapture[];
   samples: SortieSample[];
+  /** RUL (flight hours) when the mission launched. */
+  rulStartH?: number;
+  /** RUL (flight hours) when the sortie ended. */
+  rulEndH?: number;
+  /** Distinct fault names latched at any point during the sortie. */
+  faultsSeen?: string[];
 }
 
 export function fmtDuration(sec: number): string {

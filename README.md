@@ -642,3 +642,87 @@ channel model (LOS/SATCOM) ──ws──▶  hub: telemetry→grounds,  ◀─�
 
 ### Deployment honesty
 WebSockets need a persistent process. Local demo = the relay on your laptop. A public preview would host the relay as a small always-on Node service or Cloudflare Durable Objects (this repo already targets Cloudflare via Nitro). The local two-window demo is what we present — the network hop is real.
+
+
+## CAN Ingestion Layer — How the Engine Actually Talks to the Twin
+
+### Why CAN, and why this matters for the "real data" question
+
+A real MALE UAV does not stream CSV or JSON from its engine. The Rotax 914 ECU / FADEC publishes **CAN frames** — 11-bit arbitration IDs, 8 payload bytes each, scaled integers — onto a 500 kbit/s–1 Mbit/s bus. The mission computer decodes those frames and relays them to the ground. AERIS-TWIN now reproduces that exact pipeline in simulation (`src/lib/datalink/can/`), so the digital twin consumes the *same shaped data* a physical aircraft emits — including quantization and the frame layout — and the **only** thing that changes for real hardware is one transport class.
+
+### The pipeline
+
+```
+flightStore (ECU model, 20 Hz physics)
+   |  storeToCanSource() — pack physical values
+   v
+encoder.ts — quantize + pack 13 CANaerospace-style frames @ 50 Hz   (ECU transmit)
+   |
+   v
+SimulatedCanBus / RealSocketCanBus ---- THE SWAP POINT (CanBusTransport)
+   |
+   v
+decoder.ts — scaled integers -> engineering units (0.25 rpm/LSB, 0.1 C/LSB ...)
+   |
+   v
+gateway.ts — merges telegram, keeps 12-frame raw ring, builds TelemetrySnapshot
+   |
+   v
+airborne.ts — when CAN INGEST is ON, the 20 Hz datalink frames are built
+              from CAN-decoded values instead of raw model outputs
+   |
+   v
+GCS — identical to before; it cannot tell (or care) whether the values
+      arrived from the physics model or off a CAN bus
+```
+
+### Frame map (CANaerospace-style, 11-bit IDs)
+
+| ID | Label | Signals |
+|---|---|---|
+| 0x0C0 | ENGINE 1 | rpm (0.25 rpm/LSB) · throttle (0.5 %/LSB) · injection timing (0.1 BTDC/LSB) |
+| 0x0C1 / 0x0C2 | CHT 1-2 / 3-4 | 0.1 C/LSB each |
+| 0x0C3 / 0x0C4 | EGT 1-2 / 3-4 | 0.1 C/LSB each |
+| 0x0C5 | MAP + OIL PRESS | 0.1 kPa/LSB · 0.01 bar/LSB |
+| 0x0C6 | OIL TEMP + VIB | 0.1 C/LSB · 0.001 m/s2/LSB |
+| 0x0C7 | HEALTH | healthIndex (1 %/LSB) · anomalyScore · RUL (0.1 h/LSB) |
+| 0x0C8 | AMBIENT | ambient temp (0.1 C/LSB, signed) |
+| 0x0C9 | FAULTS | bitmap: bit0 c2Overheat ... bit4 misfire3 |
+| 0x0D0 | FLIGHT | altitude (1 ft/LSB) · speed (0.5 kt/LSB) · heading (0.1 /LSB) |
+| 0x0D1 | ATTITUDE | pitch / roll (0.01 /LSB) · vertical speed (1 ft/min/LSB) |
+| 0x0D2 | POSITION | lat/lon (1e-7 /LSB, GPS-style, signed 32-bit) |
+
+13 frames/tick @ 50 Hz = 650 frames/s ≈ **72 kbit/s ≈ 14% bus load** on a 500 kbit/s bus — realistic for a real ECU telegram.
+
+### The swap point — going from simulation to real hardware
+
+Everything downstream of the bus speaks one interface:
+
+```ts
+interface CanBusTransport {
+  readonly name: string;
+  start(onFrame: (frame: CanFrame) => void): void;  // { id, data: Uint8Array(8), ts }
+  stop(): void;
+}
+```
+
+The demo uses `new SimulatedCanBus()` (encodes the live sim at 50 Hz). To consume a **physical engine**:
+
+1. **Bring up the CAN interface** on the UAV flight computer (Linux):
+   ```
+   ip link set can0 type can bitrate 500000   (run as root: su -c or admin shell)
+   ip link set can0 up
+   ```
+2. **Install the adapter**: `bun add socketcan` (or pipe `candump can0` lines into the same callback).
+3. **Swap one line** — `RealSocketCanBus` in `src/lib/datalink/can/bus.ts` implements the identical contract (wiring is documented inline; it opens a raw socketCAN channel and forwards `{ id, data }` messages to the same `onFrame` callback).
+4. **Done.** The decoder, gateway, datalink, GCS, ML and replay stack are consumed unchanged — they only ever see `CanFrame`s.
+
+### Trying it in the UI
+
+On **/sim**, the DATALINK MODEM panel has a **"ENABLE CAN INGESTION (SIM)"** toggle. Flipping it on switches the telemetry source to CAN-decoded values: the panel shows the transport ("SIM-CAN0 · 500 kbit/s"), frames/s, decoded frame count, bus load %, and a live **raw-frame capture strip** (last 4 frames as ID + hex + decoded headline values, e.g. `0x0C1 CHT 1-2 — cht0 154.3C · cht1 155.1C`). The GCS keeps rendering the same wire — the values now carry real ECU-style quantization (~0.25 rpm, 0.1 C, 0.5 kt).
+
+### What this answers
+
+> "How does the data get from the engine to the control centre?"
+
+**Sensors -> CAN frames (scaled integers) -> mission computer decode -> binary telemetry frames -> relay -> GCS.** CSV never crosses any link: it is a post-flight debrief generated at the ground station. The CAN layer is the missing front end of that chain, and it is the same code shape the hardware will feed.

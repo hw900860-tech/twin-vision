@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play, RotateCcw } from "lucide-react";
 import { Panel } from "@/components/hud/primitives";
 import { useLinkStore } from "@/features/datalink/linkStore";
+import { buildSortieHealthReport, type SortieHealthReport } from "@/lib/flight-analysis/sortieHealthReport";
 import { REGIONS_BY_BIOME } from "@/features/flight-sim/regions";
 import { fmtDuration, type SortieRecord, type SortieSample } from "@/lib/datalink/sortie";
 
@@ -303,10 +304,165 @@ function ReplayView({ rec }: { rec: SortieRecord }) {
   );
 }
 
+const GRADE_COLOR: Record<string, string> = { A: "#10b981", B: "#eab308", C: "#f0a63c", D: "#e2523f" };
+const SEV_COLOR: Record<string, string> = { info: "#3b82f6", caution: "#f0a63c", critical: "#e2523f" };
+
+/** Per-sortie health report card — derived on the ground from the wire record. */
+function HealthCard({ rec }: { rec: SortieRecord }) {
+  const report = useMemo(() => buildSortieHealthReport(rec), [rec]);
+  const [exported, setExported] = useState(false);
+
+  const exportJson = () => {
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `health-report-${rec.id}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExported(true);
+    setTimeout(() => setExported(false), 1500);
+  };
+
+  const Metric = ({ k, v, tone = "cyan", hint }: { k: string; v: string; tone?: "cyan" | "nominal" | "amber" | "critical" | "muted"; hint?: string }) => (
+    <div className="bg-panel-2/80 px-2 py-1.5">
+      <div className="label-xs text-[7px] text-muted-foreground">{k}</div>
+      <div className={`font-mono text-[12px] font-bold ${
+        tone === "nominal" ? "text-nominal" : tone === "amber" ? "text-amber" : tone === "critical" ? "text-critical" : tone === "muted" ? "text-muted-foreground" : "text-cyan"
+      }`} title={hint}>{v}</div>
+    </div>
+  );
+
+  const toneFor = (sec: number, warn: number, crit: number): "nominal" | "amber" | "critical" =>
+    sec > crit ? "critical" : sec > warn ? "amber" : "nominal";
+
+  return (
+    <div className="rounded border border-cyan/25 bg-panel/80 p-3">
+      {/* header */}
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="font-mono text-[11px] font-bold text-foreground">{rec.presetLabel}</div>
+          <div className="font-mono text-[8px] text-muted-foreground">
+            {rec.biome.toUpperCase()} · {fmtDuration(rec.duration)} · {report.engineHours.toFixed(3)} ENGINE HOURS
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className="border px-2 py-1 font-mono text-[9px] font-bold"
+            style={{ borderColor: END_COLOR[rec.endReason] ?? "#94a3b8", color: END_COLOR[rec.endReason] ?? "#94a3b8", background: `${END_COLOR[rec.endReason] ?? "#94a3b8"}18` }}
+          >
+            {rec.endReason}
+          </span>
+          <span
+            className="flex items-center gap-1.5 border px-2 py-1 font-mono"
+            style={{ borderColor: GRADE_COLOR[report.grade], color: GRADE_COLOR[report.grade], background: `${GRADE_COLOR[report.grade]}18` }}
+            title={report.gradeNotes.join(" · ")}
+          >
+            <b className="text-[13px]">{report.grade}</b>
+            <span className="text-[8px]">HEALTH {report.gradeScore}%</span>
+          </span>
+          <button
+            onClick={exportJson}
+            className={`border px-2 py-1 font-mono text-[8px] font-bold transition-colors ${
+              exported ? "border-nominal text-nominal" : "border-border text-muted-foreground hover:border-cyan hover:text-cyan"
+            }`}
+          >
+            {exported ? "EXPORTED ✓" : "EXPORT JSON"}
+          </button>
+        </div>
+      </div>
+
+      {/* thermal / fluids / mechanical */}
+      <div className="grid grid-cols-4 gap-px bg-border sm:grid-cols-8">
+        {report.maxCht.map((v, i) => (
+          <Metric key={`cht${i}`} k={`MAX CHT C${i + 1}`} v={`${v.toFixed(0)}°C`} tone={v > 220 ? "critical" : v > 180 ? "amber" : "cyan"} />
+        ))}
+        <Metric k="MAX EGT" v={`${report.maxEgt.toFixed(0)}°C`} tone={report.egtHotSec > 0 ? "critical" : "cyan"} />
+        <Metric k="AVG EGT" v={`${report.avgEgt.toFixed(0)}°C`} tone="muted" />
+        <Metric k="MIN MAP" v={`${report.minMap.toFixed(1)} kPa`} tone={report.mapCollapseSec > 0 ? "amber" : "cyan"} />
+        <Metric k="MIN OIL P" v={`${report.minOilPressure.toFixed(2)} bar`} tone={report.minOilPressure < 3 ? "critical" : "cyan"} />
+      </div>
+      <div className="mt-px grid grid-cols-4 gap-px bg-border sm:grid-cols-8">
+        <Metric k="CHT >180°C" v={`${Math.round(report.chtHotSec)} s`} tone={toneFor(report.chtHotSec, 0, 30)} />
+        <Metric k="CHT >220°C" v={`${Math.round(report.chtCriticalSec)} s`} tone={toneFor(report.chtCriticalSec, 0, 0)} />
+        <Metric k="EGT >720°C" v={`${Math.round(report.egtHotSec)} s`} tone={toneFor(report.egtHotSec, 0, 0)} />
+        <Metric k="MAP <15 kPa" v={`${Math.round(report.mapCollapseSec)} s`} tone={toneFor(report.mapCollapseSec, 0, 0)} />
+        <Metric k="MAX OIL T" v={`${report.maxOilTemp.toFixed(0)}°C`} tone={report.oilHotSec > 0 ? "amber" : "cyan"} />
+        <Metric k="OIL >110°C" v={`${Math.round(report.oilHotSec)} s`} tone={toneFor(report.oilHotSec, 0, 0)} />
+        <Metric k="MAX VIB" v={`${report.maxVib.toFixed(2)} m/s²`} tone={report.vibHighSec > 0 ? "amber" : "cyan"} />
+        <Metric k="VIB >1.2" v={`${Math.round(report.vibHighSec)} s`} tone={toneFor(report.vibHighSec, 0, 0)} />
+      </div>
+      <div className="mt-px grid grid-cols-4 gap-px bg-border sm:grid-cols-8">
+        <Metric k="HEALTH MIN" v={`${report.healthMin.toFixed(0)}%`} tone={report.healthMin < 30 ? "critical" : report.healthMin < 50 ? "amber" : "nominal"} />
+        <Metric k="HEALTH AVG" v={`${report.healthAvg.toFixed(0)}%`} tone="muted" />
+        <Metric k="RUL START" v={report.rulStartH !== null ? `${report.rulStartH.toFixed(1)} h` : "—"} tone="muted" />
+        <Metric k="RUL END" v={report.rulEndH !== null ? `${report.rulEndH.toFixed(1)} h` : "—"} tone="muted" />
+        <Metric k="RUL CONSUMED" v={report.rulConsumedH !== null ? `${report.rulConsumedH.toFixed(2)} h` : "—"} tone={report.rulConsumedH !== null && report.rulConsumedH > 0.05 ? "amber" : "nominal"} />
+        <Metric k="FAULT COUNT" v={`${report.faultCount}`} tone={report.faultCount > 0 ? "critical" : "nominal"} />
+        <Metric k="REGION CROSSINGS" v={`${report.regionEvents.length}`} tone={report.regionEvents.some((r) => r.severity === "critical") ? "amber" : "muted"} />
+        <Metric k="SORTIE ID" v={rec.id} tone="muted" />
+      </div>
+
+      {/* fault windows */}
+      <div className="mt-2">
+        <div className="label-xs mb-1 text-[8px] font-bold tracking-wider text-amber">FAULT WINDOWS</div>
+        {report.faultWindows.length === 0 ? (
+          <div className="border border-border/50 bg-panel-2/50 px-2 py-1 font-mono text-[8px] text-nominal">NO FAULTS DETECTED DURING SORTIE</div>
+        ) : (
+          <div className="space-y-0.5">
+            {report.faultWindows.map((f) => (
+              <div key={`${f.name}-${f.t0}`} className="flex items-center justify-between border border-amber/25 bg-amber/5 px-2 py-1 font-mono text-[8px]">
+                <span className="font-bold text-amber">{f.name.toUpperCase()}</span>
+                <span className="text-muted-foreground">
+                  {fmtDuration(f.t0)} → {f.t1 !== null ? fmtDuration(f.t1) : "SORTIE END"} · <span className="text-amber">{f.durSec.toFixed(0)} s</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* region crossings */}
+      <div className="mt-2">
+        <div className="label-xs mb-1 text-[8px] font-bold tracking-wider text-cyan">REGION CROSSINGS</div>
+        {report.regionEvents.length === 0 ? (
+          <div className="border border-border/50 bg-panel-2/50 px-2 py-1 font-mono text-[8px] text-muted-foreground">NO ATMOSPHERIC REGIONS ENTERED</div>
+        ) : (
+          <div className="space-y-0.5">
+            {report.regionEvents.map((r) => (
+              <div key={`${r.id}-${r.enterT}`} className="flex items-center justify-between border border-border/60 bg-panel-2/50 px-2 py-1 font-mono text-[8px]">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: SEV_COLOR[r.severity] ?? "#3b82f6" }} />
+                  <span className="font-bold" style={{ color: SEV_COLOR[r.severity] ?? "#3b82f6" }}>{r.name}</span>
+                  <span className="text-muted-foreground">{r.severity.toUpperCase()}</span>
+                </span>
+                <span className="text-muted-foreground">
+                  {fmtDuration(r.enterT)} → {r.exitT !== null ? fmtDuration(r.exitT) : "END"} · <span className="text-cyan">{r.dwellSec.toFixed(0)} s</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* verdict */}
+      <div className="mt-2 border-t border-border/50 pt-2">
+        <div className="label-xs mb-1 text-[8px] font-bold tracking-wider" style={{ color: GRADE_COLOR[report.grade] }}>GRADE REASONING</div>
+        <ul className="space-y-0.5">
+          {report.gradeNotes.map((n, i) => (
+            <li key={i} className="font-mono text-[8px] leading-relaxed text-muted-foreground">▸ {n}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export function SortieReplayPanel() {
   const sorties = useLinkStore((s) => s.sorties);
   const clearSorties = useLinkStore((s) => s.clearSorties);
   const [selId, setSelId] = useState<string | null>(null);
+  const [showHealth, setShowHealth] = useState(false);
   const selected = sorties.find((s) => s.id === selId) ?? sorties[0] ?? null;
 
   useEffect(() => {
@@ -351,7 +507,28 @@ export function SortieReplayPanel() {
 
         {/* replay stage */}
         <div className="min-w-0">
-          {selected ? (
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="font-mono text-[9px] font-bold text-muted-foreground">
+              {selected ? `SORTIE ${selected.id} · AUTO HEALTH CARD AVAILABLE` : "SELECT A SORTIE"}
+            </span>
+            <button
+              onClick={() => setShowHealth((v) => !v)}
+              disabled={!selected}
+              className={`border px-2 py-1 font-mono text-[8px] font-bold transition-colors ${
+                showHealth
+                  ? "border-cyan bg-cyan/20 text-cyan"
+                  : selected
+                    ? "border-border text-muted-foreground hover:border-cyan hover:text-cyan"
+                    : "cursor-not-allowed border-border/40 text-muted-foreground/40"
+              }`}
+              title="Auto-generated per-mission health card: max CHT/EGT exposure, exceedance seconds, RUL consumed, fault windows, region crossings, engine hours and a mission grade"
+            >
+              {showHealth ? "◀ SHOW REPLAY" : "HEALTH CARD ▶"}
+            </button>
+          </div>
+          {selected && showHealth ? (
+            <HealthCard key={selected.id} rec={selected} />
+          ) : selected ? (
             <ReplayView key={selected.id} rec={selected} />
           ) : (
             <div className="flex h-72 items-center justify-center rounded border border-dashed border-border/60 font-mono text-[10px] text-muted-foreground">

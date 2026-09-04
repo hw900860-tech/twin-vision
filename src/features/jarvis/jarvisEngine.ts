@@ -10,6 +10,11 @@ import { captureSystemSnapshot, type SystemSnapshot } from "./jarvisContext";
 import { useJarvisStore, type JarvisMessage } from "./jarvisStore";
 import { useFlightStore } from "@/features/flight-sim/flightStore";
 import { scrollToLandingSection } from "./jarvisNavigation";
+import {
+  startGuidedDemo,
+  stopGuidedDemo,
+  closeDemoReport,
+} from "@/features/flight-sim/guidedDemo";
 
 export interface JarvisExecutionResult {
   spokenText: string;
@@ -214,12 +219,50 @@ Emit your JSON response matching the required format.
         break;
       }
 
+      case "INJECT_FAULT": {
+        const key = act.fault as keyof typeof flightState.faults;
+        if (key in flightState.faults) {
+          if (flightState.faults[key]) {
+            actionsExecuted.push(`Fault already active: ${key}`);
+          } else {
+            flightState.toggleFault(key);
+            actionsExecuted.push(`Injected fault: ${key}`);
+          }
+        }
+        break;
+      }
+
+      case "START_DEMO": {
+        startGuidedDemo();
+        actionsExecuted.push("Started guided mission demo");
+        break;
+      }
+
+      case "STOP_DEMO": {
+        stopGuidedDemo();
+        actionsExecuted.push("Stopped guided mission demo");
+        break;
+      }
+
+      case "RTB": {
+        flightState.triggerRtb();
+        actionsExecuted.push("Return-to-base engaged");
+        break;
+      }
+
+      case "CLOSE_DEMO_REPORT": {
+        closeDemoReport();
+        actionsExecuted.push("Mission report dismissed");
+        break;
+      }
+
       case "CLEAR_FAULTS": {
         const curFaults = flightState.faults;
         if (curFaults.c2Overheat) flightState.toggleFault("c2Overheat");
         if (curFaults.turboFail) flightState.toggleFault("turboFail");
         if (curFaults.bearingFail) flightState.toggleFault("bearingFail");
         if (curFaults.injectorClog) flightState.toggleFault("injectorClog");
+        if (curFaults.misfire3) flightState.toggleFault("misfire3");
         actionsExecuted.push("All engine fault injections cleared");
         break;
       }
@@ -547,7 +590,99 @@ You are viewing the **AERIS-TWIN Ground Control Station** monitoring the Rotax 9
     };
   }
 
-  // 12. FAULTS, ALARMS & DIAGNOSTICS
+  // 12. FLIGHT COMMANDS — guided demo, RTB, fault injection (offline)
+  if (q.includes("demo") && (q.includes("start") || q.includes("launch") || q.includes("run") || q.includes("begin"))) {
+    return {
+      spokenText: "Initiating the guided mission demo. Launching the Himalaya region transect now.",
+      displayText: "**GUIDED DEMO LAUNCH** — running the full value chain: launch → transect → turbo fault → GCS alert → MAYDAY → RTB → mission report.",
+      intent: "UI_ACTION",
+      actions: [{ type: "START_DEMO" }],
+    };
+  }
+
+  if (q.includes("demo") && (q.includes("stop") || q.includes("abort") || q.includes("cancel") || q.includes("halt"))) {
+    return {
+      spokenText: "Guided demo stopped.",
+      displayText: "**GUIDED DEMO STOPPED**.",
+      intent: "UI_ACTION",
+      actions: [{ type: "STOP_DEMO" }],
+    };
+  }
+
+  if (q.includes("return to base") || q.includes(" rtb") || q.startsWith("rtb") || q.includes("come home") || q.includes("head home") || q.includes("go home") || q.includes("fly home")) {
+    return {
+      spokenText: "Return to base engaged. Reducing power to 55 percent and routing home.",
+      displayText: "**RTB ENGAGED** — return-to-base navigation active at reduced power. Remaining waypoints will be skipped.",
+      intent: "UI_ACTION",
+      actions: [{ type: "RTB" }],
+    };
+  }
+
+  if (q.includes("dismiss") && (q.includes("report") || q.includes("debrief"))) {
+    return {
+      spokenText: "Mission report dismissed.",
+      displayText: "**MISSION REPORT CLOSED**.",
+      intent: "UI_ACTION",
+      actions: [{ type: "CLOSE_DEMO_REPORT" }],
+    };
+  }
+
+  if (q.includes("misfire")) {
+    return {
+      spokenText: "Injecting misfire on cylinder 3. Expect rough running, EGT 3 collapse, and erratic injection timing.",
+      displayText: "**FAULT INJECTED: MISFIRE CYL 3** — combustion loss on C3: EGT3 collapse ~55°C, knock vibration, timing hunting.",
+      intent: "UI_ACTION",
+      actions: [{ type: "INJECT_FAULT", fault: "misfire3" }],
+    };
+  }
+
+  if (q.includes("overheat") || (q.includes("cylinder 2") && (q.includes("hot") || q.includes("heat")))) {
+    return {
+      spokenText: "Injecting cylinder 2 overheat. Cooling airflow blocked, CHT 2 will spike past 220 degrees.",
+      displayText: "**FAULT INJECTED: CYLINDER 2 OVERHEAT** — CHT2 rising >220°C, thermal stress climbing.",
+      intent: "UI_ACTION",
+      actions: [{ type: "INJECT_FAULT", fault: "c2Overheat" }],
+    };
+  }
+
+  if (q.includes("wastegate") || (q.includes("turbo") && (q.includes("fail") || q.includes("inject")))) {
+    return {
+      spokenText: "Injecting wastegate turbo failure. Manifold pressure will collapse with a power loss.",
+      displayText: "**FAULT INJECTED: WASTEGATE / TURBO FAILURE** — MAP collapse, power loss, turbo spool shortfall.",
+      intent: "UI_ACTION",
+      actions: [{ type: "INJECT_FAULT", fault: "turboFail" }],
+    };
+  }
+
+  if (q.includes("bearing")) {
+    return {
+      spokenText: "Injecting bearing fatigue spall. Expect a high amplitude 140 hertz vibration peak in the FFT.",
+      displayText: "**FAULT INJECTED: BEARING FATIGUE SPALL** — BPFO 140 Hz peak injected into the vibration spectrum.",
+      intent: "UI_ACTION",
+      actions: [{ type: "INJECT_FAULT", fault: "bearingFail" }],
+    };
+  }
+
+  if (q.includes("injector") || q.includes("clog") || (q.includes("fuel") && q.includes("inject"))) {
+    return {
+      spokenText: "Injecting fuel injector clog. Expect EGT imbalance and cylinder knock.",
+      displayText: "**FAULT INJECTED: FUEL INJECTOR CLOG** — EGT runner imbalance >40°C, combustion instability.",
+      intent: "UI_ACTION",
+      actions: [{ type: "INJECT_FAULT", fault: "injectorClog" }],
+    };
+  }
+
+  if (q.includes("clear") && (q.includes("fault") || q.includes("injection"))) {
+    return {
+      spokenText: "All fault injections cleared.",
+      displayText: "**ALL FAULT INJECTIONS CLEARED** — engine returned to nominal baseline.",
+      intent: "UI_ACTION",
+      actions: [{ type: "CLEAR_FAULTS" }],
+    };
+  }
+
+  // 5. Navigation commands
+  // 13. FAULTS, ALARMS & DIAGNOSTICS
   if (q.includes("fault") || q.includes("alarm") || q.includes("warn") || q.includes("fail") || q.includes("error") || q.includes("broken") || q.includes("issue") || q.includes("wrong") || q.includes("problem")) {
     const activeFaults: string[] = [];
     if (s.faults.c2Overheat) activeFaults.push("CYLINDER 2 OVERHEAT (CHT > 180°C)");
@@ -581,6 +716,7 @@ You are viewing the **AERIS-TWIN Ground Control Station** monitoring the Rotax 9
     q.includes("dismantle")
   ) {
     const isStudio = q.includes("studio") || q.includes("twin") || q.includes("dismantle");
+
     return {
       spokenText: "Scrolling to 3D engine stage and activating the exploded view.",
       displayText: `### 3D ENGINE EXPLORER ACTIVATED

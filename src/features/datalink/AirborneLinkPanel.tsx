@@ -1,5 +1,7 @@
 import { setAirborneMode } from "./airborne";
 import { useLinkStore } from "./linkStore";
+import { useCanBusStore, canBusLoadPct, canBusThroughputKbps } from "@/lib/datalink/can/gateway";
+import { describeFrame } from "@/lib/datalink/can/decoder";
 
 /** Airborne-side (flight sim) datalink control: profile switch + TX telemetry. */
 export function AirborneLinkPanel() {
@@ -12,6 +14,11 @@ export function AirborneLinkPanel() {
   const txBuffer = useLinkStore((s) => s.txBuffer);
   const replaysSent = useLinkStore((s) => s.replaysSent);
   const airborneOnline = useLinkStore((s) => s.airborneOnline);
+  const canEnabled = useCanBusStore((s) => s.enabled);
+  const canFps = useCanBusStore((s) => s.framesPerSec);
+  const canTotal = useCanBusStore((s) => s.totalFrames);
+  const canTransport = useCanBusStore((s) => s.transportName);
+  const canRing = useCanBusStore((s) => s.ring);
 
   const modes: { key: "LOS" | "SATCOM" | "OUTAGE"; label: string }[] = [
     { key: "LOS", label: "LOS" },
@@ -59,6 +66,60 @@ export function AirborneLinkPanel() {
             {m.label}
           </button>
         ))}
+      </div>
+
+      {/* CAN ingestion (simulated socketCAN) — the ECU→mission-computer path */}
+      <div className="mb-1.5 border border-cyan/20 bg-cyan/5 p-1.5">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="text-[8px] font-bold tracking-wider text-cyan">CAN INGEST · socketCAN SIM</span>
+          <span
+            className={`px-1.5 py-0.5 text-[7.5px] font-bold ${
+              canEnabled ? "text-nominal" : "text-muted-foreground"
+            }`}
+          >
+            {canEnabled ? `● ${canFps} FRAMES/S` : "○ BYPASSED"}
+          </span>
+        </div>
+        <button
+          onClick={() => useCanBusStore.getState().setEnabled(!canEnabled)}
+          className={`w-full border px-1 py-1 text-[8px] font-bold tracking-wider transition-all cursor-pointer ${
+            canEnabled
+              ? "border-nominal bg-nominal/25 text-nominal"
+              : "border-border bg-background/60 text-muted-foreground hover:text-cyan"
+          }`}
+          title={
+            canEnabled
+              ? "Telemetry now routed through the simulated CAN bus (12 frames/tick @ 50 Hz)"
+              : "Enable simulated socketCAN: engine state is encoded to CANaerospace-style frames and decoded back before transmission"
+          }
+        >
+          {canEnabled ? "TELEMETRY SOURCE: CAN BUS 0x0C0–0x0D2" : "ENABLE CAN INGESTION (SIM)"}
+        </button>
+        {canEnabled && (
+          <div className="mt-1.5 space-y-1">
+            <div className="flex items-center justify-between text-[7.5px] text-muted-foreground">
+              <span>{canTransport}</span>
+              <span className="text-cyan">
+                {canBusLoadPct().toFixed(1)}% LOAD · {canBusThroughputKbps().toFixed(1)} kbit/s
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[7.5px] text-muted-foreground">
+              <span>FRAMES DECODED</span>
+              <span className="text-nominal">{canTotal} · LAST 12 RING</span>
+            </div>
+            <div className="space-y-0.5 border-t border-cyan/15 pt-1">
+              {canRing.slice(-4).map((f, i) => (
+                <div key={`${f.ts}-${i}`} className="truncate font-mono text-[7px] leading-tight text-cyan/80">
+                  <span className="text-muted-foreground">
+                    {(f.data[0] ?? 0).toString(16).padStart(2, "0").toUpperCase()}{" "}
+                    {(f.data[1] ?? 0).toString(16).padStart(2, "0").toUpperCase()}…
+                  </span>{" "}
+                  {describeFrame(f)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[8px] text-muted-foreground">
