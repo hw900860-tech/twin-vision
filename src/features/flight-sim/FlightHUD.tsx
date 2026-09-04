@@ -45,6 +45,11 @@ export function FlightHUD() {
           <span className="text-[7.5px] text-muted-foreground font-bold">RPM</span>
           <span className="font-bold text-[11px] text-foreground">{s.rpm.toFixed(0)}</span>
         </div>
+
+        <div className="border border-cyan/40 bg-panel/90 px-2.5 py-1 backdrop-blur-md rounded shadow-lg text-cyan flex items-center gap-2">
+          <span className="text-[7.5px] text-muted-foreground font-bold">INJ</span>
+          <span className="font-bold text-[11px] text-foreground">{s.injectionTiming.toFixed(1)}° <span className="text-[7.5px] text-cyan">BTDC</span></span>
+        </div>
       </div>
 
       {/* Advisory banner - Moved cleanly to top center */}

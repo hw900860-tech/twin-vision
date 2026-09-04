@@ -50,9 +50,10 @@ export interface TelemetrySnapshot {
   anomalyScore: number; // 0-100
   ambientTemp: number;
   rul: number; // flight hours remaining
+  injectionTiming: number; // ° BTDC spark/advance angle
   lat: number;
   lon: number;
-  faults: { c2Overheat: boolean; turboFail: boolean; bearingFail: boolean; injectorClog: boolean };
+  faults: { c2Overheat: boolean; turboFail: boolean; bearingFail: boolean; injectorClog: boolean; misfire3: boolean };
   emergency: EmergencyCode;
   missionActive: boolean;
 }
@@ -162,6 +163,7 @@ export function encodeTelemetryFrame(snap: TelemetrySnapshot, seq: number, txMs:
   if (snap.faults.turboFail) f0 |= 2;
   if (snap.faults.bearingFail) f0 |= 4;
   if (snap.faults.injectorClog) f0 |= 8;
+  if (snap.faults.misfire3) f0 |= 32;
   if (snap.missionActive) f0 |= 16;
   dv.setUint8(flagsOff, f0);
   dv.setUint8(flagsOff + 1, snap.emergency);
@@ -211,6 +213,7 @@ export function decodeTelemetryFrame(buf: ArrayBuffer): DecodedTelemetry | null 
     anomalyScore: g("anomalyScore"),
     ambientTemp: g("ambientTemp"),
     rul: g("rul"),
+    injectionTiming: g("injectionTiming"),
     lat: g("lat"),
     lon: g("lon"),
     faults: {
@@ -218,6 +221,7 @@ export function decodeTelemetryFrame(buf: ArrayBuffer): DecodedTelemetry | null 
       turboFail: (f0 & 2) !== 0,
       bearingFail: (f0 & 4) !== 0,
       injectorClog: (f0 & 8) !== 0,
+      misfire3: (f0 & 32) !== 0,
     },
     emergency: toEmergency(f1),
     missionActive: (f0 & 16) !== 0,

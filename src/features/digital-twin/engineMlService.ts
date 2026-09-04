@@ -190,7 +190,7 @@ export function runExhaustModel(state: EngineStateInputs): ExhaustMLOutput {
   const avgEGT = (e1 + e2 + e3 + e4) / 4;
   const runnerBalance = Math.max(0, 100 - (clogOffset * 0.8));
   const combustionEfficiency = Math.max(40, Math.min(99, 98 - (state.throttle > 90 ? 8 : 0) - clogOffset * 0.4));
-  const injectorAnomalyRisk = state.faults.injectorClog ? 88 : Math.min(100, Math.max(0, (avgEGT - 680) * 0.4));
+  const injectorAnomalyRisk = state.faults.injectorClog ? 88 : state.faults.misfire3 ? 74 : Math.min(100, Math.max(0, (avgEGT - 680) * 0.4));
 
   const status = evalStatus(avgEGT, 'egt');
   const health = Math.max(0, Math.min(1, (runnerBalance / 100) * (1 - injectorAnomalyRisk / 200)));
@@ -247,7 +247,7 @@ export function runCrankcaseModel(state: EngineStateInputs): CrankcaseMLOutput {
 
   const structuralHealth = Math.max(0, 100 - (vib * 35) - (state.faults.bearingFail ? 50 : 0));
   const bearingFatigueIndex = state.faults.bearingFail ? 94 : Math.min(100, Math.max(0, (vib - 0.5) * 60));
-  const pistonSlapProbability = Math.min(100, Math.max(0, (vib - 1.0) * 40));
+  const pistonSlapProbability = state.faults.misfire3 ? 82 : Math.min(100, Math.max(0, (vib - 1.0) * 40));
   const estimatedRUL = Math.max(10, state.rul * (1 - bearingFatigueIndex / 150));
 
   const status = evalStatus(vib, 'vibration');

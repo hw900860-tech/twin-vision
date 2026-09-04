@@ -69,7 +69,7 @@ export function GcsLiveDataBand() {
           <span>AGE <b className={stale ? "text-critical" : "text-cyan"}>{Math.round(link.lastFrameAgeMs)} ms</b></span>
           <span>GAPS <b className="text-amber">{link.rxGaps}</b> · REC <b className="text-nominal">{link.gapRecovered}</b></span>
           <span title="One 112-byte binary frame carries flight state + 4-cylinder engine data + fault flags, CRC-16 protected">
-            FRAME <b className="text-cyan">112 B · CRC-16</b> ≈ 18 kbit/s @ 20 Hz
+            FRAME <b className="text-cyan">126 B · CRC-16</b> ≈ 20 kbit/s @ 20 Hz
           </span>
         </div>
       </div>
@@ -99,13 +99,14 @@ export function GcsLiveDataBand() {
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[9px] font-mono">
         <span className="text-muted-foreground">
           {anyFault
-            ? <span className="text-critical">⚠ FAULT FLAGS: {Object.entries(flight.faults).filter(([, v]) => v).map(([k]) => k.replace("c2Overheat", "CYL2 OVERHEAT").replace("turboFail", "TURBO FAIL").replace("bearingFail", "BEARING").replace("injectorClog", "INJECTOR")).join(" · ")}</span>
+            ? <span className="text-critical">⚠ FAULT FLAGS: {Object.entries(flight.faults).filter(([, v]) => v).map(([k]) => k.replace("c2Overheat", "CYL2 OVERHEAT").replace("turboFail", "TURBO FAIL").replace("bearingFail", "BEARING").replace("injectorClog", "INJECTOR").replace("misfire3", "MISFIRE C3")).join(" · ")}</span>
             : <span className="text-nominal">NO FAULT FLAGS — ENGINE PARAMETERS IN LIMITS</span>}
         </span>
         <span className="text-muted-foreground">
           HEALTH <b style={{ color: flight.healthIndex > 0.6 ? "#34d399" : flight.healthIndex > 0.3 ? "#f0a63c" : "#ef4444" }}>{(flight.healthIndex * 100).toFixed(0)}%</b>
           {" · "}OIL <b style={{ color: oilTone === "ok" ? "#6fd8e8" : toneColor(oilTone) }}>{flight.oilTemp.toFixed(0)}°C</b>
           {" · "}OIL PRESS <b className="text-cyan">{flight.oilPressure.toFixed(1)} bar</b>
+          {" · "}INJ <b className="text-cyan">{flight.injectionTiming.toFixed(1)}° BTDC</b>
           {" · "}RUL <b className="text-cyan">{flight.rul.toFixed(0)} h</b>
           {flight.missionActive && <span className="ml-1 text-cyan">· MISSION ACTIVE</span>}
         </span>

@@ -2,6 +2,7 @@ import { useFlightStore, type Biome, type MissionPreset, type FaultFlags } from 
 import { Panel } from '@/components/hud/primitives';
 import { Mountain, Waves, CloudSun, Play, Square, AlertTriangle, RotateCcw, Eye, Navigation, Route, Trash2, Undo2, Plus } from 'lucide-react';
 import { analyzeLegs, LEG_RISK_COLOR } from './routePlanner';
+import { startGuidedDemo, stopGuidedDemo } from './guidedDemo';
 
 const BIOMES: { key: Biome; label: string; icon: typeof Mountain }[] = [
   { key: 'himalaya', label: 'HIMALAYA', icon: Mountain },
@@ -23,13 +24,61 @@ const FAULTS: { key: keyof FaultFlags; label: string; desc: string }[] = [
   { key: 'turboFail', label: 'TURBO FAILURE', desc: 'MAP collapse, power loss' },
   { key: 'bearingFail', label: 'BEARING SPALL', desc: 'BPFO peak at 140 Hz' },
   { key: 'injectorClog', label: 'INJECTOR CLOG', desc: 'EGT imbalance' },
+  { key: 'misfire3', label: 'MISFIRE CYL 3', desc: 'Knock · EGT3 drop · rough RPM' },
 ];
 
 export function ControlPanel() {
   const s = useFlightStore();
 
+  const CHIP_TONE: Record<string, string> = {
+    cyan: 'text-[var(--cyan)]',
+    nominal: 'text-[var(--nominal)]',
+    amber: 'text-[var(--amber)]',
+    critical: 'text-[var(--critical)]',
+  };
+
   return (
     <div className="pointer-events-auto w-full h-full overflow-y-auto bg-[var(--panel)]/95 backdrop-blur-md">
+      {/* Guided Demo — one-click full value chain */}
+      <div className="border-b border-[var(--border)] p-3">
+        <div className="label-xs mb-2 text-[var(--amber)]">GUIDED DEMO · FULL VALUE CHAIN</div>
+        {!s.demo.active ? (
+          <button
+            onClick={startGuidedDemo}
+            className="w-full flex flex-col items-center gap-1 p-2 text-[9px] tracking-wider border border-[var(--amber)] bg-[var(--amber)]/10 text-[var(--amber)] hover:bg-[var(--amber)]/20 transition-colors animate-pulse"
+          >
+            <span className="flex items-center gap-1 font-semibold">
+              <Play className="h-3 w-3" /> RUN GUIDED DEMO
+            </span>
+            <span className="text-[7.5px] text-[var(--muted-foreground)] leading-tight text-center">
+              LAUNCH → TRANSECT → FAULT → GCS ALERT → MAYDAY → RTB → AUTO REPORT
+            </span>
+          </button>
+        ) : (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[8px] font-mono font-bold tracking-wider text-[var(--amber)] animate-pulse">
+                PHASE: {s.demo.phase.toUpperCase()}
+              </span>
+              <button
+                onClick={stopGuidedDemo}
+                className="text-[7.5px] border border-[var(--border)] px-1.5 py-0.5 hover:border-[var(--critical)] hover:text-[var(--critical)] transition-colors"
+              >
+                ABORT
+              </button>
+            </div>
+            <div className="space-y-0.5">
+              {s.demo.chips.map((c, i) => (
+                <div key={i} className={`flex items-start gap-1 text-[7.5px] leading-tight ${CHIP_TONE[c.tone] ?? ''}`}>
+                  <span className="font-mono shrink-0 opacity-80">T+{String(c.t).padStart(2, '0')}s</span>
+                  <span>{c.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Terrain Selector */}
       <div className="border-b border-[var(--border)] p-3">
         <div className="label-xs mb-2 text-[var(--cyan)]">TERRAIN</div>

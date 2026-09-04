@@ -40,6 +40,7 @@ export interface FaultFlags {
   turboFail: boolean;
   bearingFail: boolean;
   injectorClog: boolean;
+  misfire3: boolean;
 }
 
 export interface FaultSmoothState {
@@ -47,6 +48,52 @@ export interface FaultSmoothState {
   turboFail: number;
   bearingFail: number;
   injectorClog: number;
+  misfire3: number;
+}
+
+export type DemoPhase = 'idle' | 'launching' | 'cruise' | 'fault' | 'alert' | 'mayday' | 'rtb' | 'report';
+
+export interface DemoChip {
+  /** Mission-clock seconds when the event fired. */
+  t: number;
+  label: string;
+  tone: 'cyan' | 'nominal' | 'amber' | 'critical';
+}
+
+export interface MissionExtremes {
+  maxCht: [number, number, number, number];
+  maxEgt: number;
+  minMap: number;
+  maxOilTemp: number;
+  maxVib: number;
+  minHealthPct: number;
+  rulConsumed: number;
+  maxAltFt: number;
+}
+
+/** Auto-generated debrief card produced when the guided demo sortie ends. */
+export interface MissionReport {
+  mission: string;
+  biome: string;
+  outcome: string;
+  durationSec: number;
+  faultInjected: string;
+  faultAtSec: number;
+  maydayAtSec: number;
+  rtbAtSec: number;
+  waypointCaptures: { wp: number; t: number }[];
+  regionCrossings: string[];
+  extremes: MissionExtremes;
+  chips: DemoChip[];
+}
+
+/** One-click guided demo state, driven by features/flight-sim/guidedDemo.ts. */
+export interface GuidedDemoState {
+  active: boolean;
+  phase: DemoPhase;
+  chips: DemoChip[];
+  report: MissionReport | null;
+  faultInjected: boolean;
 }
 
 export interface TelemetryHistoryPoint {
@@ -97,6 +144,7 @@ export interface TelemetryLogEntry {
   oilPressure: number;
   vibrationRMS: number;
   health: number;
+  injectionTiming: number;
   faultState: string;
 }
 
@@ -118,6 +166,7 @@ export interface FlightState {
   /** Immutable biome/scenario OAT base — region & altitude deltas are applied ONCE per tick on top of this. */
   baseAmbientTemp: number;
   rpm: number;
+  injectionTiming: number;
   cht: number[];
   egt: number;
   map: number;
@@ -153,6 +202,12 @@ export interface FlightState {
   pendingRegionAlerts: RegionAlert[];
   /** Finished sortie records awaiting datalink transmission to the GCS. */
   pendingSorties: SortieRecord[];
+
+  /** Operator MAYDAY RTB command — overrides waypoint nav to fly straight home. */
+  rtbActive: boolean;
+
+  /** One-click guided demo (launch → fault → MAYDAY → RTB → report). */
+  demo: GuidedDemoState;
 
   // Real-Time Physics & 3D Load Field State
   airDensity: number;
@@ -213,6 +268,8 @@ export interface FlightState {
   clearPendingRegionAlerts: () => void;
   queueSortie: (rec: SortieRecord) => void;
   clearPendingSorties: () => void;
+  triggerRtb: () => void;
+  updateDemo: (patch: Partial<GuidedDemoState>) => void;
   setPlannerMode: (on: boolean) => void;
   addWaypoint: (x: number, z: number) => void;
   moveWaypoint: (index: number, x: number, z: number) => void;
@@ -269,6 +326,7 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
     turboFail: lerp(state.faultSmooth.turboFail, state.faults.turboFail ? 1 : 0, dt * 3.0),
     bearingFail: lerp(state.faultSmooth.bearingFail, state.faults.bearingFail ? 1 : 0, dt * 2.5),
     injectorClog: lerp(state.faultSmooth.injectorClog, state.faults.injectorClog ? 1 : 0, dt * 2.0),
+    misfire3: lerp(state.faultSmooth.misfire3, state.faults.misfire3 ? 1 : 0, dt * 3.5),
   };
 
   // Atmospheric density & Dynamic pressure q = 0.5 * rho * V^2 (in kPa)
@@ -286,6 +344,9 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
   // RPM — scales with throttle and atmospheric altitude density
   let rpm = biomeConfig.baseRPM + thr * 1600 * (0.86 + 0.14 * altitudeFactor);
   rpm += noise(t, 3) * 15;
+  // Misfire on cylinder 3 — rough running: RPM surging at combustion frequency
+  // plus a slower hunting cycle, exactly like a missing power stroke.
+  rpm += fs.misfire3 * (Math.sin(t * 41) * 26 + Math.sin(t * 7.3) * 14);
 
   // MAP — barometric pressure equation, drops with altitude, turbo compensates.
   // A low-pressure trough region multiplies the manifold pressure down, forcing
@@ -294,12 +355,18 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
   map *= (1 - fs.turboFail * 0.42);
   map *= region?.params.pressureDelta ?? 1;
 
+  // Injection timing — advance (° BTDC) retarded slightly with load (knock
+  // margin), advanced slightly at high RPM; injector clog retards it, and a
+  // misfire makes the ECU timing hunt erratically between power strokes.
+  const injKnock = fs.misfire3 * (Math.sin(t * 47) * 7 + noise(t, 9) * 9);
+  const injectionTiming = 30 - thr * 6 + (rpm > 4000 ? 1.5 : 0) - fs.injectorClog * 3.5 + injKnock;
+
   // CHT per cylinder — rises with throttle, ambient temp; drops with air density cooling at altitude
   const chtBase = 96 + thr * 96 + ambientTemp * 0.72 - altitudeFactor * 12;
   const cht = [
     chtBase + (fs.c2Overheat * 75) + noise(t, 1) * 3,
     chtBase + (fs.c2Overheat * 122) + noise(t, 2) * 3,
-    chtBase + noise(t, 3) * 3,
+    chtBase + noise(t, 3) * 3 - fs.misfire3 * 16,
     chtBase + noise(t, 4) * 3,
   ];
 
@@ -316,6 +383,9 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
   // turbulent region air masses add gust excitation on top.
   let vib = 0.42 + thr * 0.36;
   vib += fs.bearingFail * 1.88 + Math.abs(noise(t, 6)) * 0.5;
+  // Misfire knock — sharp combustion-pressure impulses at part load, stronger
+  // under load (the classic knock regime of a retarded/hunting timing map).
+  vib += fs.misfire3 * 0.72 * (0.6 + thr);
   vib += (region?.params.turbulence ?? 0) * (0.35 + thr * 0.45);
 
   // Component Stress Indices (0.0 .. 1.0)
@@ -352,6 +422,7 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
     if (i >= 15 && i <= 17) val += 0.25 * thr;
     if (i >= 23 && i <= 25) val += 0.15 * thr;
     if (i >= 13 && i <= 15) val += fs.bearingFail * 1.6;
+    if (i >= 4 && i <= 7) val += fs.misfire3 * 0.8;
     return Math.max(0, Math.min(2, val + noise(t, i + 7) * 0.05));
   });
 
@@ -360,6 +431,7 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
     turboFail: fs.turboFail > 0.3,
     bearingFail: fs.bearingFail > 0.3,
     injectorClog: fs.injectorClog > 0.3,
+    misfire3: fs.misfire3 > 0.3,
   };
 
   const engineDecision = runEngineDecisionEngine({
@@ -419,12 +491,13 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
     cht4: Number((cht[3] ?? 0).toFixed(1)),
     egt1: Number(egt.toFixed(1)),
     egt2: Number(egt.toFixed(1)),
-    egt3: Number((egt + (fs.injectorClog > 0.3 ? 68 : 0)).toFixed(1)),
+    egt3: Number((egt + (fs.injectorClog > 0.3 ? 68 : 0) - (fs.misfire3 > 0.3 ? 55 : 0)).toFixed(1)),
     egt4: Number(egt.toFixed(1)),
     oilTemp: Number(oilTemp.toFixed(1)),
     oilPressure: Number(oilPressure.toFixed(2)),
     vibrationRMS: Number(vib.toFixed(3)),
     health: Number((healthIndex * 100).toFixed(1)),
+    injectionTiming: Number(injectionTiming.toFixed(1)),
     faultState: activeFaultsStr,
   };
 
@@ -432,7 +505,7 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
   const updatedLogs = state.isRecording ? [...state.recordedLogs, logEntry] : state.recordedLogs;
 
   return {
-    rpm, map, cht, egt, oilPressure, oilTemp,
+    rpm, injectionTiming, map, cht, egt, oilPressure, oilTemp,
     vibrationRMS: vib, fftSpectrum,
     airDensity, dynamicPressure, loadVector: [Lx, Ly, Lz], componentStress,
     healthIndex,
@@ -523,8 +596,8 @@ export const MISSIONS: Record<MissionPreset, {
 /** Every preset ends back at base — finishing when the last waypoint is reached. */
 const END_ON_ARRIVAL: MissionPreset[] = ['nominalRoutine', 'highAltitudeFailure', 'coastalRecovery', 'himalayaTransect', 'tharTransect', 'coastalTransect'];
 
-const INITIAL_FAULTS: FaultFlags = { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false };
-const INITIAL_SMOOTH: FaultSmoothState = { c2Overheat: 0, turboFail: 0, bearingFail: 0, injectorClog: 0 };
+const INITIAL_FAULTS: FaultFlags = { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false, misfire3: false };
+const INITIAL_SMOOTH: FaultSmoothState = { c2Overheat: 0, turboFail: 0, bearingFail: 0, injectorClog: 0, misfire3: 0 };
 const DEFAULT_STRESS: ComponentStressState = {
   cylinders: [0.2, 0.2, 0.2, 0.2],
   exhaustRunners: [0.2, 0.2, 0.2, 0.2],
@@ -536,7 +609,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   targetHeading: 0, targetAltitude: 6000, bankAngle: 0, pitchAngle: 0, cameraMode: 'chase',
   throttle: 65, rudder: 0,
   biome: 'himalaya', ambientTemp: -5, baseAmbientTemp: -5,
-  rpm: 2400, cht: [140, 140, 140, 140], egt: 680, map: 93,
+  rpm: 2400, injectionTiming: 27, cht: [140, 140, 140, 140], egt: 680, map: 93,
   oilPressure: 5.2, oilTemp: 95, vibrationRMS: 0.8,
   fftSpectrum: Array(64).fill(0.2),
   healthIndex: 0.96, rul: 480, anomalyScore: 0.04,
@@ -552,6 +625,8 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   regionAlerts: [],
   pendingRegionAlerts: [],
   pendingSorties: [],
+  rtbActive: false,
+  demo: { active: false, phase: 'idle', chips: [], report: null, faultInjected: false },
   airDensity: 0.98, dynamicPressure: 1.42, loadVector: [0, 1.0, 0.2],
   componentStress: DEFAULT_STRESS,
   vizMode: 'NORMAL',
@@ -614,6 +689,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
         throttle: Number((state.throttle || 0).toFixed(1)),
         engineLoad: 50.0,
         rpm: Number((state.rpm || 2400).toFixed(0)),
+        injectionTiming: Number((state.injectionTiming || 27).toFixed(1)),
         map: Number((state.map || 93).toFixed(1)),
         boost: Number(((state.map || 93) * 0.0338639).toFixed(2)),
         cht1: Number((state.cht?.[0] ?? 140).toFixed(1)),
@@ -657,10 +733,17 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   clearPendingRegionAlerts: () => set({ pendingRegionAlerts: [] }),
   queueSortie: (rec) => set((st) => ({ pendingSorties: [...(st.pendingSorties ?? []), rec].slice(-4) })),
   clearPendingSorties: () => set({ pendingSorties: [] }),
+  triggerRtb: () =>
+    set((s2) => ({
+      rtbActive: true,
+      throttle: Math.min(s2.throttle, 55),
+      systemMessage: 'MAYDAY RTB COMMAND ACCEPTED — RETURNING TO BASE AT REDUCED POWER',
+    })),
+  updateDemo: (patch) => set((s2) => ({ demo: { ...s2.demo, ...patch } })),
   setMissionPreset: (p) => {
     const mission = MISSIONS[p];
     const scenarioFaults: FaultFlags = p === 'highAltitudeFailure'
-      ? { c2Overheat: true, turboFail: true, bearingFail: false, injectorClog: false }
+      ? { c2Overheat: true, turboFail: true, bearingFail: false, injectorClog: false, misfire3: false }
       : INITIAL_FAULTS;
     const wx = get().weather;
     set({
@@ -681,10 +764,10 @@ export const useFlightStore = create<FlightState>((set, get) => ({
       faults: scenarioFaults,
       faultSmooth: INITIAL_SMOOTH,
       emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null,
-      evadePath: [], evadeIndex: 0, regionMode: 'cruise' as const, regionModeText: null, transitEcoThrottle: null,
+      evadePath: [], evadeIndex: 0, regionMode: 'cruise' as const, regionModeText: null, transitEcoThrottle: null, rtbActive: false,
     });
   },
-  startMission: () => set({ missionActive: true, missionProgress: 0, missionElapsed: 0, emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null, plannerMode: false, evadePath: [], evadeIndex: 0, regionMode: 'cruise', regionModeText: null, transitEcoThrottle: null }),
+  startMission: () => set({ missionActive: true, missionProgress: 0, missionElapsed: 0, emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null, plannerMode: false, evadePath: [], evadeIndex: 0, regionMode: 'cruise', regionModeText: null, transitEcoThrottle: null, rtbActive: false }),
   setDragging: (d, sx, sy) => set({ isDragging: d, dragStartX: sx ?? 0, dragStartY: sy ?? 0 }),
   setPlannerMode: (on) => set({ plannerMode: on }),
   addWaypoint: (x, z) =>
@@ -725,7 +808,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     faults: INITIAL_FAULTS,
     faultSmooth: INITIAL_SMOOTH,
     emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null,
-    evadePath: [], evadeIndex: 0, regionMode: 'cruise', regionModeText: null, transitEcoThrottle: null,
+    evadePath: [], evadeIndex: 0, regionMode: 'cruise', regionModeText: null, transitEcoThrottle: null, rtbActive: false,
   });
     },
 
@@ -826,7 +909,8 @@ export const useFlightStore = create<FlightState>((set, get) => ({
 
     const rul = Math.max(0, state.rul - dt * 0.01);
     const anomalyScore = Math.min(1, state.anomalyScore + (state.faults.c2Overheat ? 0.001 : 0) +
-      (state.faults.bearingFail ? 0.002 : 0) + (state.faults.turboFail ? 0.0015 : 0) + (coldProgress * 0.003));
+      (state.faults.bearingFail ? 0.002 : 0) + (state.faults.turboFail ? 0.0015 : 0) +
+      (state.faults.misfire3 ? 0.0012 : 0) + (coldProgress * 0.003));
 
     const engineUpdates = updateEngineTelemetry({ ...state, x, z, heading: hdg, altitude: alt, speed, anomalyScore }, dt);
     engineUpdates.rpm = (engineUpdates.rpm ?? state.rpm) * (1 - stallProgress * 0.8 - coldProgress * 0.45);
@@ -848,6 +932,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     let regionModeText: string | null = state.regionModeText ?? null;
     let transitEcoThrottle: number | null = state.transitEcoThrottle ?? null;
     let finalThrottle = state.throttle;
+    let rtbActive = state.rtbActive;
 
     if (state.emergencyState === 'nominal' && alt > state.targetAltitude) {
       newTargetAltitude = Math.max(newTargetAltitude, alt);
@@ -856,8 +941,22 @@ export const useFlightStore = create<FlightState>((set, get) => ({
       const wpIdx = Math.min(Math.floor(missionProgress), state.waypoints.length - 1);
       const wp = state.waypoints[wpIdx];
       if (wp) {
-        // -- follow any active evade detour first --
-        let goal = wp;
+        if (rtbActive) {
+          // MAYDAY RTB: ignore waypoint order and fly straight home to base.
+          const home = state.waypoints[0] ?? { x: 0, z: 0 };
+          const dHome = Math.hypot(x - home.x, z - home.z);
+          if (dHome < 30) {
+            missionActive = false;
+            rtbActive = false;
+            emergencyState = 'recovery';
+            emergencyTimer = 0;
+            systemMessage = 'MAYDAY RTB COMPLETE — UAV RECOVERED AT BASE · POST-FLIGHT INSPECTION QUEUED';
+          } else {
+            newTargetHeading = mod((Math.atan2(home.x - x, -(home.z - z)) * 180 / Math.PI) + 360, 360);
+          }
+        } else {
+          // -- follow any active evade detour first --
+          let goal = wp;
         if (evadePath.length > 0) {
           const seg = evadePath[Math.min(evadeIndex, evadePath.length - 1)];
           if (seg) goal = seg as typeof wp;
@@ -935,10 +1034,11 @@ export const useFlightStore = create<FlightState>((set, get) => ({
           }
         }
 
-        const dx = goal.x - x;
-        const dz = goal.z - z;
-        if (Math.hypot(dx, dz) > 0.5) {
-          newTargetHeading = mod((Math.atan2(dx, -dz) * 180 / Math.PI) + 360, 360);
+          const dx = goal.x - x;
+          const dz = goal.z - z;
+          if (Math.hypot(dx, dz) > 0.5) {
+            newTargetHeading = mod((Math.atan2(dx, -dz) * 180 / Math.PI) + 360, 360);
+          }
         }
       }
     }
@@ -1005,6 +1105,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
       bankAngle, pitchAngle: Math.max(-0.35, Math.min(0.35, altDiff * 0.00012)),
       rul, anomalyScore, missionProgress, missionActive, missionElapsed,
       emergencyState, emergencyTimer, crashCoordinates,
+      rtbActive,
       systemMessage:
         regionModeText && state.emergencyState === 'nominal'
           ? regionModeText

@@ -411,7 +411,7 @@ function patchGroundActions(): void {
       originalActions.setThrottle(v);
       sendCommand(CMD_THROTTLE, v, "THROTTLE");
     },
-    toggleFault: (fault: "c2Overheat" | "turboFail" | "bearingFail" | "injectorClog") => {
+    toggleFault: (fault: "c2Overheat" | "turboFail" | "bearingFail" | "injectorClog" | "misfire3") => {
       originalActions.toggleFault(fault);
       sendCommand(CMD_FAULT, FAULT_INDEX[fault] ?? 0, `FAULT ${fault.toUpperCase()}`);
     },

@@ -15,7 +15,7 @@
  */
 
 export const DL_MAGIC = 0x415a; // "AZ"
-export const DL_VERSION = 1;
+export const DL_VERSION = 2;
 
 export const DL_MSG_TELEMETRY = 0x01; // airborne → ground, unacknowledged stream
 export const DL_MSG_CMD = 0x02; // ground → airborne, acknowledged control
@@ -30,7 +30,7 @@ export const DL_HEADER_BYTES = 14; // magic2 + ver1 + type1 + seq2 + txSec8 (f64
 
 // Command identifiers (0x02 payload: u8 cmdId + f32 value)
 export const CMD_THROTTLE = 1; // value = throttle % (0-100)
-export const CMD_FAULT = 2; // value = fault index 0..3 (see FAULT_INDEX)
+export const CMD_FAULT = 2; // value = fault index 0..4 (see FAULT_INDEX)
 export const CMD_ALTITUDE = 3; // value = target altitude ft
 export const CMD_HEADING = 4; // value = target heading deg
 export const CMD_RUDDER = 5; // value = rudder -1..1
@@ -40,13 +40,15 @@ export const FAULT_INDEX: Record<string, number> = {
   turboFail: 1,
   bearingFail: 2,
   injectorClog: 3,
+  misfire3: 4,
 };
 
-export const FAULT_KEYS: ["c2Overheat", "turboFail", "bearingFail", "injectorClog"] = [
+export const FAULT_KEYS: ["c2Overheat", "turboFail", "bearingFail", "injectorClog", "misfire3"] = [
   "c2Overheat",
   "turboFail",
   "bearingFail",
   "injectorClog",
+  "misfire3",
 ];
 
 // Emergency state codes transmitted in flag byte 1
@@ -55,7 +57,7 @@ export const EMERGENCY_FORCED_LANDING = 1;
 export const EMERGENCY_CRASHED = 2;
 export const EMERGENCY_RECOVERY = 3;
 
-// Payload field order for telemetry frames (24 × f32 = 96 bytes)
+// Payload field order for telemetry frames (27 × f32 = 108 bytes)
 export const PAYLOAD_FIELDS = [
   "altitude", // ft
   "speed", // knots
@@ -81,6 +83,7 @@ export const PAYLOAD_FIELDS = [
   "anomalyScore", // 0-100
   "ambientTemp", // °C
   "rul", // hours remaining
+  "injectionTiming", // ° BTDC advance
   "lat",
   "lon",
 ] as const;

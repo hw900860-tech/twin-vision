@@ -280,6 +280,13 @@ function UAVGLB() {
         detail="EGT IMBALANCE · CHECK FLOW"
         color="#f0a63c"
       />
+      <FaultHighlight
+        active={faults.misfire3}
+        position={[-0.75, 0.2, 3.4]}
+        label="CYL 3 MISFIRE"
+        detail="KNOCK · EGT3 DROP · ROUGH RPM"
+        color="#f0a63c"
+      />
     </group>
   );
 }

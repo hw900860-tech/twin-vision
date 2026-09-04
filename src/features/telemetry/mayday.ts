@@ -82,6 +82,7 @@ export function evaluateMayday(sample: MaydaySample): MaydayCause[] {
     turboFail: { label: "TURBOCHARGER FAILURE ACTIVE", detail: "Turbo/wastegate fault latched — boost compensation lost at altitude." },
     bearingFail: { label: "BEARING SPALL FAULT ACTIVE", detail: "Drivetrain bearing fault latched — BPFO vibration signature present." },
     injectorClog: { label: "INJECTOR CLOG FAULT ACTIVE", detail: "Fuel-injector restriction latched — EGT runner imbalance present." },
+    misfire3: { label: "CYLINDER 3 MISFIRE ACTIVE", detail: "Combustion failure on cylinder 3 latched — knock vibration and EGT3 collapse present." },
   };
 
   (Object.entries(sample.faults ?? {}) as [keyof FaultFlags, boolean][]).forEach(([key, engaged]) => {
