@@ -1,9 +1,13 @@
 /**
  * JARVIS Reasoning & Action Engine.
- * Dual-core architecture:
- * 1. Immediate local pre-navigation & flight command dispatcher for instantaneous (0ms) execution.
- * 2. Primary Google Gemini (gemini-3.1-flash-lite) LLM for rich, natural, conversational chatbot intelligence.
- * 3. Guided mission demo, RTB, CAN telemetry faults, and graceful local fallback.
+ * Tailored for Smart India Hackathon (SIH 2026) Problem Statement 26054 (DRDO / iDEX):
+ * "AI-Enabled Real-Time Digital Twin System for Health Monitoring, Fault Prediction and Mission Reliability Enhancement of Aero Piston Engines used in MALE UAVs."
+ *
+ * Architecture:
+ * 1. Immediate 0ms local navigation & flight command dispatcher.
+ * 2. Instantaneous live telemetry facts engine (altitude, airspeed, position/biome, health, RUL, CHT, oil, PS 26054).
+ * 3. Primary Google Gemini (gemini-3.1-flash-lite) LLM for rich, natural conversational chatbot intelligence.
+ * 4. Resilient local fallback ensuring specific, exact data is ALWAYS returned.
  */
 
 import { JARVIS_CONFIG } from "./jarvisConfig";
@@ -88,7 +92,7 @@ export interface DetectedNavigation {
 
 /**
  * Instant local parser for navigation and UI commands.
- * Identifies explicit commands and runs them in 0ms.
+ * Identifies explicit commands and executes them in 0ms.
  */
 export function detectNavigationFromQuery(query: string): DetectedNavigation | null {
   const q = query.toLowerCase().trim();
@@ -605,10 +609,285 @@ export function executeActions(rawActions: any[]): string[] {
 }
 
 /**
+ * Deterministic, instant live telemetry and SIH PS 26054 solver.
+ * Delivers exact flight numbers, positioning, and problem statement domain mastery in <1ms.
+ */
+export function tryGenerateTelemetryAndDomainAnswer(
+  query: string,
+  s: SystemSnapshot
+): { spokenText: string; displayText: string; intent?: any; actions?: any[] } | null {
+  const q = query.toLowerCase().trim();
+
+  // 1. ALTITUDE / ELEVATION
+  if (
+    q.includes("altitude") ||
+    q.includes("how high") ||
+    q.includes("height") ||
+    q.includes("elevation") ||
+    q.includes("ceiling") ||
+    (q.includes("alt") && (q.includes("what") || q.includes("current") || q.includes("is")))
+  ) {
+    const alt = s.flight.altitude_ft;
+    const targetAlt = s.flight.targetAltitude_ft;
+    const densityRatio = s.environment.densityRatio;
+    return {
+      spokenText: `The aircraft is currently maintaining an altitude of ${alt.toLocaleString()} feet MSL at ${s.flight.airspeed_knots} knots, Commander.`,
+      displayText: `### ✈️ CURRENT FLIGHT ALTITUDE & VERTICAL PROFILE
+
+- **Current Altitude**: **${alt.toLocaleString()} FT MSL**
+- **Target / Assigned Altitude**: **${targetAlt.toLocaleString()} FT**
+- **Calibrated Airspeed**: **${s.flight.airspeed_knots} Knots**
+- **Density Altitude Ratio**: **${(densityRatio * 100).toFixed(1)}%** (${alt > 18000 ? "High altitude thin-air regime" : "Nominal air density"})
+- **Rotax 914 Service Ceiling**: 28,000 FT MSL (Turbine boost active)
+- **Cooling Convection Margin**: ${densityRatio < 0.7 ? "Reduced mass flow cooling on cylinder head 2" : "Adequate mass flow cooling"}`,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
+  // 2. LOCATION / WHERE ARE WE / FLYING REGION / BIOME
+  if (
+    q.includes("where are we") ||
+    q.includes("where we are") ||
+    q.includes("where am i") ||
+    q.includes("our location") ||
+    q.includes("current location") ||
+    q.includes("what region") ||
+    q.includes("what biome") ||
+    q.includes("where flying") ||
+    q.includes("flying where") ||
+    q.includes("coordinates") ||
+    q.includes("position")
+  ) {
+    const biome = s.environment.biome || "himalaya";
+    const biomeFormatted = biome.charAt(0).toUpperCase() + biome.slice(1);
+    const stationMap: Record<string, { code: string; name: string; coord: string; desc: string }> = {
+      himalaya: { code: "VIH", name: "Leh (Kushok Bakula Rimpoche)", coord: "34.1359° N, 77.5465° E", desc: "High-altitude cold mountain pass with thin atmosphere" },
+      desert: { code: "VIJR", name: "Jaisalmer Air Base", coord: "26.8887° N, 70.8653° E", desc: "Extreme hot-arid desert biome with thermal updrafts and dust exposure" },
+      coastal: { code: "VOGO", name: "Dabolim Naval Air Station", coord: "15.3808° N, 73.8314° E", desc: "Humid maritime coastal corridor with salt-spray atmospheric boundary" },
+      plains: { code: "VISR", name: "Srinagar Air Force Station", coord: "33.9871° N, 74.7741° E", desc: "Sub-alpine valley basin with variable barometric density" },
+    };
+    const activeStation = stationMap[biome] || stationMap.himalaya;
+
+    return {
+      spokenText: `We are currently operating in the ${biomeFormatted} defense theater over ${activeStation.name}, cruising at ${s.flight.altitude_ft.toLocaleString()} feet, heading ${s.flight.heading_deg} degrees North.`,
+      displayText: `### 📍 ACTIVE OPERATIONAL DISPOSITION & FLIGHT THEATER
+
+- **Current Location / Waypoint**: **${activeStation.name}** (\`${activeStation.code}\`)
+- **Coordinates**: **${activeStation.coord}**
+- **Operating Biome**: **${biomeFormatted} Corridor** (${activeStation.desc})
+- **Flight Altitude**: **${s.flight.altitude_ft.toLocaleString()} FT MSL** (Airspeed: **${s.flight.airspeed_knots} KT**)
+- **Magnetic Heading**: **${s.flight.heading_deg}°** (Pitch: ${s.flight.pitch_deg}°, Roll: ${s.flight.roll_deg}°)
+- **Ambient Conditions**: OAT **${s.environment.ambientTemperature_C}°C** | Density Ratio **${(s.environment.densityRatio * 100).toFixed(1)}%**
+- **Datalink Status**: Synchronized 20Hz SocketCAN stream`,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
+  // 3. AIRSPEED / SPEED / HOW FAST
+  if (
+    q.includes("airspeed") ||
+    q.includes("how fast") ||
+    q.includes("speed") ||
+    q.includes("velocity") ||
+    q.includes("knots")
+  ) {
+    const tas = Math.round(s.flight.airspeed_knots / Math.sqrt(Math.max(0.2, s.environment.densityRatio)));
+    return {
+      spokenText: `Current calibrated airspeed is ${s.flight.airspeed_knots} knots at ${s.flight.altitude_ft.toLocaleString()} feet MSL, with true airspeed estimated at ${tas} knots.`,
+      displayText: `### ⚡ AIRCRAFT SPEED & AERODYNAMIC METRICS
+
+- **Calibrated Airspeed (CAS)**: **${s.flight.airspeed_knots} Knots**
+- **True Airspeed (TAS)**: ~**${tas} Knots** (corrected for altitude density ratio ${(s.environment.densityRatio * 100).toFixed(1)}%)
+- **Engine Operating Speed**: **${s.telemetry.rpm.toLocaleString()} RPM** (Throttle: **${s.telemetry.throttle_pct}%**)
+- **Operational Band**: Safe cruise envelope (Stall: 45 KT | V_ne: 160 KT)`,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
+  // 4. HEADING / COMPASS / DIRECTION
+  if (q.includes("heading") || q.includes("direction") || q.includes("which way") || q.includes("compass")) {
+    return {
+      spokenText: `Aircraft heading is currently ${s.flight.heading_deg} degrees Magnetic North.`,
+      displayText: `### 🧭 AIRCRAFT HEADING & ATTITUDE VECTOR
+
+- **Magnetic Heading**: **${s.flight.heading_deg}°**
+- **Pitch Angle**: **${s.flight.pitch_deg}°** (${s.flight.pitch_deg > 0.5 ? "Climbing" : s.flight.pitch_deg < -0.5 ? "Descending" : "Level"})
+- **Roll / Bank Angle**: **${s.flight.roll_deg}°** (${Math.abs(s.flight.roll_deg) < 1.5 ? "Wings Level" : "Banking"})
+- **Assigned Altitude**: **${s.flight.targetAltitude_ft.toLocaleString()} FT**`,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
+  // 5. SMART INDIA HACKATHON PROBLEM STATEMENT 26054 (DRDO / IDEX)
+  if (
+    q.includes("problem statement") ||
+    q.includes("26054") ||
+    q.includes("sih") ||
+    q.includes("drdo") ||
+    q.includes("idex") ||
+    q.includes("male uav") ||
+    q.includes("digital twin system") ||
+    q.includes("hackathon")
+  ) {
+    return {
+      spokenText: "AERIS-TWIN is our indigenous cyber-physical Digital Twin built for DRDO Problem Statement 26054, monitoring the Rotax 914 engine for MALE UAVs.",
+      displayText: `### 🛡️ DRDO / iDEX PROBLEM STATEMENT 26054: AERIS-TWIN OVERVIEW
+
+**Problem Statement ID**: \`26054\`  
+**Organization**: **Defence Research and Development Organisation (DRDO)** / Department of Defence Production (iDEX)  
+**Title**: *AI-Enabled Real-Time Digital Twin System for Health Monitoring, Fault Prediction and Mission Reliability Enhancement of Aero Piston Engines used in MALE UAVs.*
+
+---
+
+#### ✈️ Operational Defense Context
+- **Airframe**: DRDO **TAPAS BH-201** (Rustom-II) MALE UAV (operating weight 2,200 kg, 24–30 hr endurance).
+- **Powerplant**: **Rotax 914 F/UL (AE-P4)** — 4-cylinder, 4-stroke boxer, turbocharged, 115 HP aero piston engine.
+- **The Core Problem**: Conventional UAV monitoring is threshold-based and reactive (alarms only trigger after catastrophic failure). At 28,000+ FT in thin air, engine degradation leads to mission aborts and UAV asset loss.
+
+---
+
+#### 🚀 AERIS-TWIN Core Architectural Deliverables (A to F):
+1. **A. Digital Twin Core Framework**:
+   - Continuous **20Hz telemetry synchronization** via simulated SocketCAN bus (\`vcan0\`) with CAN hardware gateway.
+   - Interactive 3D Digital Twin with exploded component view and component inspection breakdown.
+2. **B. Subsystem Health Monitoring**:
+   - 12-sensor live telemetry grid: RPM, CHT (Cylinders 1–4), EGT, Oil Pressure & Temperature, MAP/Boost, Vibration RMS, and 140Hz BPFO bearing harmonics.
+3. **C. Intelligent Fault Prediction**:
+   - Shifts from reactive thresholds to early causal prediction:
+     * **C2 Overheat**: CHT2 thermal excursion detection caused by rear nacelle cowl airflow shadowing.
+     * **Bearing Fatigue**: 140Hz BPFO harmonic micro-spalling in vibration spectrum.
+     * **Turbo Boost Shortfall**: Electronic wastegate TCU boost collapse at high density altitudes.
+     * **Injector Clogging**: EGT runner thermal imbalance spread (>40°C).
+4. **D. AI/ML Analytics Layer**:
+   - **Variational Autoencoder (VAE)**: Learns multidimensional nominal flight manifolds to extract anomaly residuals.
+   - **XGBoost Classifier**: Multi-class root-cause attribution.
+   - **Weibull Hazard RUL Prognosis**: Estimates Remaining Useful Life based on cumulative thermal and vibration cycle stress.
+5. **E. Mission Simulation & Replay**:
+   - Historical blackbox flight replay with scrubbable telemetry timeline.
+   - Environmental biome simulations (Himalaya altitude cold, Thar desert heat, Coastal humidity).
+   - Autonomous Return-to-Base (RTB) flight commands and guided mission demo.
+6. **F. Visualization Dashboard (GCS)**:
+   - Defense-grade tactical Ground Control Station with 10 mission panels, 3D exploded twin, and automated per-sortie health report cards.`,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
+  // 6. ENGINE HEALTH / RUL / DEGRADATION
+  if (
+    q.includes("health") ||
+    q.includes("rul") ||
+    q.includes("useful life") ||
+    q.includes("lifetime") ||
+    q.includes("hours left") ||
+    q.includes("overhaul") ||
+    q.includes("tbo") ||
+    q.includes("why is health") ||
+    q.includes("why is the engine health")
+  ) {
+    const health = s.telemetry.healthIndex_pct;
+    const rul = s.telemetry.rul_hours;
+    const isC2Hot = s.telemetry.cht_C[1] > 180 || s.faults.c2Overheat;
+    const isBearingBad = s.faults.bearingFail || s.telemetry.vibrationRMS_G > 1.2;
+    const isTurboBad = s.faults.turboFail;
+    const isInjectorBad = s.faults.injectorClog;
+
+    let primaryCause = "Nominal mechanical wear along standard Weibull baseline.";
+    if (isC2Hot) {
+      primaryCause = `Cylinder 2 CHT thermal excursion (${s.telemetry.cht_C[1]}°C) exceeding safe cooling bounds due to rear nacelle airflow shadowing.`;
+    } else if (isBearingBad) {
+      primaryCause = `Elevated structural vibration (${s.telemetry.vibrationRMS_G} G) indicating 140Hz outer-race bearing fatigue.`;
+    } else if (isTurboBad) {
+      primaryCause = `Turbocharger TCU boost shortfall (${s.telemetry.manifoldAirPressure_kPa} kPa) causing high thermal load and power loss.`;
+    } else if (isInjectorBad) {
+      primaryCause = `Injector spray pattern imbalance across cylinder runners creating combustion asymmetry.`;
+    }
+
+    return {
+      spokenText: `Engine composite health index is currently at ${health} percent with ${rul.toFixed(0)} operating hours remaining useful life, Commander. ${primaryCause}`,
+      displayText: `### 🩺 ROTAX 914 COMPOSITE HEALTH & RUL PROGNOSIS
+
+- **Composite Health Index**: **${health}%** (Status: ${health > 80 ? "NOMINAL" : health > 50 ? "DEGRADED / MONITOR" : "CRITICAL"})
+- **Remaining Useful Life (RUL)**: **${rul.toFixed(1)} Operational Hours** (TBO: 1,200 Total Hours)
+- **ML Anomaly Score**: **${s.mlIntelligence.anomalyScore}** (${s.mlIntelligence.overallStatus})
+- **Primary Diagnostic Finding**: ${primaryCause}
+
+#### Sensor Parameter Matrix:
+- **Cylinder Head Temp (CHT)**: C1: ${s.telemetry.cht_C[0]}°C | **C2: ${s.telemetry.cht_C[1]}°C** | C3: ${s.telemetry.cht_C[2]}°C | C4: ${s.telemetry.cht_C[3]}°C
+- **Vibration RMS**: **${s.telemetry.vibrationRMS_G} G** (Dominant harmonic: 140 Hz BPFO)
+- **Oil System**: **${s.telemetry.oilPressure_bar} bar** / **${s.telemetry.oilTemp_C}°C**
+- **Manifold Air Pressure (MAP)**: **${s.telemetry.manifoldAirPressure_kPa} kPa**`,
+      intent: "ANALYSIS",
+      actions: [],
+    };
+  }
+
+  // 7. OIL PRESSURE & TEMPERATURE
+  if (q.includes("oil") || q.includes("lubric") || (q.includes("pressure") && !q.includes("manifold"))) {
+    const press = s.telemetry.oilPressure_bar;
+    const temp = s.telemetry.oilTemp_C;
+    const isNominal = press >= 3.0 && press <= 5.5 && temp <= 110;
+    return {
+      spokenText: `Oil pressure is reading ${press.toFixed(2)} bar with oil temperature at ${temp.toFixed(1)} degrees Celsius, rated ${isNominal ? "nominal" : "elevated"}.`,
+      displayText: `### 🛢️ LUBRICATION & OIL SYSTEM TELEMETRY
+
+- **Oil Pressure**: **${press.toFixed(2)} bar** (Nominal Operating Band: 3.5 – 5.5 bar | Warning: <3.0 bar)
+- **Oil Temperature**: **${temp.toFixed(1)}°C** (Nominal: 80 – 100°C | Warning: >110°C)
+- **Viscosity Shear Status**: ${temp > 105 ? "Thermal thinning risk detected" : "Hydrodynamic boundary layer stable"}
+- **Assessment**: ${isNominal ? "Nominal operating margins" : "Approaching caution threshold"}`,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
+  // 8. CHT / CYLINDER HEAD TEMPERATURE
+  if (q.includes("cht") || q.includes("cylinder") || (q.includes("temp") && !q.includes("oil"))) {
+    const cht = s.telemetry.cht_C;
+    const maxCht = Math.max(...cht);
+    return {
+      spokenText: `Cylinder head temperatures are peaking at ${maxCht.toFixed(1)} degrees Celsius on Cylinder 2 due to rear airflow shadowing.`,
+      displayText: `### 🌡️ CYLINDER HEAD TEMPERATURE (CHT) MATRIX
+
+- **Max Cylinder Temp**: **${maxCht.toFixed(1)}°C**
+- **Per-Cylinder Distribution**:
+  * **Cylinder 1**: ${cht[0].toFixed(1)}°C
+  * **Cylinder 2**: **${cht[1].toFixed(1)}°C** ${cht[1] > 175 ? "⚠️ [Elevated Thermal Stress]" : "✓"}
+  * **Cylinder 3**: ${cht[2].toFixed(1)}°C
+  * **Cylinder 4**: ${cht[3].toFixed(1)}°C
+- **Operating Limits**: Normal 140–170°C | Caution >180°C | Critical >220°C`,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
+  // 9. VIBRATION / BEARING / HARMONICS
+  if (q.includes("vibrat") || q.includes("bearing") || q.includes("harmonic") || q.includes("bpfo")) {
+    const vib = s.telemetry.vibrationRMS_G;
+    return {
+      spokenText: `Vibration RMS is reading ${vib.toFixed(2)} G. Spectral analysis tracks a 140 Hz peak corresponding to outer-race bearing harmonics.`,
+      displayText: `### 📊 VIBRATION & BEARING SPECTRAL ANALYSIS
+
+- **Vibration RMS**: **${vib.toFixed(2)} G** (Nominal: 0.3 – 0.8 G | Caution: >1.2 G)
+- **Spectral Feature**: **140 Hz Peak** (BPFO — Ball Pass Frequency Outer Race)
+- **Mechanical Classification**: ${vib > 1.2 ? "Bearing outer-race micro-spalling detected" : "Dynamic balance within aerospace flight limits"}`,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
+  return null;
+}
+
+/**
  * Main query execution entry point.
  * 1. Executes navigation & UI commands immediately in 0ms.
- * 2. Queries Gemini (gemini-3.1-flash-lite) for natural conversational chatbot intelligence.
- * 3. Falls back gracefully to rich local intelligence if offline.
+ * 2. Resolves specific flight & telemetry queries instantly in <1ms.
+ * 3. Queries Gemini (gemini-3.1-flash-lite) for natural conversational chatbot intelligence.
+ * 4. Falls back gracefully to rich local intelligence if offline.
  */
 export async function executeJarvisQuery(
   query: string,
@@ -623,7 +902,18 @@ export async function executeJarvisQuery(
     preActions = executeActions(preNav.actions);
   }
 
-  // 2. QUERY GEMINI (gemini-3.1-flash-lite) FOR NATURAL CONVERSATIONAL INTELLIGENCE
+  // 2. FAST-PATH: If this is a specific flight telemetry or SIH PS 26054 inquiry, answer instantly in <1ms
+  const instantAnswer = tryGenerateTelemetryAndDomainAnswer(query, snapshot);
+  if (instantAnswer) {
+    return {
+      spokenText: instantAnswer.spokenText,
+      displayText: instantAnswer.displayText,
+      intent: instantAnswer.intent || (preNav ? preNav.intent : "QUESTION"),
+      actionsExecuted: preActions,
+    };
+  }
+
+  // 3. QUERY GEMINI (gemini-3.1-flash-lite) FOR NATURAL CONVERSATIONAL INTELLIGENCE
   const apiKey = JARVIS_CONFIG.apiKey;
   let parsed: any = null;
 
@@ -651,13 +941,17 @@ export async function executeJarvisQuery(
                 text: `CURRENT FLIGHT SNAPSHOT:\n${JSON.stringify({
                   route: snapshot.screen.route,
                   gcsTab: snapshot.screen.gcsTab,
-                  altitude: `${Math.round(snapshot.flight.altitude_ft)} FT`,
-                  airspeed: `${Math.round(snapshot.flight.airspeed_knots)} KT`,
-                  health: `${snapshot.telemetry.healthIndex_pct}%`,
-                  rpm: Math.round(snapshot.telemetry.rpm),
-                  chtMax: `${snapshot.telemetry.chtMax_C}°C`,
-                  oilPress: `${snapshot.telemetry.oilPressure_bar} bar`,
-                  vib: `${snapshot.telemetry.vibrationRMS_G} G`,
+                  altitude_ft: snapshot.flight.altitude_ft,
+                  airspeed_knots: snapshot.flight.airspeed_knots,
+                  heading_deg: snapshot.flight.heading_deg,
+                  biome: snapshot.environment.biome,
+                  oat_C: snapshot.environment.ambientTemperature_C,
+                  health_pct: snapshot.telemetry.healthIndex_pct,
+                  rpm: snapshot.telemetry.rpm,
+                  chtMax_C: snapshot.telemetry.chtMax_C,
+                  oilPress_bar: snapshot.telemetry.oilPressure_bar,
+                  vib_G: snapshot.telemetry.vibrationRMS_G,
+                  rul_hours: snapshot.telemetry.rul_hours,
                   faults: Object.keys(snapshot.faults).filter((k) => (snapshot.faults as any)[k]),
                 })}\n\nUSER INQUIRY / COMMAND:\n"${query}"`,
               },
@@ -698,7 +992,7 @@ export async function executeJarvisQuery(
     }
   }
 
-  // 3. IF GEMINI SUCCEEDED:
+  // 4. IF GEMINI SUCCEEDED:
   if (parsed) {
     const rawActions = Array.isArray(parsed.actions) ? parsed.actions : [];
     const postActions = executeActions(rawActions);
@@ -712,7 +1006,7 @@ export async function executeJarvisQuery(
     };
   }
 
-  // 4. FALLBACK IF OFFLINE:
+  // 5. FALLBACK IF OFFLINE:
   if (preNav) {
     return {
       spokenText: preNav.spokenText,
@@ -740,8 +1034,14 @@ function generateLocalIntelligenceResponse(
 ) {
   const q = query.toLowerCase().trim();
 
+  // Try the specific telemetry & domain solver first
+  const specificAnswer = tryGenerateTelemetryAndDomainAnswer(query, s);
+  if (specificAnswer) {
+    return specificAnswer;
+  }
+
   // All pages / navigation directory
-  if (q.includes("page") || q.includes("where can i go") || q.includes("tabs")) {
+  if (q.includes("page") || q.includes("where can i go") || q.includes("tabs") || q.includes("directory")) {
     return {
       spokenText: "I can navigate to any view across AERIS-TWIN, including all ten Ground Control panels, the 3D Flight Simulator, and the digital twin landing overview. Where would you like to go?",
       displayText: `### 🧭 AERIS-TWIN NAVIGATION DIRECTORY
@@ -781,14 +1081,15 @@ You can command me to navigate to any of the following views:
       spokenText: "Good day, Commander! All telemetry channels are connected, and I am standing by. How can I assist you today?",
       displayText: `### J.A.R.V.I.S. ONLINE // TACTICAL COPILOT
 
-Hello! I am **J.A.R.V.I.S.** (Joint Aerospace Real-time Virtual Intelligence System), your AI copilot for the AERIS-TWIN platform.
+Hello! I am **J.A.R.V.I.S.** (Joint Aerospace Real-time Virtual Intelligence System), your AI copilot for the AERIS-TWIN platform (SIH Problem Statement 26054 / DRDO).
 
 I can assist you with:
-- **Universal Navigation**: Command me to open any tab (e.g. *Sensor Matrix*, *Diagnostics*, *Simulation Lab*, *Fleet*, *Reports*) or fly in the *3D Flight Simulator*.
+- **Universal Navigation**: Command me to open any tab (*Sensor Matrix*, *Diagnostics*, *Simulation Lab*, *Fleet*, *Reports*) or fly in the *3D Flight Simulator*.
+- **Live Flight Metrics**: Ask *"What is the altitude?"*, *"Where are we?"*, or *"How fast are we flying?"*
 - **Live Engine Intelligence**: Ask about composite health, Remaining Useful Life (RUL), cylinder temperatures, or vibration harmonics.
 - **Causal Fault Diagnosis**: Ask *"Why is the health dropping?"* or *"Is the oil pressure nominal?"*
 - **3D Digital Twin Interaction**: Command me to *"Explode the engine"*, *"Inspect the cylinder head"*, or *"Assemble the twin"*.
-- **General & Aerospace Theory**: Feel free to ask general questions about aviation, science, or technology!`,
+- **SIH PS 26054 Domain Mastery**: Ask about the DRDO MALE UAV digital twin architecture!`,
       intent: "QUESTION" as const,
       actions: [],
     };
@@ -796,16 +1097,15 @@ I can assist you with:
 
   // General fallback
   return {
-    spokenText: `All systems are nominal with engine health at ${s.telemetry.healthIndex_pct} percent, Commander. How can I assist you with the aircraft or general flight operations?`,
-    displayText: `### J.A.R.V.I.S. COPILOT ONLINE
+    spokenText: `Aircraft is cruising at ${s.flight.altitude_ft.toLocaleString()} feet MSL and ${s.flight.airspeed_knots} knots with engine health at ${s.telemetry.healthIndex_pct} percent, Commander.`,
+    displayText: `### J.A.R.V.I.S. COPILOT ONLINE // TELEMETRY CORRELATION
 
-I am standing by and monitoring the Rotax 914 AE-P4 digital twin.
+- **Current Altitude / Airspeed**: **${s.flight.altitude_ft.toLocaleString()} FT MSL** | **${s.flight.airspeed_knots} KT** (Heading: **${s.flight.heading_deg}°**)
+- **Active Operational Biome**: **${s.environment.biome.toUpperCase()} Corridor** (OAT: **${s.environment.ambientTemperature_C}°C**)
+- **Composite Engine Health**: **${s.telemetry.healthIndex_pct}%** (RUL: **${s.telemetry.rul_hours.toFixed(0)} Hours**)
+- **Rotax 914 Operating State**: **${s.telemetry.rpm.toLocaleString()} RPM** | CHT Max **${s.telemetry.chtMax_C}°C** | Oil **${s.telemetry.oilPressure_bar} bar**
 
-- **Current Engine Health**: **${s.telemetry.healthIndex_pct}%**
-- **Altitude / Speed**: **${Math.round(s.flight.altitude_ft)} FT** | **${Math.round(s.flight.airspeed_knots)} KT**
-- **Active Tab**: \`${s.screen.gcsTab}\` on \`${s.screen.route}\`
-
-You can command me to navigate to any panel (*"open Sensor matrix"*, *"go to fleet"*, *"open flight simulator"*, *"go to homepage"*, *"explore the parts"*), or ask any question about the engine, flight physics, or general topics!`,
+You can ask me specific questions regarding our altitude, location, problem statement 26054, engine health, or command navigation across any panel!`,
     intent: "QUESTION" as const,
     actions: [],
   };

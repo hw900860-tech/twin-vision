@@ -110,6 +110,7 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
   setWakeWordEnabled: (enabled) => {
     set({ wakeWordEnabled: enabled });
     if (enabled) {
+      set({ isWakeWordActive: false });
       get().initWakeWord();
     } else {
       jarvisWakeWord.stop();
@@ -131,7 +132,7 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
       set({ isOpen: true });
 
       if (spokenCommand && spokenCommand.trim().length > 2) {
-        // User said command along with wake-word: e.g. "Jarvis open Sensor matrix"
+        // User said command along with wake-word: e.g. "Jarvis what is our altitude"
         get().submitQuery(spokenCommand.trim());
       } else {
         // User just summoned: "Jarvis!"
@@ -188,39 +189,55 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
     jarvisSpeaker.stop();
     set({ isSpeaking: false, isListening: true });
 
-    jarvisRecognizer.start({
-      onStart: () => {
-        set({ isListening: true });
-      },
-      onResult: (transcript, isFinal) => {
-        set({ transcriptInput: transcript });
-        if (isFinal && transcript.trim().length > 1) {
-          jarvisRecognizer.stop();
+    // 120ms safety margin ensures Chromium's native microphone pipe is released cleanly
+    setTimeout(() => {
+      if (!get().isListening) return;
+
+      jarvisRecognizer.start({
+        onStart: () => {
+          set({ isListening: true });
+        },
+        onResult: (transcript, isFinal) => {
+          set({ transcriptInput: transcript });
+          if (isFinal && transcript.trim().length > 1) {
+            jarvisRecognizer.stop();
+            set({ isListening: false });
+            submitQuery(transcript.trim());
+          }
+        },
+        onError: () => {
           set({ isListening: false });
-          submitQuery(transcript.trim());
-        }
-      },
-      onError: (err) => {
-        console.warn("Speech recognition error:", err);
-        set({ isListening: false });
-        if (get().wakeWordEnabled) {
-          jarvisWakeWord.resume();
-        }
-      },
-      onEnd: () => {
-        set({ isListening: false });
-        if (get().wakeWordEnabled) {
-          jarvisWakeWord.resume();
-        }
-      },
-    });
+          if (get().wakeWordEnabled) {
+            setTimeout(() => {
+              if (!get().isListening && !get().isSpeaking && get().wakeWordEnabled) {
+                jarvisWakeWord.resume();
+              }
+            }, 180);
+          }
+        },
+        onEnd: () => {
+          set({ isListening: false });
+          if (get().wakeWordEnabled) {
+            setTimeout(() => {
+              if (!get().isListening && !get().isSpeaking && get().wakeWordEnabled) {
+                jarvisWakeWord.resume();
+              }
+            }, 180);
+          }
+        },
+      });
+    }, 120);
   },
 
   stopListening: () => {
     jarvisRecognizer.stop();
     set({ isListening: false });
     if (get().wakeWordEnabled) {
-      jarvisWakeWord.resume();
+      setTimeout(() => {
+        if (!get().isListening && !get().isSpeaking && get().wakeWordEnabled) {
+          jarvisWakeWord.resume();
+        }
+      }, 150);
     }
   },
 
@@ -228,7 +245,11 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
     jarvisSpeaker.stop();
     set({ isSpeaking: false });
     if (get().wakeWordEnabled) {
-      jarvisWakeWord.resume();
+      setTimeout(() => {
+        if (!get().isListening && !get().isSpeaking && get().wakeWordEnabled) {
+          jarvisWakeWord.resume();
+        }
+      }, 150);
     }
   },
 
@@ -301,12 +322,21 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
           },
           onEnd: () => {
             set({ isSpeaking: false });
-            // Add a 600ms room-silence buffer before resuming wake word to prevent self-triggering
-            setTimeout(() => {
-              if (get().wakeWordEnabled && !get().isSpeaking && !get().isListening) {
-                jarvisWakeWord.resume();
-              }
-            }, 600);
+            // Seamless continuous conversation:
+            // If the operator has the HUD open, arm listening so they can speak continuous follow-ups naturally!
+            if (get().isOpen && get().voiceEnabled) {
+              setTimeout(() => {
+                if (!get().isSpeaking && !get().isListening && !get().isThinking && get().isOpen) {
+                  get().startListening();
+                }
+              }, 450);
+            } else if (get().wakeWordEnabled) {
+              setTimeout(() => {
+                if (get().wakeWordEnabled && !get().isSpeaking && !get().isListening) {
+                  jarvisWakeWord.resume();
+                }
+              }, 450);
+            }
           },
           onError: () => {
             set({ isSpeaking: false });
@@ -314,13 +344,17 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
               if (get().wakeWordEnabled && !get().isSpeaking && !get().isListening) {
                 jarvisWakeWord.resume();
               }
-            }, 600);
+            }, 450);
           },
         });
       } else {
         set({ isSpeaking: false });
         if (get().wakeWordEnabled && !get().isListening) {
-          jarvisWakeWord.resume();
+          setTimeout(() => {
+            if (get().wakeWordEnabled && !get().isSpeaking && !get().isListening) {
+              jarvisWakeWord.resume();
+            }
+          }, 300);
         }
       }
     } catch (err: any) {
