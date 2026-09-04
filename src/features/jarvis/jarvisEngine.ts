@@ -661,13 +661,14 @@ export function tryGenerateTelemetryAndDomainAnswer(
   ) {
     const biome = s.environment.biome || "himalaya";
     const biomeFormatted = biome.charAt(0).toUpperCase() + biome.slice(1);
+    const defaultStation: { code: string; name: string; coord: string; desc: string } = { code: "VIH", name: "Leh (Kushok Bakula Rimpoche)", coord: "34.1359° N, 77.5465° E", desc: "High-altitude cold mountain pass with thin atmosphere" };
     const stationMap: Record<string, { code: string; name: string; coord: string; desc: string }> = {
-      himalaya: { code: "VIH", name: "Leh (Kushok Bakula Rimpoche)", coord: "34.1359° N, 77.5465° E", desc: "High-altitude cold mountain pass with thin atmosphere" },
+      himalaya: defaultStation,
       desert: { code: "VIJR", name: "Jaisalmer Air Base", coord: "26.8887° N, 70.8653° E", desc: "Extreme hot-arid desert biome with thermal updrafts and dust exposure" },
       coastal: { code: "VOGO", name: "Dabolim Naval Air Station", coord: "15.3808° N, 73.8314° E", desc: "Humid maritime coastal corridor with salt-spray atmospheric boundary" },
       plains: { code: "VISR", name: "Srinagar Air Force Station", coord: "33.9871° N, 74.7741° E", desc: "Sub-alpine valley basin with variable barometric density" },
     };
-    const activeStation = stationMap[biome] || stationMap.himalaya;
+    const activeStation = stationMap[biome] ?? defaultStation;
 
     return {
       spokenText: `We are currently operating in the ${biomeFormatted} defense theater over ${activeStation.name}, cruising at ${s.flight.altitude_ft.toLocaleString()} feet, heading ${s.flight.heading_deg} degrees North.`,
