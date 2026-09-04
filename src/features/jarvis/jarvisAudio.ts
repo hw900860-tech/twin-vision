@@ -164,9 +164,36 @@ export class JarvisSpeechRecognizer {
 // --- Text to Speech (TTS) ---
 export class JarvisSpeechSynthesizer {
   private currentUtterance: SpeechSynthesisUtterance | null = null;
+  private cachedVoice: SpeechSynthesisVoice | null = null;
+
+  constructor() {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        this.resolveVoice();
+      };
+    }
+  }
 
   isSupported(): boolean {
     return typeof window !== "undefined" && "speechSynthesis" in window;
+  }
+
+  private resolveVoice(): SpeechSynthesisVoice | null {
+    if (this.cachedVoice) return this.cachedVoice;
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return null;
+
+    this.cachedVoice =
+      voices.find((v) => v.lang.startsWith("en-GB") && v.name.includes("Male")) ||
+      voices.find((v) => v.name.includes("Natural") && v.lang.startsWith("en")) ||
+      voices.find((v) => v.name.includes("Google UK English Male")) ||
+      voices.find((v) => v.lang.startsWith("en") && !v.name.includes("Female")) ||
+      voices.find((v) => v.lang.startsWith("en")) ||
+      null;
+
+    return this.cachedVoice;
   }
 
   speak(
@@ -185,10 +212,21 @@ export class JarvisSpeechSynthesizer {
     this.stop();
 
     // Clean markdown symbols from spoken text
-    const cleanText = text
+    let cleanText = text
       .replace(/[*_#`~[\]]/g, "")
       .replace(/https?:\/\/\S+/g, "")
+      .replace(/\n+/g, " ")
       .trim();
+
+    // Keep voice transmission punchy & fast (1-2 sentences max, <= 28 words)
+    const sentences = cleanText.split(/(?<=[.?!])\s+/);
+    if (sentences.length > 2) {
+      cleanText = sentences.slice(0, 2).join(" ");
+    }
+    const words = cleanText.split(/\s+/);
+    if (words.length > 28) {
+      cleanText = words.slice(0, 28).join(" ") + ".";
+    }
 
     if (!cleanText) {
       options?.onEnd?.();
@@ -199,15 +237,7 @@ export class JarvisSpeechSynthesizer {
     utterance.rate = JARVIS_CONFIG.speechRate;
     utterance.pitch = JARVIS_CONFIG.speechPitch;
 
-    // Try to pick a crisp, high-tech English voice
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice =
-      voices.find((v) => v.lang.startsWith("en-GB") && v.name.includes("Male")) ||
-      voices.find((v) => v.name.includes("Natural") && v.lang.startsWith("en")) ||
-      voices.find((v) => v.name.includes("Google UK English Male")) ||
-      voices.find((v) => v.lang.startsWith("en") && !v.name.includes("Female")) ||
-      voices.find((v) => v.lang.startsWith("en"));
-
+    const preferredVoice = this.resolveVoice();
     if (preferredVoice) {
       utterance.voice = preferredVoice;
     }
@@ -218,13 +248,17 @@ export class JarvisSpeechSynthesizer {
 
     utterance.onend = () => {
       this.currentUtterance = null;
-      options?.onEnd?.();
+      setTimeout(() => {
+        options?.onEnd?.();
+      }, 100);
     };
 
     utterance.onerror = (e) => {
       this.currentUtterance = null;
       options?.onError?.(e);
-      options?.onEnd?.();
+      setTimeout(() => {
+        options?.onEnd?.();
+      }, 100);
     };
 
     this.currentUtterance = utterance;
@@ -233,7 +267,9 @@ export class JarvisSpeechSynthesizer {
 
   stop() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
       this.currentUtterance = null;
     }
   }

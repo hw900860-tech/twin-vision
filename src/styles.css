@@ -3035,5 +3035,18 @@ body.studio-modal-active .aeris-nav {
   }
 }
 
+@keyframes jarvisWaveBar {
+  0%, 100% {
+    height: 3px;
+  }
+  50% {
+    height: 16px;
+  }
+}
+
+.jarvis-wave-active {
+  animation: jarvisWaveBar 0.65s infinite ease-in-out;
+}
+
 
 

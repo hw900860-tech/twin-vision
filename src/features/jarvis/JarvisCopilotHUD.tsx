@@ -306,26 +306,22 @@ export function JarvisCopilotHUD() {
           </div>
 
           {/* Audio Reactive Visualizer Ribbon */}
-          <div className="flex h-5 shrink-0 items-center justify-center gap-1 bg-[#040608] px-4 border-b border-border/40">
-            {Array.from({ length: 28 }).map((_, i) => (
+          <div className="flex h-5 shrink-0 items-center justify-center gap-1 bg-[#040608] px-4 border-b border-border/40 overflow-hidden">
+            {Array.from({ length: 24 }).map((_, i) => (
               <div
                 key={i}
-                className={`w-1 rounded-full transition-all duration-75 ${
+                className={`w-1 rounded-full ${
                   isSpeaking
-                    ? "bg-cyan"
+                    ? "bg-cyan jarvis-wave-active"
                     : isListening
-                    ? "bg-emerald-400"
+                    ? "bg-emerald-400 jarvis-wave-active"
                     : isThinking
-                    ? "bg-amber"
-                    : "bg-cyan/20"
+                    ? "bg-amber animate-pulse"
+                    : "bg-cyan/20 h-[3px]"
                 }`}
                 style={{
-                  height:
-                    isSpeaking || isListening
-                      ? `${Math.max(3, Math.sin((i + Date.now() / 150) * 0.5) * 16 + 2)}px`
-                      : isThinking
-                      ? `${Math.max(2, (Math.sin(i * 0.4 + Date.now() / 200) + 1) * 6)}px`
-                      : "3px",
+                  animationDelay: isSpeaking || isListening ? `${(i * 0.03).toFixed(2)}s` : undefined,
+                  height: !isSpeaking && !isListening && !isThinking ? "3px" : undefined,
                 }}
               />
             ))}
