@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Plane, Activity, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Plane, Activity, ShieldAlert, Zap } from "lucide-react";
+import { useJarvisStore } from "@/features/jarvis/jarvisStore";
 import { ClientOnly } from "@/components/ClientOnly";
 import { StatusDot } from "@/components/hud/primitives";
 import { MiniMap } from "@/features/flight-sim/MiniMap";
@@ -74,6 +75,15 @@ function SimPageContent() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => useJarvisStore.getState().toggleOpen()}
+            className="flex h-7 items-center gap-1.5 border border-cyan bg-cyan/15 px-2.5 text-[9px] font-mono label-xs text-cyan backdrop-blur transition-all hover:bg-cyan/25 hover:shadow-[0_0_15px_rgba(111,216,232,0.35)] cursor-pointer"
+            title="Toggle JARVIS AI Voice Copilot"
+          >
+            <Zap className="h-3 w-3 text-cyan animate-pulse" />
+            <span className="font-bold">JARVIS COPILOT</span>
+          </button>
           <LinkStatusChip detailed />
           <Link
             to="/gcs"

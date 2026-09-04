@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState, useMemo, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, LayoutGrid, Activity, Stethoscope, History, FlaskConical, Wrench, FileText, Gauge, Expand, Shrink, Tag, Plane, MapPin, PlaneTakeoff } from "lucide-react";
+import { ArrowLeft, LayoutGrid, Activity, Stethoscope, History, FlaskConical, Wrench, FileText, Gauge, Expand, Shrink, Tag, Plane, MapPin, PlaneTakeoff, Zap } from "lucide-react";
+import { useJarvisStore } from "@/features/jarvis/jarvisStore";
 import { ClientOnly } from "@/components/ClientOnly";
 import { Bar, Panel, StatusDot, useClock } from "@/components/hud/primitives";
 import { TelemetryDashboard } from "@/features/telemetry/TelemetryDashboard";
@@ -86,6 +87,23 @@ function GcsPage() {
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
 
+  // Sync state with JARVIS Copilot store
+  useEffect(() => {
+    useJarvisStore.getState().setActiveGcsTab(tab);
+    useJarvisStore.getState().setSelectedPart(selectedZone);
+    useJarvisStore.getState().setIsExploded(exploded);
+    useJarvisStore.getState().setIsStudioOpen(isStudioOpen);
+  }, [tab, selectedZone, exploded, isStudioOpen]);
+
+  useEffect(() => {
+    useJarvisStore.getState().registerHandlers({
+      gcsTab: (newTab) => setTab(newTab as NavKey),
+      explode: (exp) => setExploded(exp),
+      studio: (open) => setIsStudioOpen(open),
+      partSelect: (part) => setSelectedZone(part),
+    });
+  }, []);
+
   // Primitive selectors to trigger immediate React re-renders on every simulation frame tick
   const rpm = useFlightStore((s) => s.rpm);
   const cht = useFlightStore((s) => s.cht);
@@ -158,7 +176,16 @@ function GcsPage() {
               : "AWAITING AIRBORNE SESSION"}
           </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => useJarvisStore.getState().toggleOpen()}
+            className="flex min-h-8 items-center gap-1.5 border border-cyan bg-cyan/15 px-3 text-[11px] font-mono label-xs text-cyan backdrop-blur transition-all hover:bg-cyan/25 hover:shadow-[0_0_15px_rgba(111,216,232,0.35)] cursor-pointer"
+            title="Toggle JARVIS AI Voice Copilot"
+          >
+            <Zap className="h-3.5 w-3.5 text-cyan animate-pulse" />
+            <span className="font-bold">JARVIS COPILOT</span>
+          </button>
           <Link
             to="/sim"
             className="flex min-h-8 items-center gap-2 border border-amber/70 bg-amber/10 px-3 text-[11px] font-mono label-xs text-amber backdrop-blur transition-all hover:bg-amber/20 hover:border-amber cursor-pointer"
