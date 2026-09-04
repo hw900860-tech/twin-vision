@@ -1,6 +1,21 @@
 import { create } from "zustand";
 import { DEFAULT_RELAY_URL } from "@/lib/datalink/protocol";
 import type { LinkMode, LinkRole, WsStatus } from "@/lib/datalink/types";
+import type { DecodedRegionAlert } from "@/lib/datalink/codec";
+import { regionById, type RegionSeverity } from "@/features/flight-sim/regions";
+import type { RegionExcursion } from "./regionExcursions";
+import type { SortieRecord } from "@/lib/datalink/sortie";
+
+export interface GroundAlert {
+  id: string;
+  regionId: string;
+  name: string;
+  severity: RegionSeverity;
+  event: "ENTER" | "EXIT";
+  text: string;
+  params: { tempDeltaC: number; densityRatio: number; pressureDelta: number; turbulence: number };
+  at: number;
+}
 
 export type CmdUiStatus = "idle" | "sent" | "retrying" | "acked" | "noack";
 
@@ -47,6 +62,13 @@ export interface LinkStatsState {
   lossPct: number; // sequence-gap based loss estimate (ground)
   lastFrameAgeMs: number; // now - lastRxTxMs (ground)
 
+  // tactical region alerts received over the link (airborne → ground)
+  alerts: GroundAlert[];
+  /** Finalized region excursions: enter/exit events + engine-response series. */
+  excursions: RegionExcursion[];
+  /** Completed sorties received from the aircraft (mission recorder). */
+  sorties: SortieRecord[];
+
   // command downlink (ground → airborne)
   cmdStatus: CmdUiStatus;
   cmdRttMs: number;
@@ -58,6 +80,13 @@ export interface LinkStatsState {
   setWsStatus: (s: WsStatus) => void;
   setAirborneOnline: (v: boolean) => void;
   patch: (p: Partial<LinkStatsState>) => void;
+  pushAlert: (a: DecodedRegionAlert) => void;
+  dismissAlert: (id: string) => void;
+  clearAlerts: () => void;
+  pushExcursion: (e: RegionExcursion) => void;
+  clearExcursions: () => void;
+  pushSortie: (r: SortieRecord) => void;
+  clearSorties: () => void;
   resetRx: () => void;
   resetTx: () => void;
 }
@@ -97,12 +126,44 @@ export const useLinkStore = create<LinkStatsState>((set) => ({
   cmdRttMs: 0,
   cmdName: "",
   cmdAttempts: 0,
+  alerts: [],
+  excursions: [],
+  sorties: [],
 
   setRole: (role) => set({ role }),
   setMode: (mode) => set({ mode }),
   setWsStatus: (wsStatus) => set({ wsStatus }),
   setAirborneOnline: (airborneOnline) => set({ airborneOnline }),
   patch: (p) => set(p),
+  pushAlert: (a) =>
+    set((s) => {
+      const reg = regionById(a.regionId);
+      const ga: GroundAlert = {
+        id: `${a.regionId}-${a.txMs}`,
+        regionId: a.regionId,
+        name: reg?.name ?? a.regionId,
+        severity: a.severity,
+        event: a.event,
+        text:
+          a.event === "EXIT"
+            ? `UAV LEFT ${reg?.name ?? a.regionId} — CONDITIONS NORMALIZING`
+            : (reg?.advisory ?? `UAV ENTERED REGION ${a.regionId}`),
+        params: {
+          tempDeltaC: a.tempDeltaC,
+          densityRatio: a.densityRatio,
+          pressureDelta: a.pressureDelta,
+          turbulence: a.turbulence,
+        },
+        at: Date.now(),
+      };
+      return { alerts: [ga, ...s.alerts].slice(0, 12) };
+    }),
+  dismissAlert: (id) => set((s) => ({ alerts: s.alerts.filter((a) => a.id !== id) })),
+  clearAlerts: () => set({ alerts: [] }),
+  pushExcursion: (e) => set((s) => ({ excursions: [e, ...s.excursions].slice(0, 10) })),
+  clearExcursions: () => set({ excursions: [] }),
+  pushSortie: (r) => set((s) => ({ sorties: [r, ...s.sorties].slice(0, 8) })),
+  clearSorties: () => set({ sorties: [] }),
   resetRx: () =>
     set({
       rxFrames: 0,

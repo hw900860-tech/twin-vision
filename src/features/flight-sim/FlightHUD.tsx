@@ -1,10 +1,18 @@
 import { useFlightStore } from './flightStore';
 
+const REGION_TONE: Record<string, string> = {
+  info: '#7fb0ff',
+  caution: '#f0a63c',
+  critical: '#ff7a6b',
+};
+
 export function FlightHUD() {
   const s = useFlightStore();
   const lat = 28.6139 + s.x * 0.00001;
   const lon = 77.209 + s.z * 0.00001;
   const maxCht = Math.max(...s.cht);
+  const region = s.currentRegion;
+  const regionTone = region ? (REGION_TONE[region.severity] ?? '#7fb0ff') : null;
 
   const advisoryColor = maxCht > 220 ? 'text-[#e2523f]' : maxCht > 180 ? 'text-[#f0a63c]' : 'text-[#4fd6a6]';
   const advisoryText = s.systemMessage ?? (maxCht > 220
@@ -61,6 +69,34 @@ export function FlightHUD() {
           <span>LON: <strong className="text-foreground">{lon.toFixed(4)}°E</strong></span>
         </div>
       </div>
+
+      {/* Current atmospheric region readout (top right) */}
+      {region && (
+        <div className="absolute top-2 right-2 flex flex-col items-end gap-1 font-mono text-[8.5px]">
+          <div
+            className="border bg-panel/90 px-2.5 py-1 backdrop-blur-md rounded shadow-lg"
+            style={{ borderColor: regionTone ?? '#7fb0ff', color: regionTone ?? '#7fb0ff' }}
+          >
+            <span className="font-bold tracking-wider">◈ IN REGION — {region.name}</span>
+            <div className="mt-0.5 text-muted-foreground">
+              OAT {region.params.tempDeltaC >= 0 ? '+' : ''}{region.params.tempDeltaC.toFixed(0)}°C
+              {' · '}DENS ×{region.params.densityRatio.toFixed(2)}
+              {' · '}MAP ×{region.params.pressureDelta.toFixed(2)}
+              {' · '}TURB {region.params.turbulence.toFixed(1)}
+            </div>
+          </div>
+          <div className="border border-border/50 bg-panel/80 px-2 py-0.5 backdrop-blur-md rounded text-muted-foreground">
+            LEFT-DRAG UAV TO STEER · DRAG SCENE / RIGHT-DRAG TO LOOK · W/S THROTTLE · A/D ALTITUDE
+          </div>
+        </div>
+      )}
+      {!region && (
+        <div className="absolute top-2 right-2 font-mono text-[8px] text-muted-foreground/70">
+          <div className="border border-border/40 bg-panel/70 px-2 py-0.5 backdrop-blur-md rounded">
+            LEFT-DRAG UAV TO STEER · DRAG SCENE / RIGHT-DRAG TO LOOK · W/S THROTTLE · A/D ALTITUDE
+          </div>
+        </div>
+      )}
 
       {/* Emergency Crash Modal Alert */}
       {s.crashCoordinates && (

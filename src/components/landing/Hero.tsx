@@ -100,14 +100,19 @@ const DESKTOP_REST_SCALE = 1.15;
 const DESKTOP_MACRO_SCALE = 2.45;
 /**
  * Resting stance. With macroPose.blend === 0 the twin is perfectly axis-aligned
- * (pure side profile) while it idles — which reads as "not oriented". Blend a
- * persistent yaw/pitch into the resting pose so the engine presents a strong
- * 3/4 front view at rest (both red rocker banks readable), then rotates inside
- * that stance. Values tuned against the desktop right-frame composition: the
- * projected box ≈ 29vw × 37vh sits centred at ≈79vw / 50vh, clear of the HUD
- * cluster (band top-left) and the bottom telemetry strip.
+ * (pure front view — prop flange facing the camera) while it idles — which
+ * reads as "not oriented". Blend a persistent yaw/pitch into the resting pose
+ * so the engine rests in a FRONT 3/4 stance: the overview camera (front-right
+ * of the engine) then sees the prop flange head-on, BOTH red rocker banks
+ * (their tops read from the elevated camera) and the intake/turbo side at the
+ * right edge, then rotates inside that stance. Effective rest yaw = −24° ×
+ * blend 0.5 = −12° (was −27.5° — the old stance swung the view onto the intake
+ * side and hid the −X cylinder bank). Values tuned against the desktop
+ * right-frame composition: the projected box ≈ 27vw × 36vh sits centred at
+ * ≈72vw / 50vh, clear of the HUD cluster (band top-left) and the bottom
+ * telemetry strip.
  */
-const REST_YAW_DEG = -55;
+const REST_YAW_DEG = -24;
 const REST_PITCH_DEG = -5;
 const REST_BLEND = 0.5;
 /**

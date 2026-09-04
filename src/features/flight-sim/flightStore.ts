@@ -3,9 +3,13 @@ import { terrainHeightAt } from './terrainMath';
 import { runEngineDecisionEngine, type EngineDecisionResult, type SubsystemStatus } from '../digital-twin/engineMlService';
 import { sampleAtmosphere, type WeatherObservation } from '@/lib/domain/engine/environment';
 import { serializeTelemetryLogs } from '@/lib/flight-analysis/sessionCsv';
+import { applyWeatherToRegions, regionAtList, regionById, REGIONS_BY_BIOME, type FlightRegion, type RegionEvent, type RegionSeverity } from './regions';
+import { legThreats, planEscape, ringPenetration } from './regionPilot';
+import { pointInRegion } from './routePlanner';
+import type { SortieRecord } from '@/lib/datalink/sortie';
 
 export type Biome = 'himalaya' | 'thar' | 'coastal';
-export type MissionPreset = 'nominalRoutine' | 'highAltitudeFailure' | 'coastalRecovery';
+export type MissionPreset = 'nominalRoutine' | 'highAltitudeFailure' | 'coastalRecovery' | 'himalayaTransect' | 'tharTransect' | 'coastalTransect';
 export type EmergencyState = 'nominal' | 'forcedLanding' | 'crashed' | 'recovery';
 export type CameraMode = 'chase' | 'birdseye';
 
@@ -15,6 +19,20 @@ export interface CrashCoordinates {
   x: number;
   z: number;
   altitude: number;
+}
+
+export interface RegionAlert {
+  id: string;
+  regionId: string;
+  name: string;
+  severity: RegionSeverity;
+  event: RegionEvent;
+  text: string;
+  tempDeltaC: number;
+  densityRatio: number;
+  pressureDelta: number;
+  turbulence: number;
+  at: number;
 }
 
 export interface FaultFlags {
@@ -97,6 +115,8 @@ export interface FlightState {
   rudder: number;
   biome: Biome;
   ambientTemp: number;
+  /** Immutable biome/scenario OAT base — region & altitude deltas are applied ONCE per tick on top of this. */
+  baseAmbientTemp: number;
   rpm: number;
   cht: number[];
   egt: number;
@@ -123,6 +143,17 @@ export interface FlightState {
   dragStartX: number;
   dragStartY: number;
 
+  // Atmospheric regions (micro-weather air masses with their own engine effect).
+  // `regions` is the ACTIVE set for the current biome — its positions/params are
+  // deformed by the live OpenWeather ingestion when a station is synced.
+  regions: FlightRegion[];
+  currentRegion: FlightRegion | null;
+  regionsInside: string[];
+  regionAlerts: RegionAlert[];
+  pendingRegionAlerts: RegionAlert[];
+  /** Finished sortie records awaiting datalink transmission to the GCS. */
+  pendingSorties: SortieRecord[];
+
   // Real-Time Physics & 3D Load Field State
   airDensity: number;
   dynamicPressure: number;
@@ -146,6 +177,17 @@ export interface FlightState {
   // Layer-2 Environmental Ingestion (live weather bound to physics)
   weather: WeatherObservation | null;
 
+  // Waypoint route planner (pre-launch only — editing disabled mid-mission)
+  plannerMode: boolean;
+
+  // Region-adaptive autopilot: seek an alternate path around a zone first;
+  // if none exists, transit it under optimal (reduced-throttle) conditions.
+  evadePath: { x: number; z: number }[];
+  evadeIndex: number;
+  regionMode: 'cruise' | 'evade' | 'transit';
+  regionModeText: string | null;
+  transitEcoThrottle: number | null;
+
   setThrottle: (v: number) => void;
   setRudder: (v: number) => void;
   setTargetHeading: (h: number) => void;
@@ -168,6 +210,14 @@ export interface FlightState {
   stopReplay: () => void;
   syncLiveWeather: (obs: WeatherObservation) => void;
   clearLiveWeather: () => void;
+  clearPendingRegionAlerts: () => void;
+  queueSortie: (rec: SortieRecord) => void;
+  clearPendingSorties: () => void;
+  setPlannerMode: (on: boolean) => void;
+  addWaypoint: (x: number, z: number) => void;
+  moveWaypoint: (index: number, x: number, z: number) => void;
+  removeWaypoint: (index: number) => void;
+  resetRoute: () => void;
   tick: (dt: number) => void;
 }
 
@@ -204,8 +254,14 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
   // air-density ratio is computed from the true density altitude. When no
   // live weather is bound the legacy fixed-biome model is preserved exactly.
   const atmosphere = state.weather ? sampleAtmosphere(state.altitude, state.weather) : null;
-  const ambientTemp = atmosphere ? atmosphere.oatC : state.ambientTemp;
-  const altitudeFactor = atmosphere ? atmosphere.densityRatio : Math.exp(-state.altitude / 27000);
+  // Micro-weather region blend: temperature offset, air density and pressure
+  // deltas from the atmospheric region the UAV currently sits inside (the
+  // live-meteo-deformed set when a station is synced).
+  const region = regionAtList(state.x, state.z, state.regions);
+  // NOTE: the base is `baseAmbientTemp` (immutable) — never the previously
+  // blended `ambientTemp`, or the region offset would accumulate every tick.
+  const ambientTemp = (atmosphere ? atmosphere.oatC : state.baseAmbientTemp) + (region?.params.tempDeltaC ?? 0);
+  const altitudeFactor = (atmosphere ? atmosphere.densityRatio : Math.exp(-state.altitude / 27000)) * (region?.params.densityRatio ?? 1);
 
   // Smooth fault intensity lerping (thermal and mechanical inertia)
   const fs: FaultSmoothState = {
@@ -231,9 +287,12 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
   let rpm = biomeConfig.baseRPM + thr * 1600 * (0.86 + 0.14 * altitudeFactor);
   rpm += noise(t, 3) * 15;
 
-  // MAP — barometric pressure equation, drops with altitude, turbo compensates
+  // MAP — barometric pressure equation, drops with altitude, turbo compensates.
+  // A low-pressure trough region multiplies the manifold pressure down, forcing
+  // the turbocharger to spool harder (EGT/CHT rise) exactly like a real trough.
   let map = 18 + thr * 14 * altitudeFactor;
   map *= (1 - fs.turboFail * 0.42);
+  map *= region?.params.pressureDelta ?? 1;
 
   // CHT per cylinder — rises with throttle, ambient temp; drops with air density cooling at altitude
   const chtBase = 96 + thr * 96 + ambientTemp * 0.72 - altitudeFactor * 12;
@@ -253,9 +312,11 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
   const oilTemp = 68 + thr * 34 + ambientTemp * 0.5 + fs.c2Overheat * 18;
   const oilPressure = Math.max(1.6, Math.min(6.2, 5.6 - (oilTemp - 90) * 0.012 - fs.c2Overheat * 0.4));
 
-  // Vibration — rises with throttle, spikes smoothly with bearing fault
+  // Vibration — rises with throttle, spikes smoothly with bearing fault;
+  // turbulent region air masses add gust excitation on top.
   let vib = 0.42 + thr * 0.36;
   vib += fs.bearingFail * 1.88 + Math.abs(noise(t, 6)) * 0.5;
+  vib += (region?.params.turbulence ?? 0) * (0.35 + thr * 0.45);
 
   // Component Stress Indices (0.0 .. 1.0)
   const normCht = cht.map((c) => Math.max(0, Math.min(1, (c - 110) / 110))) as [number, number, number, number];
@@ -384,7 +445,7 @@ function updateEngineTelemetry(state: FlightState, dt: number): Partial<FlightSt
   };
 }
 
-const MISSIONS: Record<MissionPreset, {
+export const MISSIONS: Record<MissionPreset, {
   biome: Biome;
   altitude: number;
   throttle: number;
@@ -409,6 +470,7 @@ const MISSIONS: Record<MissionPreset, {
       { x: 400, z: 50, label: 'WP-02 SCAN ZONE A' },
       { x: 350, z: -100, label: 'WP-03 SCAN ZONE B' },
       { x: 100, z: -150, label: 'WP-04 RTB' },
+      { x: 0, z: 0, label: 'BASE / RECOVERY' },
     ],
   },
   coastalRecovery: {
@@ -420,9 +482,46 @@ const MISSIONS: Record<MissionPreset, {
       { x: 500, z: -100, label: 'WP-02 FAR PATROL' },
       { x: 400, z: 100, label: 'WP-03 COAST LINE' },
       { x: 100, z: 50, label: 'WP-04 RTB' },
+      { x: 0, z: 0, label: 'NAVAL BASE / RECOVERY' },
+    ],
+  },
+  himalayaTransect: {
+    biome: 'himalaya', altitude: 9500, throttle: 72,
+    label: 'HIMALAYA REGION TRANSECT',
+    waypoints: [
+      { x: 0, z: 0, label: 'BASE / DEPARTURE' },
+      { x: 110, z: -35, label: 'CRYO TROUGH CORE' },
+      { x: 320, z: 5, label: 'LOW PRESSURE CORE' },
+      { x: 420, z: 85, label: 'THERMAL SHEAR CORE' },
+      { x: 0, z: 0, label: 'BASE / RECOVERY' },
+    ],
+  },
+  tharTransect: {
+    biome: 'thar', altitude: 12000, throttle: 68,
+    label: 'THAR REGION TRANSECT',
+    waypoints: [
+      { x: 0, z: 0, label: 'BASE / DEPARTURE' },
+      { x: 150, z: 55, label: 'HEAT BASIN CORE' },
+      { x: 320, z: -65, label: 'DUST STORM CORE' },
+      { x: 450, z: 100, label: 'MIRAGE UPWELL CORE' },
+      { x: 0, z: 0, label: 'BASE / RECOVERY' },
+    ],
+  },
+  coastalTransect: {
+    biome: 'coastal', altitude: 8500, throttle: 70,
+    label: 'COASTAL REGION TRANSECT',
+    waypoints: [
+      { x: 0, z: 0, label: 'NAVAL BASE / DEPARTURE' },
+      { x: 200, z: -125, label: 'MARITIME DENSE AIR CORE' },
+      { x: 450, z: 5, label: 'COLD FRONT CORE' },
+      { x: 250, z: 75, label: 'GUST LAYER CORE' },
+      { x: 0, z: 0, label: 'NAVAL BASE / RECOVERY' },
     ],
   },
 };
+
+/** Every preset ends back at base — finishing when the last waypoint is reached. */
+const END_ON_ARRIVAL: MissionPreset[] = ['nominalRoutine', 'highAltitudeFailure', 'coastalRecovery', 'himalayaTransect', 'tharTransect', 'coastalTransect'];
 
 const INITIAL_FAULTS: FaultFlags = { c2Overheat: false, turboFail: false, bearingFail: false, injectorClog: false };
 const INITIAL_SMOOTH: FaultSmoothState = { c2Overheat: 0, turboFail: 0, bearingFail: 0, injectorClog: 0 };
@@ -436,7 +535,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   x: 0, z: 0, heading: 0, altitude: 6000, speed: 145,
   targetHeading: 0, targetAltitude: 6000, bankAngle: 0, pitchAngle: 0, cameraMode: 'chase',
   throttle: 65, rudder: 0,
-  biome: 'himalaya', ambientTemp: -5,
+  biome: 'himalaya', ambientTemp: -5, baseAmbientTemp: -5,
   rpm: 2400, cht: [140, 140, 140, 140], egt: 680, map: 93,
   oilPressure: 5.2, oilTemp: 95, vibrationRMS: 0.8,
   fftSpectrum: Array(64).fill(0.2),
@@ -447,6 +546,12 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   faultSmooth: INITIAL_SMOOTH,
   emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null,
   isDragging: false, dragStartX: 0, dragStartY: 0,
+  regions: REGIONS_BY_BIOME.himalaya,
+  currentRegion: null,
+  regionsInside: [],
+  regionAlerts: [],
+  pendingRegionAlerts: [],
+  pendingSorties: [],
   airDensity: 0.98, dynamicPressure: 1.42, loadVector: [0, 1.0, 0.2],
   componentStress: DEFAULT_STRESS,
   vizMode: 'NORMAL',
@@ -460,13 +565,27 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   selectedSubsystem: 'CYLINDER HEAD (ROTAX RED)',
   historyBuffer: [],
   weather: null,
+  plannerMode: false,
+  evadePath: [],
+  evadeIndex: 0,
+  regionMode: 'cruise',
+  regionModeText: null,
+  transitEcoThrottle: null,
 
   setThrottle: (v) => set({ throttle: Math.max(0, Math.min(100, v)) }),
   setRudder: (v) => set({ rudder: Math.max(-1, Math.min(1, v)) }),
   setTargetHeading: (h) => set({ targetHeading: mod(h, 360) }),
   setTargetAltitude: (a) => set({ targetAltitude: Math.max(500, Math.min(30000, a)) }),
   setCameraMode: (mode) => set({ cameraMode: mode }),
-  setBiome: (b) => set({ biome: b, ambientTemp: BIOME_CONFIG[b].ambientTemp }),
+  setBiome: (b) =>
+    set((st) => ({
+      biome: b,
+      ambientTemp: BIOME_CONFIG[b].ambientTemp,
+      baseAmbientTemp: BIOME_CONFIG[b].ambientTemp,
+      currentRegion: null,
+      regionsInside: [],
+      regions: st.weather ? applyWeatherToRegions(REGIONS_BY_BIOME[b], st.weather) : REGIONS_BY_BIOME[b],
+    })),
   setSelectedSubsystem: (name) => set({ selectedSubsystem: name }),
   setVizMode: (mode) => set({ vizMode: mode }),
   setFocusedComponent: (comp) => set({ focusedComponent: comp }),
@@ -525,20 +644,35 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   },
   startReplay: () => set({ isReplaying: true, replayIndex: 0 }),
   stopReplay: () => set({ isReplaying: false }),
-  syncLiveWeather: (obs) => set({ weather: obs }),
-  clearLiveWeather: () => set({ weather: null }),
+  syncLiveWeather: (obs) =>
+    set((st) => ({
+      weather: obs,
+      regions: applyWeatherToRegions(REGIONS_BY_BIOME[st.biome], obs),
+    })),
+  clearLiveWeather: () =>
+    set((st) => ({
+      weather: null,
+      regions: REGIONS_BY_BIOME[st.biome],
+    })),
+  clearPendingRegionAlerts: () => set({ pendingRegionAlerts: [] }),
+  queueSortie: (rec) => set((st) => ({ pendingSorties: [...(st.pendingSorties ?? []), rec].slice(-4) })),
+  clearPendingSorties: () => set({ pendingSorties: [] }),
   setMissionPreset: (p) => {
     const mission = MISSIONS[p];
     const scenarioFaults: FaultFlags = p === 'highAltitudeFailure'
       ? { c2Overheat: true, turboFail: true, bearingFail: false, injectorClog: false }
       : INITIAL_FAULTS;
+    const wx = get().weather;
     set({
       x: 0, z: 0, heading: 0, targetHeading: 0,
       altitude: mission.altitude, targetAltitude: mission.altitude,
       speed: 145, bankAngle: 0, pitchAngle: 0, cameraMode: 'chase',
+      currentRegion: null, regionsInside: [],
+      regions: wx ? applyWeatherToRegions(REGIONS_BY_BIOME[mission.biome], wx) : REGIONS_BY_BIOME[mission.biome],
       missionPreset: p,
       biome: mission.biome,
       ambientTemp: p === 'highAltitudeFailure' ? 42 : p === 'coastalRecovery' ? -25 : BIOME_CONFIG[mission.biome].ambientTemp,
+      baseAmbientTemp: p === 'highAltitudeFailure' ? 42 : p === 'coastalRecovery' ? -25 : BIOME_CONFIG[mission.biome].ambientTemp,
       throttle: mission.throttle,
       waypoints: mission.waypoints,
       missionActive: false,
@@ -547,10 +681,30 @@ export const useFlightStore = create<FlightState>((set, get) => ({
       faults: scenarioFaults,
       faultSmooth: INITIAL_SMOOTH,
       emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null,
+      evadePath: [], evadeIndex: 0, regionMode: 'cruise' as const, regionModeText: null, transitEcoThrottle: null,
     });
   },
-  startMission: () => set({ missionActive: true, missionProgress: 0, missionElapsed: 0, emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null }),
+  startMission: () => set({ missionActive: true, missionProgress: 0, missionElapsed: 0, emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null, plannerMode: false, evadePath: [], evadeIndex: 0, regionMode: 'cruise', regionModeText: null, transitEcoThrottle: null }),
   setDragging: (d, sx, sy) => set({ isDragging: d, dragStartX: sx ?? 0, dragStartY: sy ?? 0 }),
+  setPlannerMode: (on) => set({ plannerMode: on }),
+  addWaypoint: (x, z) =>
+    set((s) => {
+      if (s.missionActive) return {};
+      const label = `WP-${String(s.waypoints.length).padStart(2, '0')} PLAN`;
+      return { waypoints: [...s.waypoints, { x, z, label }] };
+    }),
+  moveWaypoint: (index, x, z) =>
+    set((s) => {
+      if (s.missionActive || index < 0 || index >= s.waypoints.length) return {};
+      const waypoints = s.waypoints.map((wp, i) => (i === index ? { ...wp, x, z } : wp));
+      return { waypoints };
+    }),
+  removeWaypoint: (index) =>
+    set((s) => {
+      if (s.missionActive || s.waypoints.length <= 2 || index < 0 || index >= s.waypoints.length) return {};
+      return { waypoints: s.waypoints.filter((_, i) => i !== index) };
+    }),
+  resetRoute: () => set((s) => ({ waypoints: MISSIONS[s.missionPreset].waypoints })),
   toggleFault: (fault) => set((s) => ({
     faults: { ...s.faults, [fault]: !s.faults[fault] },
   })),
@@ -558,21 +712,45 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     faults: INITIAL_FAULTS,
     faultSmooth: INITIAL_SMOOTH,
   }),
-  resetSimulation: () => set({
+  resetSimulation: () => {
+    const wx = get().weather;
+    set({
     x: 0, z: 0, heading: 0, targetHeading: 0, altitude: 6000, targetAltitude: 6000,
     speed: 145, bankAngle: 0, pitchAngle: 0, cameraMode: 'chase', throttle: 65, rudder: 0,
-    missionPreset: 'nominalRoutine', biome: 'himalaya', ambientTemp: -5,
+    missionPreset: 'nominalRoutine', biome: 'himalaya', ambientTemp: -5, baseAmbientTemp: -5,
+    currentRegion: null, regionsInside: [],
+    regions: wx ? applyWeatherToRegions(REGIONS_BY_BIOME.himalaya, wx) : REGIONS_BY_BIOME.himalaya,
     missionActive: false, missionProgress: 0, missionElapsed: 0,
     waypoints: MISSIONS.nominalRoutine.waypoints,
     faults: INITIAL_FAULTS,
     faultSmooth: INITIAL_SMOOTH,
     emergencyState: 'nominal', emergencyTimer: 0, crashCoordinates: null, systemMessage: null,
-  }),
+    evadePath: [], evadeIndex: 0, regionMode: 'cruise', regionModeText: null, transitEcoThrottle: null,
+  });
+    },
 
   tick: (dt) => set((state) => {
     if (state.emergencyState === 'crashed') return state;
 
-    const turnRate = 30; // deg/s max
+    // Effective navigation goal (detour point or mission waypoint) — used to
+    // tighten the turn near a waypoint so the UAV can actually capture it
+    // (with a bounded turn rate a pure chase orbits any point closer than its
+    // minimum turn radius and never arrives).
+    let goalProbe: { x: number; z: number } | null = null;
+    if (state.missionActive && state.waypoints.length > 0 && state.emergencyState === 'nominal' && !state.isDragging) {
+      const gIdx = Math.min(Math.floor(state.missionProgress), state.waypoints.length - 1);
+      const gwp = state.waypoints[gIdx];
+      if (state.evadePath.length > 0) {
+        const seg = state.evadePath[Math.min(state.evadeIndex, state.evadePath.length - 1)];
+        if (seg) goalProbe = seg;
+      } else if (gwp) {
+        goalProbe = { x: gwp.x, z: gwp.z };
+      }
+    }
+    const dGoal = goalProbe ? Math.hypot(state.x - goalProbe.x, state.z - goalProbe.z) : Infinity;
+    // Up to 165 deg/s when the goal is right on top of the aircraft — shrinks
+    // the achievable turn radius below the capture gate.
+    const turnRate = goalProbe ? 30 + Math.max(0, 165 - (dGoal * 165) / 260) : 30; // deg/s max
     const hdgDiff = angleDiff(state.targetHeading, state.heading);
     const turn = Math.sign(hdgDiff) * Math.min(Math.abs(hdgDiff), turnRate * dt);
 
@@ -586,6 +764,16 @@ export const useFlightStore = create<FlightState>((set, get) => ({
 
     const altitudeFactor = Math.exp(-alt / 27000);
     let speed = 40 + (state.throttle / 100) * 160 * (0.7 + 0.3 * altitudeFactor);
+    // Route completed at base → park: no more drift after landing.
+    if (!state.missionActive && state.emergencyState === 'nominal' &&
+        state.waypoints.length > 0 && state.missionProgress >= state.waypoints.length) {
+      speed = 0;
+    }
+    // Speed damping inside the capture horizon — keeps the waypoint within
+    // reach of the banked turn instead of being orbited at min-turn radius.
+    if (dGoal < 120) {
+      speed = Math.max(14, speed * (0.22 + 0.78 * (dGoal / 120)));
+    }
 
     const missionElapsed = state.missionElapsed + (state.missionActive ? dt : 0);
     const highAltitudeFailure = state.missionPreset === 'highAltitudeFailure' && state.missionActive;
@@ -601,6 +789,37 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     const dz = -Math.cos(headingRad) * speedMs * dt;
     const x = state.x + dx;
     const z = state.z + dz;
+
+    // ---- Atmospheric region enter/exit detection (active, weather-deformed set) ----
+    const activeRegions = state.regions ?? REGIONS_BY_BIOME[state.biome];
+    const insideIds = activeRegions
+      .filter((r) => { const rx = x - r.cx; const rz = z - r.cz; return rx * rx + rz * rz < r.radius * r.radius; })
+      .map((r) => r.id);
+    const prevInside = state.regionsInside ?? [];
+    const enteredIds = insideIds.filter((id) => !prevInside.includes(id));
+    const exitedIds = prevInside.filter((id) => !insideIds.includes(id));
+    const newAlerts: RegionAlert[] = [];
+    for (const id of enteredIds) {
+      const r = activeRegions.find((rr) => rr.id === id) ?? regionById(id);
+      if (!r) continue;
+      newAlerts.push({
+        id: `${id}-${Math.floor(performance.now())}`, regionId: r.id, name: r.name,
+        severity: r.severity, event: 'ENTER', text: r.advisory,
+        tempDeltaC: r.params.tempDeltaC, densityRatio: r.params.densityRatio,
+        pressureDelta: r.params.pressureDelta, turbulence: r.params.turbulence, at: Date.now(),
+      });
+    }
+    for (const id of exitedIds) {
+      const r = activeRegions.find((rr) => rr.id === id) ?? regionById(id);
+      if (!r) continue;
+      newAlerts.push({
+        id: `${id}-${Math.floor(performance.now())}`, regionId: r.id, name: r.name,
+        severity: 'info', event: 'EXIT', text: `UAV LEFT ${r.name} — CONDITIONS NORMALIZING`,
+        tempDeltaC: r.params.tempDeltaC, densityRatio: r.params.densityRatio,
+        pressureDelta: r.params.pressureDelta, turbulence: r.params.turbulence, at: Date.now(),
+      });
+    }
+
     const terrainY = terrainHeightAt(x, z, state.biome);
     const terrainAltitude = Math.max(500, ((terrainY + 1 - 2.5) / 0.0015) + 350);
     if (state.emergencyState === 'nominal' && alt < terrainAltitude) alt = terrainAltitude;
@@ -621,23 +840,104 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     let emergencyState: EmergencyState = state.emergencyState;
     let emergencyTimer = state.emergencyTimer;
     let crashCoordinates = state.crashCoordinates;
+
+    // Region-adaptive autopilot state (evade / optimal-transit).
+    let evadePath = state.evadePath ?? [];
+    let evadeIndex = state.evadeIndex ?? 0;
+    let regionMode: 'cruise' | 'evade' | 'transit' = state.regionMode ?? 'cruise';
+    let regionModeText: string | null = state.regionModeText ?? null;
+    let transitEcoThrottle: number | null = state.transitEcoThrottle ?? null;
+    let finalThrottle = state.throttle;
+
     if (state.emergencyState === 'nominal' && alt > state.targetAltitude) {
       newTargetAltitude = Math.max(newTargetAltitude, alt);
     }
-    if (state.missionActive && state.waypoints.length > 0 && state.emergencyState === 'nominal') {
+    if (state.missionActive && state.waypoints.length > 0 && state.emergencyState === 'nominal' && !state.isDragging) {
       const wpIdx = Math.min(Math.floor(missionProgress), state.waypoints.length - 1);
       const wp = state.waypoints[wpIdx];
       if (wp) {
-        const dist = Math.sqrt((x - wp.x) ** 2 + (z - wp.z) ** 2);
-        if (dist < 30) {
-          missionProgress = Math.min(state.waypoints.length, missionProgress + 1);
-          if (missionProgress >= state.waypoints.length && state.missionPreset === 'nominalRoutine') {
-            missionActive = false;
-            systemMessage = 'NOMINAL ROUTINE COMPLETE — UAV RETURNED SAFELY TO BASE';
+        // -- follow any active evade detour first --
+        let goal = wp;
+        if (evadePath.length > 0) {
+          const seg = evadePath[Math.min(evadeIndex, evadePath.length - 1)];
+          if (seg) goal = seg as typeof wp;
+          if (Math.hypot(x - goal.x, z - goal.z) < 26) {
+            if (evadeIndex >= evadePath.length - 1) {
+              // detour finished — resume the straight mission leg
+              evadePath = [];
+              evadeIndex = 0;
+              regionMode = 'cruise';
+              regionModeText = null;
+              goal = wp;
+            } else {
+              evadeIndex += 1;
+            }
           }
-        } else {
-          const dx = wp.x - x;
-          const dz = wp.z - z;
+        }
+
+        const distWp = Math.sqrt((x - wp.x) ** 2 + (z - wp.z) ** 2);
+        if (distWp < 30) {
+          missionProgress = Math.min(state.waypoints.length, missionProgress + 1);
+          evadePath = [];
+          evadeIndex = 0;
+          if (missionProgress >= state.waypoints.length && END_ON_ARRIVAL.includes(state.missionPreset)) {
+            missionActive = false;
+            regionMode = 'cruise';
+            regionModeText = null;
+            systemMessage = `${MISSIONS[state.missionPreset]?.label ?? 'MISSION'} COMPLETE — ALL WAYPOINTS SURVEYED · UAV RETURNED TO BASE`;
+          }
+        } else if (evadePath.length === 0) {
+          // ---- an alternate path exists only while we are still OUTSIDE the ring ----
+          const threats = legThreats({ x, z }, { x: wp.x, z: wp.z }, activeRegions);
+          const threat = threats.find((t) => t.entryT > 0.001 && ringPenetration(x, z, wp.x, wp.z, t.region) >= 5);
+          if (threat) {
+            const ex = x + (wp.x - x) * threat.entryT;
+            const ez = z + (wp.z - z) * threat.entryT;
+            const dEntry = Math.hypot(ex - x, ez - z);
+            if (dEntry < 170 && !insideIds.includes(threat.region.id)) {
+              const esc = planEscape(x, z, wp.x, wp.z, threat.region, activeRegions);
+              if (esc && esc.length > 0) {
+                evadePath = esc;
+                evadeIndex = 0;
+                regionMode = 'evade';
+                regionModeText = `ALTERNATE PATH FOUND — DIVERTING AROUND ${threat.region.name} (${Math.round(dEntry)}M TO BOUNDARY)`;
+              }
+            }
+            const wpInside = pointInRegion(wp.x, wp.z, threat.region);
+            if (wpInside) {
+              // waypoint itself sits in the zone: no alternate route exists —
+              // the aircraft will transit it under optimal conditions.
+              regionModeText = `NO ALTERNATE ROUTE — ${threat.region.name} IS THE MISSION TARGET · OPTIMAL TRANSIT ON ENTRY`;
+            }
+          }
+          // re-read the goal after a possible detour was planned
+          const seg = evadePath.length > 0 ? evadePath[Math.min(evadeIndex, evadePath.length - 1)] : null;
+          if (seg) goal = seg as typeof wp;
+        }
+
+        // ---- optimal-condition transit while inside an unavoidable zone ----
+        if (evadePath.length === 0) {
+          const insideThreat = activeRegions.find((r) => r.severity !== 'info' && insideIds.includes(r.id));
+          if (insideThreat) {
+            regionMode = 'transit';
+            if (transitEcoThrottle === null) {
+              transitEcoThrottle = state.throttle;
+              regionModeText = `NO ALTERNATE ROUTE — TRANSITING ${insideThreat.name} AT OPTIMAL POWER · THROTTLE REDUCED TO ${Math.min(state.throttle, 58)}%`;
+            }
+            finalThrottle = Math.min(finalThrottle, 58);
+          } else if (regionMode === 'transit') {
+            regionMode = 'cruise';
+            regionModeText = null;
+            if (transitEcoThrottle !== null) {
+              finalThrottle = Math.min(100, transitEcoThrottle);
+              transitEcoThrottle = null;
+            }
+          }
+        }
+
+        const dx = goal.x - x;
+        const dz = goal.z - z;
+        if (Math.hypot(dx, dz) > 0.5) {
           newTargetHeading = mod((Math.atan2(dx, -dz) * 180 / Math.PI) + 360, 360);
         }
       }
@@ -682,19 +982,46 @@ export const useFlightStore = create<FlightState>((set, get) => ({
       newTargetAltitude = 1800;
       systemMessage = `PREDICTIVE ABORT — TURBINE ICE DETECTED AT ${coordinates.lat.toFixed(5)}°N, ${coordinates.lon.toFixed(5)}°E · RECOVERY ROUTE ACTIVE`;
     } else if (emergencyState === 'recovery') {
+      // Predictive abort engaged: fly the aircraft home to the base waypoint at
+      // a safe 1800 ft cruise instead of drifting — a real RTB leg.
       finalAltitude = Math.max(1800, alt - 700 * dt);
-      finalSpeed = Math.max(35, speed);
+      finalSpeed = Math.max(60, speed);
       newTargetAltitude = 1800;
+      const home = state.waypoints[0] ?? { x: 0, z: 0 };
+      const dHome = Math.hypot(x - home.x, z - home.z);
+      if (dHome < 30) {
+        finalSpeed = 0;
+        systemMessage = 'PREDICTIVE-ABORT RECOVERY COMPLETE — UAV RECOVERED AT BASE · POST-FLIGHT INSPECTION QUEUED';
+      } else {
+        newTargetHeading = mod((Math.atan2(home.x - x, -(home.z - z)) * 180 / Math.PI) + 360, 360);
+      }
     }
 
+    const regionEntered = newAlerts.find((a) => a.event === 'ENTER');
     return {
       x, z, heading: hdg, altitude: finalAltitude, speed: finalSpeed,
       targetHeading: newTargetHeading,
       targetAltitude: newTargetAltitude,
       bankAngle, pitchAngle: Math.max(-0.35, Math.min(0.35, altDiff * 0.00012)),
       rul, anomalyScore, missionProgress, missionActive, missionElapsed,
-      emergencyState, emergencyTimer, crashCoordinates, systemMessage,
+      emergencyState, emergencyTimer, crashCoordinates,
+      systemMessage:
+        regionModeText && state.emergencyState === 'nominal'
+          ? regionModeText
+          : regionEntered && state.emergencyState === 'nominal' && !systemMessage
+            ? regionEntered.text
+            : systemMessage,
+      currentRegion: regionAtList(x, z, activeRegions),
+      regionsInside: insideIds,
+      regionAlerts: [...newAlerts, ...(state.regionAlerts ?? [])].slice(0, 12),
+      pendingRegionAlerts: [...(state.pendingRegionAlerts ?? []), ...newAlerts].slice(0, 20),
       ...engineUpdates,
+      throttle: finalThrottle,
+      evadePath,
+      evadeIndex,
+      regionMode,
+      regionModeText,
+      transitEcoThrottle,
     };
   }),
 }));

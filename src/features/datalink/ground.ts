@@ -18,6 +18,7 @@
  * acknowledged command frames (QoS: guaranteed delivery, retry ×3).
  */
 import { useFlightStore } from "@/features/flight-sim/flightStore";
+import { regionById } from "@/features/flight-sim/regions";
 import { runEngineDecisionEngine } from "@/features/digital-twin/engineMlService";
 import { LinkSocket } from "@/lib/datalink/client";
 import { OrderedReceiver } from "@/lib/datalink/orderReceiver";
@@ -31,15 +32,23 @@ import {
 } from "@/lib/datalink/protocol";
 import {
   decodeAckFrame,
+  decodeMissionRecord,
+  decodeRegionAlert,
   decodeTelemetryFrame,
   emergencyNameOf,
   encodeCmdFrame,
   encodeGapReq,
+  encodeWeatherSync,
   type DecodedTelemetry,
 } from "@/lib/datalink/codec";
+import type { WeatherObservation } from "@/lib/domain/engine/environment";
 import { useLinkStore } from "./linkStore";
+import { RegionExcursionRecorder } from "./regionExcursions";
 
 let started = false;
+// Correlates region enter/exit alerts with the telemetry stream so the GCS can
+// show engine-response excursions (MAP/EGT/CHT) while the UAV was inside a region.
+let recorder: RegionExcursionRecorder | null = null;
 let socket: LinkSocket | null = null;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
 let ageTimer: ReturnType<typeof setInterval> | null = null;
@@ -93,6 +102,8 @@ function syncReceiverStats(): void {
 /** One in-order telemetry frame delivered by the receiver — write it to the GCS. */
 function applyLive(f: DecodedTelemetry, recovered: boolean): void {
   const now = Date.now();
+  // Feed the region-excursion recorder (only live frames — replays would double-sample).
+  if (!recovered) recorder?.pushTelemetry(f);
   const ls = useLinkStore.getState();
 
   // One-way latency EMA. Replayed (store-and-forward) frames are excluded: their
@@ -220,6 +231,39 @@ function stallWatch(): void {
 
 // ================= command downlink (acknowledged) =================
 
+/** Uplink the live weather observation to the aircraft so its region map reshapes. */
+function sendWeatherUplink(obs: WeatherObservation | null): void {
+  if (!socket?.connected) return;
+  const frame = encodeWeatherSync(
+    obs
+      ? {
+          valid: true,
+          biome: obs.biome,
+          code: obs.code,
+          elevationFt: obs.elevationFt,
+          oatC: obs.oatC,
+          qnhHpa: obs.qnhHpa,
+          windSpeedKts: obs.windSpeedKts,
+          windDirDeg: obs.windDirDeg,
+          relativeHumidityPct: obs.relativeHumidityPct,
+        }
+      : {
+          valid: false,
+          biome: "himalaya",
+          code: "",
+          elevationFt: 0,
+          oatC: 0,
+          qnhHpa: 1013.25,
+          windSpeedKts: 0,
+          windDirDeg: 0,
+          relativeHumidityPct: 0,
+        },
+    0,
+    Date.now(),
+  );
+  socket.sendBinary(frame);
+}
+
 function doSend(cmdId: number, value: number, name: string): void {
   if (!socket?.connected) {
     useLinkStore.getState().patch({ cmdStatus: "noack", cmdName: name, cmdAttempts: 0 });
@@ -265,6 +309,42 @@ function checkPending(): void {
 // ================= handlers =================
 
 function onBinary(buf: ArrayBuffer): void {
+  // Tactical region alert from the aircraft (entered/exited an air mass).
+  const regionAlert = decodeRegionAlert(buf);
+  if (regionAlert) {
+    if (regionAlert.crcOk) {
+      useLinkStore.getState().pushAlert(regionAlert);
+      // Surface it on the ground flight store too, so GCS widgets/banners react.
+      const flight = useFlightStore.getState();
+      const reg = regionById(regionAlert.regionId);
+      useFlightStore.setState({
+        systemMessage: regionAlert.event === "EXIT"
+          ? `UAV LEFT ${reg?.name ?? regionAlert.regionId} — CONDITIONS NORMALIZING`
+          : (reg?.advisory ?? `UAV ENTERED REGION ${regionAlert.regionId}`),
+      });
+      // Excursion history: start/stop the engine-response recorder. An ENTER
+      // while another region is still open finalizes the previous excursion
+      // (its EXIT was lost over the link or the UAV hopped straight over).
+      const name = reg?.name ?? regionAlert.regionId;
+      if (regionAlert.event === "ENTER") {
+        const finalized = recorder?.onEnter(regionAlert.regionId, name, regionAlert.severity, regionAlert.txMs);
+        if (finalized) useLinkStore.getState().pushExcursion(finalized);
+      } else {
+        const finalized = recorder?.onExit(regionAlert.regionId, regionAlert.txMs);
+        if (finalized) useLinkStore.getState().pushExcursion(finalized);
+      }
+    }
+    return;
+  }
+  // Completed sortie record from the aircraft (mission recorder) — the ground
+  // keeps it for the animated route replay / debrief.
+  const missionRec = decodeMissionRecord(buf);
+  if (missionRec) {
+    if (missionRec.crcOk && missionRec.record) {
+      useLinkStore.getState().pushSortie(missionRec.record);
+    }
+    return;
+  }
   const ack = decodeAckFrame(buf);
   if (ack) {
     const p = pending.get(ack.cmdSeq);
@@ -319,6 +399,8 @@ const originalActions = {
   setTargetAltitude: useFlightStore.getState().setTargetAltitude,
   setTargetHeading: useFlightStore.getState().setTargetHeading,
   setRudder: useFlightStore.getState().setRudder,
+  syncLiveWeather: useFlightStore.getState().syncLiveWeather,
+  clearLiveWeather: useFlightStore.getState().clearLiveWeather,
 };
 
 function patchGroundActions(): void {
@@ -345,6 +427,14 @@ function patchGroundActions(): void {
       originalActions.setRudder(r);
       sendCommand(CMD_RUDDER, r, "RUDDER");
     },
+    syncLiveWeather: (obs: WeatherObservation) => {
+      originalActions.syncLiveWeather(obs);
+      sendWeatherUplink(obs);
+    },
+    clearLiveWeather: () => {
+      originalActions.clearLiveWeather();
+      sendWeatherUplink(null);
+    },
   });
 }
 
@@ -357,6 +447,8 @@ function restoreGroundActions(): void {
     setTargetAltitude: originalActions.setTargetAltitude,
     setTargetHeading: originalActions.setTargetHeading,
     setRudder: originalActions.setRudder,
+    syncLiveWeather: originalActions.syncLiveWeather,
+    clearLiveWeather: originalActions.clearLiveWeather,
   });
 }
 
@@ -369,6 +461,7 @@ export function startGroundLink(): void {
   ls.resetRx();
   useLinkStore.getState().setRole("ground");
 
+  recorder = new RegionExcursionRecorder();
   receiver = new OrderedReceiver({
     onApply: (f, recovered) => applyLive(f, recovered),
     onGap: () => requestGap(),
@@ -430,6 +523,7 @@ export function stopGroundLink(): void {
   socket?.close();
   socket = null;
   receiver = null;
+  recorder = null;
   restoreGroundActions();
   useLinkStore.getState().setRole("offline");
   useLinkStore.getState().setWsStatus("offline");

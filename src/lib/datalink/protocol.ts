@@ -22,6 +22,9 @@ export const DL_MSG_CMD = 0x02; // ground → airborne, acknowledged control
 export const DL_MSG_ACK = 0x03; // airborne → ground, command acknowledgement
 export const DL_MSG_HEARTBEAT = 0x04; // keep-alive / rtt probe (json envelope)
 export const DL_MSG_GAP_REQ = 0x05; // ground → airborne: "I have through seq X — replay what you buffered after it" (store-and-forward)
+export const DL_MSG_REGION_ALERT = 0x06; // airborne → ground: UAV entered/exited an atmospheric region (tactical alert)
+export const DL_MSG_WEATHER_SYNC = 0x07; // ground → airborne: OpenWeather observation uplink (reshapes region map)
+export const DL_MSG_MISSION_RECORD = 0x08; // airborne → ground: completed sortie record (route, captures, samples — JSON payload)
 
 export const DL_HEADER_BYTES = 14; // magic2 + ver1 + type1 + seq2 + txSec8 (f64 epoch seconds)
 
@@ -91,6 +94,12 @@ export const TELEMETRY_FRAME_BYTES =
 export const CMD_FRAME_BYTES = DL_HEADER_BYTES + 5 + DL_CRC_BYTES; // 17 B
 
 export const GAP_REQ_FRAME_BYTES = DL_HEADER_BYTES + 4 + DL_CRC_BYTES; // 20 B (payload: u32 groundSeq)
+
+// REGION_ALERT payload: regionId(8 ascii) + severity(1) + event(1) + 4×f32 params
+export const REGION_ALERT_FRAME_BYTES = DL_HEADER_BYTES + 8 + 1 + 1 + 16 + DL_CRC_BYTES; // 42 B
+
+// WEATHER_SYNC payload: valid(1) + biome(1) + code(4 ascii) + elevation/oat/qnh/windKts/windDeg/humidity (6×f32)
+export const WEATHER_SYNC_FRAME_BYTES = DL_HEADER_BYTES + 1 + 1 + 4 + 24 + DL_CRC_BYTES; // 46 B
 
 export const DEFAULT_RELAY_URL = "ws://localhost:3010";
 

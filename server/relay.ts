@@ -22,7 +22,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
-import { DL_MAGIC, DL_MSG_TELEMETRY, DL_MSG_CMD, DL_MSG_ACK, DL_MSG_GAP_REQ } from "../src/lib/datalink/protocol.ts";
+import { DL_MAGIC, DL_MSG_TELEMETRY, DL_MSG_CMD, DL_MSG_ACK, DL_MSG_GAP_REQ, DL_MSG_REGION_ALERT, DL_MSG_MISSION_RECORD, DL_MSG_WEATHER_SYNC } from "../src/lib/datalink/protocol.ts";
 
 const PORT = Number(process.env.RELAY_PORT ?? 3010);
 const RECORDING = process.env.RELAY_RECORD !== "0";
@@ -144,10 +144,14 @@ wss.on("connection", (ws) => {
     recorder.record(isFromAirborne ? DIR_AIR2GROUND : DIR_GROUND2AIR, buf);
 
     if (isFromAirborne) {
-      // Telemetry stream → every ground console; command ACKs → their sender.
-      if (msgType === DL_MSG_TELEMETRY || msgType === DL_MSG_ACK) {
+      // Telemetry stream → every ground console; command ACKs → their sender;
+      // tactical region alerts (entered/exited atmospheric regions) too.
+      if (msgType === DL_MSG_TELEMETRY || msgType === DL_MSG_ACK || msgType === DL_MSG_REGION_ALERT || msgType === DL_MSG_MISSION_RECORD) {
         seqOf.set(ws, buf.readUInt16BE(4));
-        const frame = buf.subarray(0, Math.min(buf.length, 512));
+        // Sortie records are occasional debrief frames with a JSON body (up to
+        // ~64 KB); the 20 Hz telemetry path stays clamped to 512 B.
+        const cap = msgType === DL_MSG_MISSION_RECORD ? 65536 : 512;
+        const frame = buf.subarray(0, Math.min(buf.length, cap));
         for (const c of wss.clients) {
           if (c !== ws && roleOf.get(c) === "ground" && c.readyState === WebSocket.OPEN) {
             c.send(frame);
@@ -158,11 +162,12 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    // Ground → airborne: commands (acknowledged) and GAP_REQ replay requests.
-    if (msgType === DL_MSG_CMD || msgType === DL_MSG_GAP_REQ) {
+    // Ground → airborne: commands (acknowledged), GAP_REQ replay requests and
+    // weather-observation uplinks (both slightly larger than a GAP_REQ).
+    if (msgType === DL_MSG_CMD || msgType === DL_MSG_GAP_REQ || msgType === DL_MSG_WEATHER_SYNC) {
       const airborne = findPeer("airborne", ws);
       if (airborne) {
-        airborne.send(buf.subarray(0, Math.min(buf.length, msgType === DL_MSG_CMD ? 64 : 32)));
+        airborne.send(buf.subarray(0, Math.min(buf.length, msgType === DL_MSG_CMD || msgType === DL_MSG_WEATHER_SYNC ? 64 : 32)));
       } else {
         sendControl(ws, { type: "no-airborne", ts: Date.now() });
       }

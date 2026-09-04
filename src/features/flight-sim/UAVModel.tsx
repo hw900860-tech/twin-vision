@@ -295,11 +295,32 @@ export function UAVModel() {
   const targetLookAt = useRef(new THREE.Vector3());
   const viewAzimuth = useRef(0);
   const viewElevation = useRef(0.95);
+  // Chase-mode look offsets (drag on the open scene / right-drag rotates the
+  // camera around the UAV without commanding a turn).
+  const chaseYawDeg = useRef(0);
+  const chasePitchDeg = useRef(0);
+  const lookRef = useRef<{ x: number; y: number; button: number } | null>(null);
+  const cameraMode = useFlightStore((s) => s.cameraMode);
 
-  // Mouse drag controls
+  // Reset look offsets when the camera mode changes.
+  useEffect(() => {
+    if (cameraMode === 'birdseye') {
+      viewAzimuth.current = 0;
+      viewElevation.current = 0.95;
+    } else {
+      chaseYawDeg.current = 0;
+      chasePitchDeg.current = 0;
+    }
+  }, [cameraMode]);
+
+  // Steering: LEFT button drag on the UAV body only (right-drag is camera look).
   const handlePointerDown = useCallback((e: THREE.Event) => {
+    const ne = (e as unknown as { nativeEvent?: PointerEvent }).nativeEvent;
+    if (ne && ne.button !== undefined && ne.button !== 0) return;
     const me = e as unknown as PointerEvent;
-    store.getState().setDragging(true, me.clientX, me.clientY);
+    const cx = (me.clientX ?? ne?.clientX ?? 0);
+    const cy = (me.clientY ?? ne?.clientY ?? 0);
+    store.getState().setDragging(true, cx, cy);
     (gl.domElement as HTMLElement).style.cursor = 'grabbing';
   }, [gl]);
 
@@ -320,6 +341,57 @@ export function UAVModel() {
       window.removeEventListener('pointercancel', releaseDrag);
     };
   }, [gl]);
+
+  // LOOK-AROUND drag — left-drag on the open scene (not on the UAV, not while
+  // planning) or right-drag anywhere rotates the camera around the aircraft.
+  useEffect(() => {
+    const el = gl.domElement as HTMLElement;
+    const onDown = (e: PointerEvent) => {
+      const st = store.getState();
+      if (e.button === 2) {
+        lookRef.current = { x: e.clientX, y: e.clientY, button: 2 };
+        el.style.cursor = 'grabbing';
+      } else if (e.button === 0 && !st.isDragging && !st.plannerMode) {
+        lookRef.current = { x: e.clientX, y: e.clientY, button: 0 };
+        el.style.cursor = 'grabbing';
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      const lk = lookRef.current;
+      if (!lk) return;
+      const dx = e.clientX - lk.x;
+      const dy = e.clientY - lk.y;
+      const st = store.getState();
+      if (st.cameraMode === 'birdseye') {
+        viewAzimuth.current -= dx * 0.008;
+        viewElevation.current = Math.max(0.45, Math.min(1.4, viewElevation.current + dy * 0.006));
+      } else {
+        chaseYawDeg.current = (chaseYawDeg.current + dx * 0.45 + 180) % 360 - 180;
+        chasePitchDeg.current = Math.max(-32, Math.min(68, chasePitchDeg.current + dy * 0.45));
+      }
+      lookRef.current = { x: e.clientX, y: e.clientY, button: lk.button };
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!lookRef.current) return;
+      if (e.button === lookRef.current.button || e.button === 0) {
+        lookRef.current = null;
+        el.style.cursor = 'grab';
+      }
+    };
+    const onCtx = (e: Event) => e.preventDefault();
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('contextmenu', onCtx);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('contextmenu', onCtx);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [gl, store]);
 
   const handlePointerMove = useCallback((e: THREE.Event) => {
     const state = store.getState();
@@ -377,13 +449,21 @@ export function UAVModel() {
       groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, s.pitchAngle, 5, delta);
     }
 
-    // Chase camera — follows behind/above UAV
-    const headingRad = (s.heading * Math.PI) / 180;
+    // Camera — chase follows behind/above the UAV (drag-look yaws the view
+    // around the aircraft); birdseye is a fixed orbit you can spin with a drag.
     const camDist = s.cameraMode === 'birdseye' ? 30 : 24;
-    const horizontalDistance = s.cameraMode === 'birdseye' ? Math.cos(viewElevation.current) * camDist : camDist;
-    const targetCamX = s.x + (s.cameraMode === 'birdseye' ? Math.sin(viewAzimuth.current) * horizontalDistance : Math.sin(headingRad) * camDist);
-    const targetCamZ = s.z + (s.cameraMode === 'birdseye' ? Math.cos(viewAzimuth.current) * horizontalDistance : Math.cos(headingRad) * camDist);
-    const targetCamY = s.altitude * 0.0015 + 2.5 + (s.cameraMode === 'birdseye' ? Math.sin(viewElevation.current) * camDist : 11);
+    let camAz = 0;
+    let camYOff = 11;
+    if (s.cameraMode === 'birdseye') {
+      camAz = viewAzimuth.current;
+      camYOff = Math.sin(viewElevation.current) * camDist;
+    } else {
+      camAz = (s.heading * Math.PI) / 180 + (chaseYawDeg.current * Math.PI) / 180;
+      camYOff = 11 + chasePitchDeg.current * 0.22;
+    }
+    const targetCamX = s.x + Math.sin(camAz) * camDist;
+    const targetCamZ = s.z + Math.cos(camAz) * camDist;
+    const targetCamY = s.altitude * 0.0015 + 2.5 + camYOff;
 
     cameraGoal.current.set(targetCamX, targetCamY, targetCamZ);
     camera.position.lerp(cameraGoal.current, smoothing);

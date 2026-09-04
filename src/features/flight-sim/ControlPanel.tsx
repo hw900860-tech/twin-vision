@@ -1,6 +1,7 @@
 import { useFlightStore, type Biome, type MissionPreset, type FaultFlags } from './flightStore';
 import { Panel } from '@/components/hud/primitives';
-import { Mountain, Waves, CloudSun, Play, Square, AlertTriangle, RotateCcw, Eye, Navigation } from 'lucide-react';
+import { Mountain, Waves, CloudSun, Play, Square, AlertTriangle, RotateCcw, Eye, Navigation, Route, Trash2, Undo2, Plus } from 'lucide-react';
+import { analyzeLegs, LEG_RISK_COLOR } from './routePlanner';
 
 const BIOMES: { key: Biome; label: string; icon: typeof Mountain }[] = [
   { key: 'himalaya', label: 'HIMALAYA', icon: Mountain },
@@ -9,7 +10,10 @@ const BIOMES: { key: Biome; label: string; icon: typeof Mountain }[] = [
 ];
 
 const MISSIONS: { key: MissionPreset; label: string; desc: string }[] = [
-  { key: 'nominalRoutine', label: 'NOMINAL ROUTINE', desc: 'Scan waypoints and return safely' },
+  { key: 'nominalRoutine', label: 'NOMINAL ROUTINE', desc: 'Scan waypoints, auto-divert around hazard zones, return safely' },
+  { key: 'himalayaTransect', label: 'HIMALAYA REGION TRANSECT', desc: 'Fly CRYO → LOW PRESSURE → THERMAL SHEAR cores (optimal transit)' },
+  { key: 'tharTransect', label: 'THAR REGION TRANSECT', desc: 'Heat Basin → Dust Storm → Mirage Upwell — full zone sweep' },
+  { key: 'coastalTransect', label: 'COASTAL REGION TRANSECT', desc: 'Dense air → Cold front → Gust layer over the sea' },
   { key: 'highAltitudeFailure', label: 'HIGH ALT / HIGH TEMP', desc: 'Engine stall, failure, and crash protocol' },
   { key: 'coastalRecovery', label: 'COASTAL COLD / RECOVERY', desc: 'Turbine ice, predictive abort, retrieval' },
 ];
@@ -72,7 +76,9 @@ export function ControlPanel() {
           </button>
         </div>
         <div className="mt-2 text-[8px] text-[var(--muted-foreground)]">
-          {s.cameraMode === 'birdseye' ? 'DRAG TO ORBIT THE SURROUNDINGS' : 'DRAG THE UAV TO STEER'}
+          {s.cameraMode === 'birdseye'
+            ? 'DRAG TO ORBIT · LEFT-DRAG UAV TO COMMAND HEADING'
+            : 'LEFT-DRAG UAV TO STEER · DRAG SCENE OR RIGHT-DRAG TO LOOK AROUND'}
         </div>
       </div>
 
@@ -199,6 +205,169 @@ export function ControlPanel() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Atmospheric Regions in this terrain (live-meteo deformed when bound) */}
+      <div className="border-b border-[var(--border)] p-3">
+        <div className="label-xs mb-2 flex items-center justify-between text-[var(--cyan)]">
+          <span>ATMOSPHERIC REGIONS</span>
+          {s.weather ? (
+            <span className="text-[var(--amber)]" title={`Station ${s.weather.code} · wind ${s.weather.windSpeedKts.toFixed(0)} KT · QNH ${s.weather.qnhHpa.toFixed(0)} hPa`}>
+              ◈ LIVE METEO BOUND
+            </span>
+          ) : (
+            <span className="text-[var(--muted-foreground)]">STATIC MAP</span>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          {s.regions.map((r) => {
+            const active = s.regionsInside.includes(r.id);
+            const tone = r.severity === 'critical' ? 'var(--critical)' : r.severity === 'caution' ? 'var(--amber)' : 'var(--cyan)';
+            return (
+              <div
+                key={r.id}
+                className={`border px-2 py-1.5 text-[8px] tracking-wider ${active ? 'shadow-[0_0_10px_rgba(111,216,232,0.25)]' : ''}`}
+                style={{ borderColor: active ? tone : 'var(--border)', background: active ? 'rgba(111,216,232,0.06)' : 'transparent', color: active ? tone : 'var(--muted-foreground)' }}
+              >
+                <div className="flex items-center justify-between font-semibold">
+                  <span>{active ? '◈ ' : '◇ '}{r.name}</span>
+                  <span style={{ color: active ? tone : 'var(--muted-foreground)' }}>
+                    {active ? 'INSIDE' : `${Math.round(Math.hypot(s.x - r.cx, s.z - r.cz) - r.radius)}m`}
+                  </span>
+                </div>
+                <div className="mt-0.5 opacity-80">
+                  OAT {r.params.tempDeltaC >= 0 ? '+' : ''}{r.params.tempDeltaC.toFixed(0)}°C · DENS ×{r.params.densityRatio.toFixed(2)} · MAP ×{r.params.pressureDelta.toFixed(2)} · TURB {r.params.turbulence.toFixed(1)}
+                  {r.stretch ? ` · WIND ×${r.stretch.toFixed(2)} @ ${((r.axisDeg ?? 0) % 360).toFixed(0)}°` : ''}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-2 text-[8px] text-[var(--muted-foreground)]">
+          CROSSING A REGION ALTERS ENGINE TELEMETRY + STREAMS AN ALERT TO GCS
+        </div>
+        {(s.regionMode !== 'cruise' || s.regionModeText) && (
+          <div
+            role="status"
+            className="mt-2 border px-2 py-1.5 text-[8px] leading-relaxed tracking-wider"
+            style={{
+              borderColor: s.regionMode === 'evade' ? 'var(--nominal)' : 'var(--amber)',
+              background: s.regionMode === 'evade' ? 'rgba(16,185,129,0.08)' : 'rgba(240,166,60,0.08)',
+              color: s.regionMode === 'evade' ? 'var(--nominal)' : 'var(--amber)',
+            }}
+          >
+            <div className="font-semibold">
+              {s.regionMode === 'evade' ? '↻ EVASIVE REROUTE ACTIVE' : s.regionMode === 'transit' ? '◈ OPTIMAL TRANSIT ACTIVE' : 'REGION NAVIGATION'}
+            </div>
+            <div className="mt-0.5 opacity-90">{s.regionModeText ?? 'Flying clear of hazard zones'}</div>
+            {s.transitEcoThrottle !== null && s.regionMode === 'transit' && (
+              <div className="mt-0.5 text-[var(--cyan)]">THROTTLE <b>{s.throttle.toFixed(0)}%</b> (ECO CLAMP) — RESTORES TO {s.transitEcoThrottle.toFixed(0)}% AFTER ZONE</div>
+            )}
+            {s.evadePath.length > 0 && (
+              <div className="mt-0.5 text-[var(--cyan)]">DETOUR WAYPOINT {Math.min(s.evadeIndex + 1, s.evadePath.length)}/{s.evadePath.length}</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Waypoint Route Planner — pre-launch re-routing around region rings */}
+      <div className="border-b border-[var(--border)] p-3">
+        <div className="label-xs mb-2 flex items-center justify-between text-[var(--cyan)]">
+          <span>ROUTE PLANNER</span>
+          <button
+            type="button"
+            onClick={() => s.setPlannerMode(!s.plannerMode)}
+            disabled={s.missionActive}
+            aria-pressed={s.plannerMode}
+            className={`flex items-center gap-1 px-2 py-1 text-[8px] tracking-wider transition-colors ${s.plannerMode ? 'border border-[var(--cyan)] bg-[var(--cyan)]/15 text-[var(--cyan)]' : 'border border-[var(--border)] hover:border-[var(--cyan)]/50'} disabled:opacity-40`}
+          >
+            <Route className="h-2.5 w-2.5" />
+            {s.plannerMode ? 'PLANNING…' : 'PLAN ROUTE'}
+          </button>
+        </div>
+
+        {s.plannerMode && (
+          <>
+            <div className="mb-2 flex gap-1">
+              <button
+                type="button"
+                onClick={() => s.resetRoute()}
+                className="flex items-center gap-1 px-2 py-1 text-[8px] border border-[var(--border)] hover:border-[var(--cyan)]/50 text-[var(--muted-foreground)]"
+              >
+                <Undo2 className="h-2.5 w-2.5" /> RESET TO MISSION ROUTE
+              </button>
+            </div>
+
+            {/* Per-leg risk analysis over the region rings */}
+            <div className="space-y-1">
+              {analyzeLegs(s.waypoints, s.regions).map((leg) => {
+                const tone = LEG_RISK_COLOR[leg.risk];
+                const warn = leg.crossings
+                  .map((c) => `${c.region.name}${c.region.severity === 'critical' ? ' (CRITICAL)' : ''}`)
+                  .join(' · ');
+                return (
+                  <div
+                    key={leg.index}
+                    className="flex items-center justify-between border px-2 py-1 text-[8px] tracking-wider"
+                    style={{ borderColor: leg.risk === 'clear' ? 'var(--border)' : tone, color: leg.risk === 'clear' ? 'var(--muted-foreground)' : tone, background: leg.risk === 'clear' ? 'transparent' : `${tone}14` }}
+                  >
+                    <span className="font-semibold">LEG {leg.index + 1}</span>
+                    <span className="truncate px-1 opacity-90">{warn || 'CLEAR PATH'}</span>
+                    <span style={{ color: tone }}>{leg.risk.toUpperCase()}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Waypoint list with remove buttons */}
+            <div className="mt-2 space-y-1">
+              {s.waypoints.map((wp, i) => {
+                const isBase = i === 0 || i === s.waypoints.length - 1;
+                const inRegion = s.regions.find((r) => {
+                  const p = { x: wp.x, z: wp.z };
+                  const ax = (r.axisDeg ?? 0) * Math.PI / 180;
+                  const stretch = r.stretch ?? 1;
+                  const dx = (wp.x - r.cx) / stretch;
+                  const dz = wp.z - r.cz;
+                  const cos = Math.cos(-ax);
+                  const sin = Math.sin(-ax);
+                  const lx = dx * cos - dz * sin;
+                  const lz = dx * sin + dz * cos;
+                  return lx * lx + lz * lz <= r.radius * r.radius;
+                });
+                return (
+                  <div key={i} className="flex items-center justify-between gap-1 border border-[var(--border)] px-2 py-1 text-[8px]">
+                    <span className={`font-semibold ${isBase ? 'text-[var(--nominal)]' : 'text-[var(--cyan)]'}`}>{wp.label}</span>
+                    <span className="opacity-70">X {wp.x.toFixed(0)} · Z {wp.z.toFixed(0)}</span>
+                    {inRegion && <span className="text-[var(--amber)]">⚠ {inRegion.id}</span>}
+                    <button
+                      type="button"
+                      onClick={() => s.removeWaypoint(i)}
+                      disabled={isBase || s.missionActive}
+                      className="text-[var(--critical)] hover:bg-[var(--critical)]/10 p-0.5 disabled:opacity-30"
+                      aria-label={`Remove ${wp.label}`}
+                    >
+                      <Trash2 className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-2 flex items-center gap-1 text-[8px] text-[var(--muted-foreground)]">
+              <Plus className="h-2.5 w-2.5" /> CLICK TERRAIN TO APPEND WAYPOINT
+            </div>
+            <div className="mt-0.5 text-[8px] text-[var(--muted-foreground)]">
+              DRAG A WAYPOINT MARKER TO MOVE IT · LEGS TINTED BY REGION RISK
+            </div>
+          </>
+        )}
+
+        {!s.plannerMode && (
+          <div className="text-[8px] text-[var(--muted-foreground)]">
+            ROUTE THE MISSION AROUND {s.regions.filter((r) => r.severity === 'critical').map((r) => r.name).join(' · ') || 'CRITICAL REGIONS'} BEFORE LAUNCH
+          </div>
+        )}
       </div>
 
       {/* Live Engine Stats */}

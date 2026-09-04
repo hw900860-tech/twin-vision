@@ -21,11 +21,15 @@ import {
 import {
   decodeCmdFrame,
   decodeGapReq,
+  decodeWeatherSync,
   emergencyCodeOf,
   encodeAckFrame,
+  encodeMissionRecord,
+  encodeRegionAlert,
   encodeTelemetryFrame,
   type TelemetrySnapshot,
 } from "@/lib/datalink/codec";
+import type { WeatherObservation } from "@/lib/domain/engine/environment";
 import { useLinkStore } from "./linkStore";
 
 const TX_INTERVAL_MS = 50; // 20 Hz sampling — matches the authoritative sim cadence
@@ -115,6 +119,35 @@ function handleBinary(buf: ArrayBuffer): void {
     }
     return;
   }
+  // Weather uplink from the GCS: rebuild the observation and let the region
+  // map + physics deform around it (valid=false clears the binding).
+  const wx = decodeWeatherSync(buf);
+  if (wx) {
+    if (wx.crcOk) {
+      const flight = useFlightStore.getState();
+      if (wx.valid) {
+        const obs: WeatherObservation = {
+          source: "LIVE",
+          station: wx.code,
+          code: wx.code,
+          biome: wx.biome,
+          lat: 0,
+          lon: 0,
+          elevationFt: wx.elevationFt,
+          oatC: wx.oatC,
+          relativeHumidityPct: wx.relativeHumidityPct,
+          windSpeedKts: wx.windSpeedKts,
+          windDirDeg: wx.windDirDeg,
+          qnhHpa: wx.qnhHpa,
+          updatedAt: Date.now(),
+        };
+        flight.syncLiveWeather(obs);
+      } else {
+        flight.clearLiveWeather();
+      }
+    }
+    return;
+  }
   const cmd = decodeCmdFrame(buf);
   if (!cmd || !cmd.crcOk) return;
   const flight = useFlightStore.getState();
@@ -144,8 +177,58 @@ function handleBinary(buf: ArrayBuffer): void {
   if (socket?.connected) socket.sendBinary(ack);
 }
 
+/** Transmit any region enter/exit alerts queued by the physics tick. */
+function drainRegionAlerts(): void {
+  if (!socket?.connected) return;
+  // Do not flush the queue into a dead radio: OUTAGE keeps them pending so they
+  // cross the link the moment it comes back (like the store-and-forward ring).
+  if (channel?.mode === "OUTAGE") return;
+  const pending = useFlightStore.getState().pendingRegionAlerts;
+  if (pending.length === 0) return;
+  useFlightStore.getState().clearPendingRegionAlerts();
+  for (const a of pending) {
+    const frame = encodeRegionAlert(
+      {
+        regionId: a.regionId,
+        severity: a.severity,
+        event: a.event,
+        tempDeltaC: a.tempDeltaC,
+        densityRatio: a.densityRatio,
+        pressureDelta: a.pressureDelta,
+        turbulence: a.turbulence,
+      },
+      0,
+      Date.now(),
+    );
+    channel?.dispatch(frame, (b) => {
+      if (socket?.connected) socket.sendBinary(b);
+    });
+  }
+}
+
+/** Transmit completed sortie records (mission recorder → GCS debrief). */
+function drainPendingSorties(): void {
+  if (!socket?.connected) return;
+  if (channel?.mode === "OUTAGE") return; // keep queued until the link returns
+  const pending = useFlightStore.getState().pendingSorties;
+  if (pending.length === 0) return;
+  useFlightStore.getState().clearPendingSorties();
+  for (const rec of pending) {
+    try {
+      const frame = encodeMissionRecord(rec, 0, Date.now());
+      channel?.dispatch(frame, (b) => {
+        if (socket?.connected) socket.sendBinary(b);
+      });
+    } catch (e) {
+      console.warn("[airborne] sortie record send failed", e);
+    }
+  }
+}
+
 function tick(): void {
   if (!socket?.connected) return;
+  drainRegionAlerts();
+  drainPendingSorties();
   const frame = encodeTelemetryFrame(snapshot(), seq, Date.now());
   ring.push({ seq, buf: frame });
   if (ring.length > RING_CAP) ring.splice(0, ring.length - RING_CAP);

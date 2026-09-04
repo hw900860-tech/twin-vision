@@ -53,10 +53,10 @@ export function GcsLinkBar() {
     >
       <span className="flex items-center gap-1.5 font-bold tracking-wider">
         <span
-          className="inline-block h-1.5 w-1.5 rounded-full"
+          className={`inline-block h-1.5 w-1.5 rounded-full ${streaming ? "animate-pulse" : ""}`}
           style={{
             background: streaming ? "#10b981" : connected && !airborneOnline ? "#eab308" : "#ef4444",
-            boxShadow: `0 0 6px ${streaming ? "#10b981" : connected && !airborneOnline ? "#eab308" : "#ef4444"}`,
+            boxShadow: `0 0 8px ${streaming ? "#10b981" : connected && !airborneOnline ? "#eab308" : "#ef4444"}`,
           }}
         />
         <span style={{ color: streaming ? "#10b981" : connected && !airborneOnline ? "#eab308" : "#ef4444" }}>
@@ -70,11 +70,11 @@ export function GcsLinkBar() {
       <span className="text-muted-foreground">
         RTT <b className="text-cyan">{fmtMs(rttMs)}</b>
       </span>
-      <span className="text-muted-foreground">
-        LOSS <b className="text-cyan">{lossPct.toFixed(2)}%</b>
+      <span className="text-muted-foreground" title="Frame loss estimated from sequence gaps — >2% needs investigation">
+        LOSS <b style={{ color: lossPct > 2 ? "#ef4444" : lossPct > 0 ? "#f0a63c" : "#6fd8e8" }}>{lossPct.toFixed(2)}%</b>
       </span>
-      <span className="text-muted-foreground">
-        RX <b className="text-cyan">{rxRateHz} Hz</b>
+      <span className="text-muted-foreground" title="Frames decoded per second (target 20 Hz)">
+        RX <b style={{ color: airborneOnline && rxRateHz === 0 ? "#ef4444" : rxRateHz < 8 && rxRateHz > 0 ? "#f0a63c" : "#6fd8e8" }}>{rxRateHz} Hz</b>
       </span>
       <span className="text-muted-foreground">
         FRAMES <b className="text-cyan">{rxFrames}</b> · CRC <b className="text-nominal">{rxBadCrc === 0 ? "OK" : `${rxBadCrc} BAD`}</b>
@@ -93,8 +93,9 @@ export function GcsLinkBar() {
           LOST <b className="text-critical">{gapLost}</b>
         </span>
       )}
-      <span className="text-muted-foreground">
-        AGE <b style={{ color: ageCritical ? "#ef4444" : "#6fd8e8" }}>{fmtMs(lastFrameAgeMs)}</b>
+      <span className="text-muted-foreground" title="Time since the last telemetry frame was applied">
+        LAST PKT <b style={{ color: ageCritical ? "#ef4444" : lastFrameAgeMs > 1500 ? "#f0a63c" : "#6fd8e8" }}>{fmtMs(lastFrameAgeMs)}</b>
+        {ageCritical && <b className="text-critical"> STALE</b>}
       </span>
       <span className="text-muted-foreground">
         CMD <b style={{ color: cmdColor }}>{cmdLabel}</b>

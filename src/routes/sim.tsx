@@ -3,6 +3,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Plane, Activity, ShieldAlert } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
 import { StatusDot } from "@/components/hud/primitives";
+import { MiniMap } from "@/features/flight-sim/MiniMap";
+import { installSortieRecorder, uninstallSortieRecorder } from "@/features/flight-sim/sortieRecorder";
 import { FlightSimulator } from "@/features/flight-sim/FlightSimulator";
 import { FlightHUD } from "@/features/flight-sim/FlightHUD";
 import { ControlPanel } from "@/features/flight-sim/ControlPanel";
@@ -43,7 +45,11 @@ function SimPageContent() {
   // tick and streams binary telemetry to ground stations through the relay.
   useEffect(() => {
     startAirborneLink();
-    return () => stopAirborneLink();
+    installSortieRecorder();
+    return () => {
+      stopAirborneLink();
+      uninstallSortieRecorder();
+    };
   }, []);
 
   const s = useFlightStore();
@@ -90,6 +96,13 @@ function SimPageContent() {
         <ClientOnly>
           <FlightSimulator />
         </ClientOnly>
+
+        {/* Tactical mini-map (top-left) */}
+        <div className="pointer-events-none absolute left-2 top-2 z-20 w-[248px]">
+          <ClientOnly>
+            <MiniMap />
+          </ClientOnly>
+        </div>
 
         {/* HUD overlay */}
         <div className="absolute inset-0 z-10 pointer-events-none">

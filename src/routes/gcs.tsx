@@ -1,12 +1,13 @@
 import { lazy, Suspense, useState, useMemo, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, LayoutGrid, Activity, Stethoscope, History, FlaskConical, Wrench, FileText, Gauge, Expand, Shrink, Tag, Plane } from "lucide-react";
+import { ArrowLeft, LayoutGrid, Activity, Stethoscope, History, FlaskConical, Wrench, FileText, Gauge, Expand, Shrink, Tag, Plane, MapPin, PlaneTakeoff } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
 import { Bar, Panel, StatusDot, useClock } from "@/components/hud/primitives";
 import { TelemetryDashboard } from "@/features/telemetry/TelemetryDashboard";
 import { ExplainablePanel, MaintenanceAdvisory, RulPanel } from "@/features/predictive-maintenance/Diagnostics";
 import { SimulationLab } from "@/features/simulation/SimulationLab";
 import { ReplayConsole } from "@/features/mission-replay/ReplayConsole";
+import { SortieReplayPanel } from "@/features/mission-replay/SortieReplayPanel";
 import { FleetPanel } from "@/features/fleet/FleetPanel";
 import { BASELINE_CONDITIONS, simulate } from "@/lib/domain/engine/model";
 import { EngineAlertsPanel } from "@/features/digital-twin/EngineAlerts";
@@ -19,6 +20,9 @@ import { useFlightStore } from "@/features/flight-sim/flightStore";
 import { startGroundLink, stopGroundLink } from "@/features/datalink/ground";
 import { useLinkStore } from "@/features/datalink/linkStore";
 import { GcsLinkBar } from "@/features/datalink/GcsLinkBar";
+import { GcsLiveDataBand } from "@/features/datalink/GcsLiveDataBand";
+import { GcsAlertTicker } from "@/features/datalink/GcsAlertTicker";
+import { RegionExcursionPanel } from "@/features/datalink/RegionExcursionPanel";
 import { MaydayBanner } from "@/features/telemetry/MaydayBanner";
 import { EnvironmentPanel } from "@/features/environment/EnvironmentPanel";
 import { PostFlightAnalytics } from "@/features/reports/PostFlightAnalytics";
@@ -45,6 +49,8 @@ const NAV = [
   { key: "LIVE TWIN", icon: Activity },
   { key: "DIAGNOSTICS", icon: Stethoscope },
   { key: "MISSION REPLAY", icon: History },
+  { key: "SORTIE REPLAY", icon: PlaneTakeoff },
+  { key: "REGION LOG", icon: MapPin },
   { key: "SIMULATION LAB", icon: FlaskConical },
   { key: "SENSOR MATRIX", icon: Gauge },
   { key: "MAINTENANCE", icon: Wrench },
@@ -167,6 +173,7 @@ function GcsPage() {
       </header>
 
       <GcsLinkBar />
+      <GcsAlertTicker />
 
       <div className="relative z-10 flex">
         {/* left nav */}
@@ -232,6 +239,9 @@ function GcsPage() {
             </span>
             <span className="text-[10px] font-mono opacity-80">RPM: {rpm.toFixed(0)} | ALT: {altitude.toFixed(0)} FT</span>
           </div>
+
+          {/* Big, readable UAV stream readout with plain-language status */}
+          <GcsLiveDataBand />
 
           {/* GCS LIVE AIRCRAFT COMMAND & CONTROL BAR */}
           <div className="mb-4 border border-cyan/40 bg-panel/90 p-3 backdrop-blur grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -469,6 +479,8 @@ function GcsPage() {
             </div>
           )}
           {tab === "MISSION REPLAY" && <ReplayConsole />}
+          {tab === "SORTIE REPLAY" && <SortieReplayPanel />}
+          {tab === "REGION LOG" && <RegionExcursionPanel />}
           {tab === "SIMULATION LAB" && <SimulationLab />}
           {tab === "SENSOR MATRIX" && (
             <div id="gcs-panel-sensor-matrix" role="tabpanel" aria-label="Analytical sensor redundancy">

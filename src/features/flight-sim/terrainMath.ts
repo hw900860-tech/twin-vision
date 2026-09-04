@@ -90,6 +90,25 @@ export function fbm2D(x: number, z: number): number {
   return (n1 + n2 + n3) / 1.75;
 }
 
+/**
+ * High-frequency detail noise (world-space) for procedural TEXTURE mottling —
+ * snow patches, rock strata, dune ripples. Purely cosmetic: heights are
+ * untouched so flight collision stays identical.
+ */
+export function detailNoise2D(wx: number, wz: number): number {
+  return (
+    simplex2D(wx * 0.018, wz * 0.018) * 0.55 +
+    simplex2D(wx * 0.043, wz * 0.043) * 0.32 +
+    simplex2D(wx * 0.11, wz * 0.11) * 0.13
+  );
+}
+
+/** Dune ripple striping for desert sand (0..1 banding). */
+export function rippleBand(wx: number, wz: number): number {
+  const v = Math.sin(wx * 0.045 + Math.sin(wz * 0.03) * 2.0) * 0.5 + 0.5;
+  return Math.pow(Math.max(0, Math.min(1, v)), 1.6);
+}
+
 // Calibrated Height Function (Prevents Overlapping & Aircraft Collision)
 export function terrainHeightAt(wx: number, wz: number, biome: Biome): number {
   const sx = wx * 0.0025;
