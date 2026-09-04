@@ -3048,5 +3048,41 @@ body.studio-modal-active .aeris-nav {
   animation: jarvisWaveBar 0.65s infinite ease-in-out;
 }
 
+/* Auto-scroll target highlight pulse */
+.aeris-section-target-highlight {
+  position: relative;
+  transition: all 0.3s ease;
+}
 
+.aeris-section-target-highlight::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border: 1.5px solid rgba(0, 210, 255, 0.85);
+  border-radius: 6px;
+  pointer-events: none;
+  box-shadow: 0 0 25px rgba(0, 210, 255, 0.4), inset 0 0 20px rgba(0, 210, 255, 0.1);
+  animation: sectionTargetGlow 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  z-index: 40;
+}
 
+@keyframes sectionTargetGlow {
+  0% {
+    opacity: 0;
+    transform: scale(0.995);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1);
+    border-color: rgba(0, 210, 255, 1);
+    box-shadow: 0 0 35px rgba(0, 210, 255, 0.6), inset 0 0 25px rgba(0, 210, 255, 0.2);
+  }
+  70% {
+    opacity: 0.85;
+    border-color: rgba(0, 210, 255, 0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.002);
+  }
+}

@@ -37,6 +37,7 @@ import {
   ExplainablePanel,
   RulPanel,
 } from "@/features/predictive-maintenance/Diagnostics";
+import { useJarvisStore } from "@/features/jarvis/jarvisStore";
 
 const EngineCanvas = lazy(
   () => import("@/features/digital-twin/EngineCanvas")
@@ -246,6 +247,29 @@ export function AerisLandingHero() {
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [blend, setBlend] = useState(1.0);
+
+  // Sync state with JARVIS store so copilot knows hero 3D status
+  useEffect(() => {
+    useJarvisStore.getState().setIsExploded(exploded);
+    useJarvisStore.getState().setIsStudioOpen(isStudioOpen);
+    useJarvisStore.getState().setSelectedPart(selectedZone);
+  }, [exploded, isStudioOpen, selectedZone]);
+
+  // Register Landing page 3D engine command handlers with JARVIS
+  useEffect(() => {
+    useJarvisStore.getState().registerHandlers({
+      explode: (exp) => {
+        setExploded(exp);
+        if (exp) {
+          engineViewerAudio.explode();
+        } else {
+          engineViewerAudio.assemble();
+        }
+      },
+      studio: (open) => setIsStudioOpen(open),
+      partSelect: (part) => setSelectedZone(part),
+    });
+  }, []);
 
   const handleCut = useCallback(() => {
     setPhase("reveal");
@@ -754,7 +778,7 @@ export function IntelligenceSection() {
 
 export function DiagnosticPreview() {
   return (
-    <section className="aeris-diagnostic-preview">
+    <section id="diagnostics" className="aeris-diagnostic-preview">
       <div className="aeris-diagnostic-copy">
         <span className="aeris-eyebrow">
           AI / EXPLAINABLE DIAGNOSTICS

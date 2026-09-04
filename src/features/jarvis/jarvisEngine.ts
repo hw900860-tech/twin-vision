@@ -9,6 +9,7 @@ import { JARVIS_SYSTEM_PROMPT } from "./jarvisPrompt";
 import { captureSystemSnapshot, type SystemSnapshot } from "./jarvisContext";
 import { useJarvisStore, type JarvisMessage } from "./jarvisStore";
 import { useFlightStore } from "@/features/flight-sim/flightStore";
+import { scrollToLandingSection } from "./jarvisNavigation";
 
 export interface JarvisExecutionResult {
   spokenText: string;
@@ -140,13 +141,40 @@ Emit your JSON response matching the required format.
 
     switch (act.type) {
       case "NAVIGATE": {
-        if (act.route && jarvisState.navHandler) {
-          jarvisState.navHandler(act.route);
-          actionsExecuted.push(`Navigated to ${act.route}`);
+        if (act.route) {
+          if (act.route.includes("#") || act.route.startsWith("#")) {
+            const [path, hash] = act.route.split("#");
+            const targetPath = path || "/";
+            if (targetPath && window.location.pathname !== targetPath && jarvisState.navHandler) {
+              jarvisState.navHandler(targetPath);
+            }
+            if (hash) {
+              scrollToLandingSection(hash, jarvisState.navHandler);
+              actionsExecuted.push(`Navigated to ${act.route}`);
+              break;
+            }
+          }
+          if (jarvisState.navHandler) {
+            jarvisState.navHandler(act.route);
+            actionsExecuted.push(`Navigated to ${act.route}`);
+          }
+        }
+        if (act.sectionId) {
+          scrollToLandingSection(act.sectionId, jarvisState.navHandler);
+          actionsExecuted.push(`Scrolled to section: ${act.sectionId}`);
         }
         if (act.tab && jarvisState.gcsTabHandler) {
           jarvisState.gcsTabHandler(act.tab);
           actionsExecuted.push(`Switched tab to ${act.tab}`);
+        }
+        break;
+      }
+
+      case "SCROLL_TO": {
+        const sid = act.sectionId || act.section || act.id;
+        if (sid) {
+          scrollToLandingSection(sid, jarvisState.navHandler);
+          actionsExecuted.push(`Scrolled to section: ${sid}`);
         }
         break;
       }
@@ -541,50 +569,194 @@ You are viewing the **AERIS-TWIN Ground Control Station** monitoring the Rotax 9
     };
   }
 
-  // 13. NAVIGATION COMMANDS
-  if (q.includes("predictive") || q.includes("diagnostics")) {
+  // 13. EXPLORER BUTTON & 3D MODEL CONTROLS
+  if (
+    q.includes("explorer") ||
+    q.includes("explore button") ||
+    q.includes("explode button") ||
+    q.includes("on the explorer") ||
+    q.includes("open explorer") ||
+    q.includes("turn on explorer") ||
+    q.includes("explode") ||
+    q.includes("dismantle")
+  ) {
+    const isStudio = q.includes("studio") || q.includes("twin") || q.includes("dismantle");
     return {
-      spokenText: "Switching to Predictive Diagnostics panel and Remaining Useful Life analysis.",
-      displayText: "Navigating to **DIAGNOSTICS** tab.",
-      intent: "NAVIGATION",
-      actions: [{ type: "SET_GCS_TAB", tab: "DIAGNOSTICS" }],
+      spokenText: "Scrolling to 3D engine stage and activating the exploded view.",
+      displayText: `### 3D ENGINE EXPLORER ACTIVATED
+
+- **Target Assembly**: Rotax 914 AE-P4 Powerplant
+- **View Mode**: **Exploded Subsystem Inspection**
+- **Action**: Auto-scrolled to Hero Engine Canvas and expanded 3D component layers.
+- **Controls**: Orbit 360°, inspect individual hot-spots, or say *"Assemble the engine"* to restore flight configuration.`,
+      intent: "UI_ACTION",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "top" },
+        { type: "SET_EXPLODED", exploded: true },
+        ...(isStudio ? [{ type: "OPEN_STUDIO", open: true }] : []),
+      ],
     };
   }
 
-  if (q.includes("sim") || q.includes("simulator") || q.includes("fly")) {
+  if (q.includes("assemble") || q.includes("put together") || q.includes("close explode")) {
+    return {
+      spokenText: "Reassembling 3D engine model to flight configuration.",
+      displayText: "Assembling Rotax 914 3D twin back into nominal flight enclosure.",
+      intent: "UI_ACTION",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "top" },
+        { type: "SET_EXPLODED", exploded: false },
+        { type: "OPEN_STUDIO", open: false },
+      ],
+    };
+  }
+
+  // 14. DOCK TAB NAVIGATION COMMANDS (HOME, LIVE ENGINE, PREDICTIVE, MISSION, INSPECTION)
+  if (
+    q === "home" ||
+    q.includes("go to home") ||
+    q.includes("open home") ||
+    q.includes("take me home") ||
+    q.includes("back to home") ||
+    q.includes("landing") ||
+    q.includes("home tab") ||
+    q.includes("scroll to top") ||
+    q.includes("scroll up")
+  ) {
+    return {
+      spokenText: "Navigating to Home and scrolling directly to the engine overview.",
+      displayText: "Navigating to **HOME** (`/`) and auto-scrolling to Hero section.",
+      intent: "NAVIGATION",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "top" },
+      ],
+    };
+  }
+
+  if (
+    q.includes("live engine") ||
+    q.includes("engine tab") ||
+    q.includes("3d engine") ||
+    (q.includes("engine") && (q.includes("show") || q.includes("open") || q.includes("go to")))
+  ) {
+    return {
+      spokenText: "Scrolling directly to the 3D Live Engine Digital Twin.",
+      displayText: "Focusing on **LIVE ENGINE** digital twin stage on Home page.",
+      intent: "NAVIGATION",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "top" },
+      ],
+    };
+  }
+
+  if (
+    q.includes("predictive") ||
+    q.includes("intelligence") ||
+    q.includes("predictive tab") ||
+    q.includes("rul tab") ||
+    q.includes("predictive section")
+  ) {
+    const isGcs = typeof window !== "undefined" && window.location.pathname === "/gcs";
+    if (isGcs && !q.includes("home") && !q.includes("page")) {
+      return {
+        spokenText: "Switching to Predictive Diagnostics panel and Remaining Useful Life analysis.",
+        displayText: "Navigating to GCS **DIAGNOSTICS** tab.",
+        intent: "NAVIGATION",
+        actions: [{ type: "SET_GCS_TAB", tab: "DIAGNOSTICS" }],
+      };
+    }
+
+    return {
+      spokenText: "Navigating to Home and scrolling directly to Predictive Engine Intelligence.",
+      displayText: "Navigating to Home and auto-scrolling to **04 / ENGINE INTELLIGENCE** (`#intelligence`).",
+      intent: "NAVIGATION",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "intelligence" },
+      ],
+    };
+  }
+
+  if (
+    q.includes("mission") ||
+    q.includes("tapas") ||
+    q.includes("platform") ||
+    q.includes("airframe") ||
+    q.includes("mission tab") ||
+    q.includes("mission context")
+  ) {
+    const isGcsReplay = q.includes("replay") || q.includes("sortie");
+    if (isGcsReplay) {
+      return {
+        spokenText: "Opening Mission Replay console in Ground Control Station.",
+        displayText: "Navigating to **MISSION REPLAY** console.",
+        intent: "NAVIGATION",
+        actions: [
+          { type: "NAVIGATE", route: "/gcs" },
+          { type: "SET_GCS_TAB", tab: "MISSION REPLAY" },
+        ],
+      };
+    }
+
+    return {
+      spokenText: "Navigating to Home and scrolling directly to the TAPAS BH-201 Mission Context.",
+      displayText: "Navigating to Home and auto-scrolling to **03 / MISSION CONTEXT** (`#mission`).",
+      intent: "NAVIGATION",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "mission" },
+      ],
+    };
+  }
+
+  if (
+    q.includes("inspection") ||
+    q.includes("inspect tab") ||
+    q.includes("component inspection") ||
+    q.includes("inspect section")
+  ) {
+    return {
+      spokenText: "Navigating to Home and scrolling directly to Digital Twin Component Inspection.",
+      displayText: "Navigating to Home and auto-scrolling to **05 / DIGITAL TWIN INSPECTION** (`#inspection`).",
+      intent: "NAVIGATION",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "inspection" },
+      ],
+    };
+  }
+
+  if (q.includes("diagnostics") || q.includes("residuals")) {
+    return {
+      spokenText: "Scrolling directly to Explainable Diagnostics and physics residuals.",
+      displayText: "Navigating to **AI / EXPLAINABLE DIAGNOSTICS** (`#diagnostics`).",
+      intent: "NAVIGATION",
+      actions: [
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "diagnostics" },
+      ],
+    };
+  }
+
+  if (q.includes("sim") || q.includes("simulator") || q.includes("fly") || q.includes("flight sim")) {
     return {
       spokenText: "Opening 3D Flight Simulator console.",
-      displayText: "Navigating to flight simulator console (`/sim`).",
+      displayText: "Navigating to **3D Flight Simulator** console (`/sim`).",
       intent: "NAVIGATION",
       actions: [{ type: "NAVIGATE", route: "/sim" }],
     };
   }
 
-  if (q.includes("live engine") || q.includes("live twin")) {
+  if (q.includes("gcs") || q.includes("ground control") || q.includes("station")) {
     return {
-      spokenText: "Opening Live Engine Twin view.",
-      displayText: "Navigating to **LIVE TWIN** tab.",
+      spokenText: "Opening Ground Control Station interface.",
+      displayText: "Navigating to **Ground Control Station** (`/gcs`).",
       intent: "NAVIGATION",
-      actions: [{ type: "SET_GCS_TAB", tab: "LIVE TWIN" }],
-    };
-  }
-
-  // 14. 3D VISUALIZATION & INSPECTION ACTIONS
-  if (q.includes("explode") || q.includes("dismantle")) {
-    return {
-      spokenText: "Exploding 3D engine model into component inspection zones.",
-      displayText: "Executing **JARVIS EXPLODE** on the Rotax 914 3D twin.",
-      intent: "UI_ACTION",
-      actions: [{ type: "SET_EXPLODED", exploded: true }],
-    };
-  }
-
-  if (q.includes("assemble")) {
-    return {
-      spokenText: "Reassembling 3D engine model to flight configuration.",
-      displayText: "Assembling Rotax 914 3D twin.",
-      intent: "UI_ACTION",
-      actions: [{ type: "SET_EXPLODED", exploded: false }],
+      actions: [{ type: "NAVIGATE", route: "/gcs" }],
     };
   }
 
@@ -594,7 +766,8 @@ You are viewing the **AERIS-TWIN Ground Control Station** monitoring the Rotax 9
       displayText: "Highlighting **CYLINDER HEAD ASSEMBLY**.",
       intent: "UI_ACTION",
       actions: [
-        { type: "SET_GCS_TAB", tab: "LIVE TWIN" },
+        { type: "NAVIGATE", route: "/" },
+        { type: "SCROLL_TO", sectionId: "top" },
         { type: "INSPECT_PART", partName: "CYLINDER HEAD" },
       ],
     };

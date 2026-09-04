@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Plane, Zap, Activity, Cpu, Shield, Layers } from "lucide-react";
 import { createTopDockController, type TopDockOptions } from "./topDockController";
+import { scrollToLandingSection } from "@/features/jarvis/jarvisNavigation";
 
 type DockItem = {
   id: string;
@@ -79,6 +80,7 @@ const BRAND_MARK = (
 
 export function Nav() {
   const [active, setActive] = useState("home");
+  const navigate = useNavigate();
   const optionsRef = useRef<TopDockOptions>({
     proximity: 122,
     spring: 0.19,
@@ -99,11 +101,17 @@ export function Nav() {
     return createTopDockController(root, () => optionsRef.current);
   }, []);
 
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string, id?: string) => {
+    e.preventDefault();
+    if (id) setActive(id);
+    scrollToLandingSection(href, (path) => navigate({ to: path as any }));
+  };
+
   return (
     <header className="animated-top-dock-component atd-modern aeris-top-dock-header">
       <div className="atd-modern__aurora" aria-hidden="true" />
       <div className="atd-modern__bar">
-        <a className="atd-modern__brand" href="#top">
+        <a className="atd-modern__brand" href="#top" onClick={(e) => handleNavClick(e, "#top", "home")}>
           <span className="atd-modern__mark" aria-hidden="true">
             {BRAND_MARK}
           </span>
@@ -124,7 +132,7 @@ export function Nav() {
               className="atd-modern__item"
               data-dock-item
               aria-pressed={active === item.id}
-              onClick={() => setActive(item.id)}
+              onClick={(e) => handleNavClick(e, item.href, item.id)}
             >
               <span className="atd-modern__icon" aria-hidden="true">
                 {item.icon}
@@ -146,3 +154,4 @@ export function Nav() {
     </header>
   );
 }
+
