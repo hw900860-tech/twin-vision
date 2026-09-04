@@ -37,86 +37,91 @@ function Section({
 }
 
 /* ---------------- 01 THE PROBLEM ---------------- */
+/* ---------------- 01 OUR APPROACH (FROM DATA TO FORESIGHT) ---------------- */
 export function ProblemSection() {
-  const { ref, progress } = useScrollProgress<HTMLDivElement>();
-  const stages = ["NORMAL", "DEGRADATION", "ANOMALY", "PREDICTED FAILURE"];
-  const active = Math.min(3, Math.floor(progress * 4));
-
   return (
-    <div ref={ref} id="system" className="relative h-[220vh]">
-      <div className="sticky top-0 flex min-h-screen items-center border-t border-border/60 px-5 py-20 lg:px-10">
-        <div className="mx-auto grid w-full max-w-[1400px] gap-12 lg:grid-cols-[minmax(0,420px)_1fr] lg:items-center">
-          <div>
-            <SectionHeading
-              index="01"
-              kicker="THE PROBLEM"
-              title={<>Engines don&apos;t fail in an instant.</>}
-              sub="Degradation begins long before a conventional threshold becomes an alarm. By the time a limit is crossed, the mission decision has already been made for you."
-            />
-            <div className="mt-10 space-y-3">
-              {stages.map((s, i) => (
-                <div key={s} className="flex items-center gap-4">
-                  <span
-                    className={`h-px transition-all duration-500 ${i <= active ? "w-10 bg-cyan" : "w-4 bg-hairline"}`}
-                  />
-                  <span
-                    className={`label-xs transition-colors duration-500 ${
-                      i <= active ? (i >= 2 ? "text-amber" : "text-cyan") : "opacity-40"
-                    }`}
-                  >
-                    {s}
-                  </span>
-                </div>
-              ))}
+    <section id="predictive" className="relative border-t border-[#00A8D6]/15 bg-[#EBF2F7] px-6 py-28 lg:px-12 lg:py-36">
+      <div className="mx-auto max-w-[1400px]">
+        {/* Section Header */}
+        <div className="text-center max-w-3xl mx-auto">
+          <div className="font-mono text-xs font-semibold tracking-[0.24em] text-[#526B7E] uppercase mb-3">
+            · OUR APPROACH ·
+          </div>
+          <h2 className="font-display text-3xl font-bold tracking-tight text-[#0A1926] sm:text-5xl lg:text-[3.2rem]">
+            From data to foresight.
+          </h2>
+          <p className="mt-4 text-sm leading-relaxed text-[#526B7E] sm:text-base">
+            A complete digital twin pipeline that understands your engine, learns its behaviour and predicts what&apos;s next — so you can act early.
+          </p>
+        </div>
+
+        {/* 4 Pristine 3D Glass Cards Row */}
+        <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4 items-center">
+          {/* CARD 01: SENSE */}
+          <div className="aeris-glass-card aeris-glass-card-hover rounded-xl p-6 relative flex flex-col justify-between h-[280px]">
+            <div className="relative h-32 w-full grid place-items-center bg-gradient-to-b from-[#00A8D6]/10 to-transparent rounded-lg border border-[#00A8D6]/20">
+              <svg viewBox="0 0 120 60" className="w-24 h-14 text-[#00A8D6]">
+                <path d="M0 30 Q15 10 30 30 T60 30 T90 30 T120 30" stroke="#00A8D6" strokeWidth="2.5" fill="none" />
+                <path d="M0 30 Q15 40 30 30 T60 30 T90 30 T120 30" stroke="#00C8FF" strokeWidth="1.5" strokeDasharray="3 3" fill="none" />
+              </svg>
             </div>
-            <div className="mt-10 space-y-2">
-              <p className="font-display text-lg" style={{ opacity: progress > 0.72 ? 1 : 0.25, transition: "opacity .6s" }}>
-                Traditional monitoring reacts to abnormality.
-              </p>
-              <p
-                className="font-display text-lg text-cyan"
-                style={{ opacity: progress > 0.86 ? 1 : 0.15, transition: "opacity .6s" }}
-              >
-                AERIS-TWIN detects divergence.
-              </p>
+            <div>
+              <span className="font-mono text-xs font-bold text-[#00A8D6]">01</span>
+              <h3 className="font-display text-xl font-bold text-[#0A1926] mt-1">Sense</h3>
+              <p className="text-xs text-[#526B7E] mt-1">Live engine telemetry.</p>
             </div>
           </div>
 
-          <Panel label="CYLINDER 03 · EGT" corner={`SCRUB ${(progress * 100).toFixed(0)}%`}>
-            <div className="p-4">
-              <div className="mb-4 flex flex-wrap gap-6">
-                <div className="flex items-center gap-2">
-                  <span className="h-px w-6 border-t border-dashed border-cyan" />
-                  <span className="label-xs">EXPECTED</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-px w-6 bg-amber" />
-                  <span className="label-xs">ACTUAL</span>
-                </div>
-                <SimBadge className="ml-auto" />
-              </div>
-              <ResidualChart progress={progress} />
-              <div className="mt-4 grid grid-cols-3 gap-px bg-border">
-                <div className="bg-panel/90 p-3">
-                  <div className="label-xs">DIVERGENCE</div>
-                  <div className="readout text-lg text-amber">+{(progress * 18.4).toFixed(1)}%</div>
-                </div>
-                <div className="bg-panel/90 p-3">
-                  <div className="label-xs">ANOMALY SCORE</div>
-                  <div className="readout text-lg text-amber">{(progress * 82).toFixed(0)}%</div>
-                </div>
-                <div className="bg-panel/90 p-3">
-                  <div className="label-xs">THRESHOLD</div>
-                  <div className="readout text-lg">{progress > 0.9 ? "CROSSED" : "NOT CROSSED"}</div>
-                </div>
-              </div>
+          {/* CARD 02: MODEL */}
+          <div className="aeris-glass-card aeris-glass-card-hover rounded-xl p-6 relative flex flex-col justify-between h-[280px]">
+            <div className="relative h-32 w-full grid place-items-center bg-gradient-to-b from-[#00A8D6]/10 to-transparent rounded-lg border border-[#00A8D6]/20">
+              <svg viewBox="0 0 80 80" className="w-16 h-16 text-[#00A8D6]">
+                <polygon points="40 10 70 25 70 55 40 70 10 55 10 25" stroke="#00A8D6" strokeWidth="2" fill="none" />
+                <polygon points="40 20 60 30 60 50 40 60 20 50 20 30" stroke="#00C8FF" strokeWidth="1.2" strokeDasharray="4 2" fill="none" />
+              </svg>
             </div>
-          </Panel>
+            <div>
+              <span className="font-mono text-xs font-bold text-[#00A8D6]">02</span>
+              <h3 className="font-display text-xl font-bold text-[#0A1926] mt-1">Model</h3>
+              <p className="text-xs text-[#526B7E] mt-1">Physics-based engine modelling.</p>
+            </div>
+          </div>
+
+          {/* CARD 03: PREDICT */}
+          <div className="aeris-glass-card aeris-glass-card-hover rounded-xl p-6 relative flex flex-col justify-between h-[280px]">
+            <div className="relative h-32 w-full grid place-items-center bg-gradient-to-b from-[#00A8D6]/10 to-transparent rounded-lg border border-[#00A8D6]/20">
+              <svg viewBox="0 0 80 80" className="w-16 h-16 text-[#00A8D6]">
+                <polygon points="40 15 70 30 40 45 10 30" fill="#00A8D6" opacity="0.3" stroke="#00A8D6" strokeWidth="1.5" />
+                <polygon points="40 30 70 45 40 60 10 45" fill="#00C8FF" opacity="0.5" stroke="#00C8FF" strokeWidth="1.5" />
+                <polygon points="40 45 70 60 40 75 10 60" fill="#00A8D6" opacity="0.8" stroke="#00A8D6" strokeWidth="1.5" />
+              </svg>
+            </div>
+            <div>
+              <span className="font-mono text-xs font-bold text-[#00A8D6]">03</span>
+              <h3 className="font-display text-xl font-bold text-[#0A1926] mt-1">Predict</h3>
+              <p className="text-xs text-[#526B7E] mt-1">AI detects early signs of degradation.</p>
+            </div>
+          </div>
+
+          {/* CARD 04: PREVENT */}
+          <div className="aeris-glass-card aeris-glass-card-hover rounded-xl p-6 relative flex flex-col justify-between h-[280px]">
+            <div className="relative h-32 w-full grid place-items-center bg-gradient-to-b from-[#00A8D6]/10 to-transparent rounded-lg border border-[#00A8D6]/20">
+              <svg viewBox="0 0 80 80" className="w-16 h-16 fill-[#00A8D6]/20 stroke-[#00A8D6]" strokeWidth="2">
+                <path d="M40 10 L65 20 V45 C65 60 40 72 40 72 C40 72 15 60 15 45 V20 Z" />
+              </svg>
+            </div>
+            <div>
+              <span className="font-mono text-xs font-bold text-[#00A8D6]">04</span>
+              <h3 className="font-display text-xl font-bold text-[#0A1926] mt-1">Prevent</h3>
+              <p className="text-xs text-[#526B7E] mt-1">Actionable insights for longer missions.</p>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
+
 
 /* ---------------- 02 LIVE TWIN ---------------- */
 export function LiveSection() {
@@ -134,51 +139,79 @@ export function LiveSection() {
 }
 
 /* ---------------- 04 PHYSICS VS REALITY ---------------- */
+/* ---------------- 04 AIRCRAFT MISSION SECTION (1:1 MATCHING REFERENCE) ---------------- */
 export function PhysicsSection() {
-  const { ref, progress } = useScrollProgress<HTMLDivElement>();
   return (
-    <div ref={ref} className="relative h-[200vh]">
-      <div className="sticky top-0 flex min-h-screen items-center border-t border-border/60 px-5 py-20 lg:px-10">
-        <div className="mx-auto w-full max-w-[1400px]">
-          <SectionHeading
-            index="04"
-            kicker="PHYSICS VS REALITY"
-            title={<>When reality begins to diverge, the twin notices.</>}
-            sub="The physics model predicts what the engine should be doing under the current mission conditions. The residual between expectation and observation is the earliest usable signal."
-          />
-          <div className="mt-10 grid gap-4 lg:grid-cols-2">
-            <Panel label="EXPECTED ENGINE BEHAVIOR" corner="PHYSICS MODEL">
-              <div className="p-4">
-                <ResidualChart progress={0} />
-              </div>
-            </Panel>
-            <Panel label="OBSERVED ENGINE BEHAVIOR" corner="TELEMETRY">
-              <div className="p-4">
-                <ResidualChart progress={progress} />
-              </div>
-            </Panel>
+    <section id="mission" className="relative border-t border-[#00A8D6]/20 bg-gradient-to-b from-[#DDE8F0] via-[#EBF2F7] to-white px-6 py-28 lg:px-12 lg:py-36 overflow-hidden">
+      <div className="mx-auto max-w-[1400px] grid gap-12 lg:grid-cols-12 lg:items-center">
+        {/* Left Column Text */}
+        <div className="lg:col-span-5 z-10">
+          <div className="font-mono text-xs font-semibold tracking-[0.2em] text-[#526B7E] uppercase mb-4">
+            <span className="text-[#00A8D6]">◦—</span> BUILT FOR REAL MISSIONS —
           </div>
-          <div className="mt-4 grid gap-px bg-border sm:grid-cols-4">
-            <div className="bg-panel/90 p-4">
-              <div className="label-xs">PHYSICS RESIDUAL</div>
-              <div className="readout text-2xl text-amber">+{(progress * 18.4).toFixed(1)}%</div>
+
+          <h2 className="font-display text-3xl font-bold tracking-tight text-[#0A1926] sm:text-5xl lg:text-[3.2rem] leading-[1.08]">
+            A deeper understanding of every flight.
+          </h2>
+
+          <p className="mt-6 text-sm leading-relaxed text-[#526B7E] sm:text-base max-w-md">
+            AERIS-TWIN integrates engine intelligence with real flight environments to help you operate smarter, safer and longer.
+          </p>
+
+          <div className="mt-8">
+            <Link
+              to="/sim"
+              className="inline-flex items-center gap-3 rounded-full bg-[#0A1926] px-7 py-3.5 font-mono text-xs font-semibold tracking-[0.16em] text-white transition-all hover:bg-[#00A8D6] shadow-md hover:shadow-[0_0_24px_rgba(0,168,214,0.4)]"
+            >
+              <span>Explore the Platform</span>
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Right Column: TAPAS BH-201 Aircraft Soaring over Mountains */}
+        <div className="lg:col-span-7 relative flex items-center justify-center">
+          <div className="relative w-full h-[420px] rounded-2xl overflow-hidden shadow-2xl border border-[#00A8D6]/30 bg-[#0A1926]">
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0A1926] via-transparent to-transparent z-10" />
+            
+            {/* Mountain SVG Vector Background */}
+            <svg viewBox="0 0 1000 500" fill="none" className="absolute inset-0 w-full h-full object-cover">
+              <path d="M0 500 L200 280 L350 380 L550 200 L750 340 L1000 180 V500 Z" fill="#1A3447" opacity="0.6" />
+              <path d="M0 500 L300 320 L500 420 L700 240 L900 380 L1000 280 V500 Z" fill="#0A1926" opacity="0.9" />
+              <polygon points="550,200 510,240 590,240" fill="#EBF2F7" opacity="0.7" />
+              <polygon points="1000,180 960,220 1000,240" fill="#EBF2F7" opacity="0.7" />
+            </svg>
+
+            {/* TAPAS BH-201 Aircraft Twin-Propeller Vector */}
+            <div className="absolute inset-0 grid place-items-center z-20">
+              <svg viewBox="0 0 600 300" className="w-[85%] h-auto drop-shadow-[0_15px_30px_rgba(0,168,214,0.5)]">
+                <path d="M220 150 C280 120 400 120 460 150 C400 180 280 180 220 150 Z" fill="#CBDADE" stroke="#00A8D6" strokeWidth="2" />
+                <path d="M120 150 L460 150 L520 142 L80 142 Z" fill="#9FB5C4" stroke="#00A8D6" strokeWidth="2" />
+                <polygon points="460,150 510,100 530,100 480,150" fill="#E08B38" />
+                <circle cx="260" cy="150" r="14" fill="#00C8FF" opacity="0.6" className="animate-spin" />
+                <circle cx="420" cy="150" r="14" fill="#00C8FF" opacity="0.6" className="animate-spin" />
+              </svg>
             </div>
-            <div className="bg-panel/90 p-4">
-              <div className="label-xs">ANOMALY SCORE</div>
-              <div className="readout text-2xl text-amber">{(progress * 82).toFixed(0)}%</div>
+
+            {/* Tactical HUD Reticle Overlay */}
+            <div className="absolute inset-0 z-30 pointer-events-none grid place-items-center">
+              <div className="h-64 w-64 rounded-full border border-[#00A8D6]/40 border-dashed animate-orbit-slow" />
+              <div className="absolute top-6 right-6 aeris-glass-card rounded px-3 py-1 font-mono text-[10px] font-bold text-[#0A1926]">
+                TAPAS BH-201 &nbsp;|&nbsp; <span className="text-[#00A8D6]">INDIAN MALE UAV</span>
+              </div>
             </div>
-            <div className="bg-panel/90 p-4">
-              <div className="label-xs">DRIVING CHANNEL</div>
-              <div className="readout text-2xl">EGT-3</div>
-            </div>
-            <div className="bg-panel/90 p-4">
-              <div className="label-xs">CLASSIFICATION</div>
-              <div className="readout text-2xl">{progress > 0.5 ? "DEGRADATION" : "NOMINAL"}</div>
+
+            {/* Right Capability Tags */}
+            <div className="absolute right-4 bottom-4 z-30 hidden sm:flex flex-col gap-1 font-mono text-[9px] font-bold text-[#526B7E] text-right tracking-widest uppercase">
+              <div>SURVEILLANCE</div>
+              <div>RECONNAISSANCE</div>
+              <div>MARITIME</div>
+              <div>BORDER SECURITY</div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -574,40 +607,40 @@ export function ArchitectureStrip() {
 
 export function Footer() {
   return (
-    <footer className="border-t border-border px-5 py-12 lg:px-10">
-      <div className="mx-auto grid max-w-[1400px] gap-10 md:grid-cols-[1.4fr_1fr]">
-        <div>
-          <div className="font-display text-sm tracking-[0.32em]">AERIS-TWIN</div>
-          <div className="label-xs mt-2">AI-ENABLED DIGITAL ENGINE INTELLIGENCE</div>
-          <p className="mt-4 max-w-md text-xs leading-relaxed text-muted-foreground">
-            Prototype / research demonstrator. All telemetry, faults, RUL estimates and lead times shown on this site are
-            produced by a deterministic simulation of a representative four-cylinder engine (AE-P4). AERIS-TWIN is advisory and
-            read-only; it does not command or control an engine.
-          </p>
+    <footer className="border-t border-[#00A8D6]/20 bg-[#EBF2F7] px-6 py-10 lg:px-12">
+      <div className="mx-auto flex max-w-[1600px] flex-col md:flex-row items-center justify-between gap-6">
+        {/* Left: Triangle Logo & Descriptor */}
+        <div className="flex items-center gap-3">
+          <div className="grid h-6 w-6 place-items-center rounded-[3px] border border-[#00A8D6]/60 bg-[#00A8D6]/10">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none stroke-[#00A8D6]" strokeWidth="2.2">
+              <polygon points="12 2 2 22 12 17 22 22 12 2" />
+            </svg>
+          </div>
+          <div className="flex flex-col">
+            <span className="font-display text-xs font-semibold tracking-[0.22em] text-[#0A1926]">
+              AERIS-TWIN
+            </span>
+            <span className="font-mono text-[8px] font-medium tracking-[0.16em] text-[#526B7E] uppercase">
+              DIGITAL INTELLIGENCE FOR FLIGHT
+            </span>
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3">
-          {[
-            { h: "SYSTEM", l: ["Architecture", "Technology", "Data model"] },
-            { h: "RESOURCE", l: ["Documentation", "Model cards", "GitHub"] },
-            { h: "CONTACT", l: ["Programme office", "Research enquiries"] },
-          ].map((c) => (
-            <div key={c.h}>
-              <div className="label-xs text-cyan">{c.h}</div>
-              <ul className="mt-3 space-y-2">
-                {c.l.map((i) => (
-                  <li key={i} className="text-xs text-muted-foreground transition-colors hover:text-foreground">
-                    {i}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+
+        {/* Center: Links */}
+        <div className="flex items-center gap-8 font-mono text-xs text-[#102A3C]">
+          <a href="#top" className="hover:text-[#00A8D6]">System</a>
+          <a href="#predictive" className="hover:text-[#00A8D6]">Engine</a>
+          <a href="#predictive" className="hover:text-[#00A8D6]">Predictive</a>
+          <a href="#mission" className="hover:text-[#00A8D6]">Mission</a>
+          <a href="#mission" className="hover:text-[#00A8D6]">About</a>
         </div>
-      </div>
-      <div className="mx-auto mt-10 flex max-w-[1400px] justify-between border-t border-border/60 pt-5 label-xs">
-        <span>AERIS-TWIN / v1.4</span>
-        <span>SYNTHETIC DATA · DEMONSTRATOR</span>
+
+        {/* Right: Tag */}
+        <div className="font-mono text-[10px] font-semibold text-[#526B7E] tracking-widest uppercase">
+          THE FUTURE OF FLIGHT IS PREDICTIVE. <span className="text-[#00A8D6]">◦</span>
+        </div>
       </div>
     </footer>
   );
 }
+

@@ -270,3 +270,2770 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* =========================================================
+   AERIS-TWIN — PREMIUM AEROSPACE LANDING SYSTEM
+   ========================================================= */
+
+.aeris-landing {
+  --aeris-ink: #EAF7FF;
+  --aeris-muted: #7893A6;
+  --aeris-soft: #526B7E;
+  --aeris-cyan: #00C8FF;
+  --aeris-blue: #287BFF;
+  --aeris-bg: #030B14;
+  --aeris-bg-light: #061522;
+  --aeris-bg-blue: #0A1A28;
+  --aeris-line: rgba(0, 200, 255, 0.14);
+
+  color: var(--aeris-ink);
+  background: var(--aeris-bg);
+  overflow: hidden;
+}
+
+.aeris-landing *,
+.aeris-landing *::before,
+.aeris-landing *::after {
+  box-sizing: border-box;
+}
+
+.aeris-landing a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.aeris-landing button {
+  font: inherit;
+}
+
+.aeris-landing
+  .aeris-eyebrow,
+.aeris-landing
+  .aeris-kicker,
+.aeris-landing
+  .aeris-index,
+.aeris-landing
+  .aeris-hero-meta,
+.aeris-landing
+  .aeris-engine-label,
+.aeris-landing
+  .aeris-engine-controls,
+.aeris-landing
+  .aeris-engine-status,
+.aeris-landing
+  .aeris-scroll-cue,
+.aeris-landing
+  .aeris-step-num,
+.aeris-landing
+  .aeris-stat-list,
+.aeris-landing
+  .aeris-aircraft-caption,
+.aeris-landing
+  .aeris-inspection-tag,
+.aeris-landing
+  .aeris-finale-mark,
+.aeris-landing
+  .aeris-footer,
+.aeris-landing
+  .aeris-engine-callout {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.aeris-eyebrow {
+  display: inline-block;
+  color: var(--aeris-cyan);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* =========================================================
+   NAV
+   ========================================================= */
+
+.aeris-nav {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 50;
+
+  height: 76px;
+  padding: 0 5vw;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  color: var(--aeris-ink);
+
+  transition:
+    background 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease,
+    backdrop-filter 0.35s ease;
+}
+
+.aeris-nav.is-scrolled {
+  background: rgba(6, 21, 34, 0.88);
+  border-bottom: 1px solid rgba(0, 200, 255, 0.16);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(18px);
+}
+
+body.studio-modal-active .aeris-nav {
+  display: none !important;
+}
+
+.aeris-brand,
+.aeris-desktop-nav,
+.aeris-nav-cta,
+.aeris-nav-status,
+.aeris-mobile-nav a {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.aeris-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+
+  font-size: 12px;
+  font-weight: 600;
+  color: #EAF7FF;
+}
+
+.aeris-brand-mark {
+  width: 21px;
+  height: 21px;
+
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+
+  padding: 3px;
+
+  border: 1px solid var(--aeris-cyan);
+}
+
+.aeris-brand-mark i {
+  display: block;
+  width: 3px;
+  background: var(--aeris-cyan);
+}
+
+.aeris-brand-mark i:nth-child(1) {
+  height: 7px;
+}
+
+.aeris-brand-mark i:nth-child(2) {
+  height: 12px;
+}
+
+.aeris-brand-mark i:nth-child(3) {
+  height: 16px;
+}
+
+.aeris-desktop-nav {
+  display: flex;
+  align-items: center;
+  gap: 27px;
+
+  color: #7893A6;
+}
+
+.aeris-desktop-nav > a {
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.aeris-desktop-nav > a:hover {
+  color: var(--aeris-cyan);
+  transform: translateY(-1px);
+}
+
+.aeris-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+
+  padding: 10px 13px;
+
+  color: var(--aeris-cyan) !important;
+  border: 1px solid rgba(0, 168, 214, 0.42);
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.aeris-nav-cta:hover {
+  background: rgba(0, 168, 214, 0.06);
+  border-color: var(--aeris-cyan);
+}
+
+.aeris-nav-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+
+  color: #169474;
+}
+
+.aeris-nav-status i {
+  width: 6px;
+  height: 6px;
+
+  border-radius: 50%;
+  background: #22b789;
+
+  box-shadow:
+    0 0 0 4px rgba(34, 183, 137, 0.11);
+
+  animation: aeris-light-pulse 2.5s ease-in-out infinite;
+}
+
+.aeris-menu {
+  display: none;
+  border: 0;
+  background: transparent;
+  color: var(--aeris-ink);
+  cursor: pointer;
+}
+
+.aeris-mobile-nav {
+  position: absolute;
+  inset: 76px 0 auto;
+
+  display: grid;
+
+  padding: 12px 22px 20px;
+
+  border-bottom: 1px solid rgba(8, 23, 34, 0.1);
+  background: rgba(244, 247, 249, 0.97);
+
+  backdrop-filter: blur(18px);
+}
+
+.aeris-mobile-nav a {
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(8, 23, 34, 0.07);
+}
+
+/* =========================================================
+   HERO
+   ========================================================= */
+
+.aeris-hero {
+  min-height: min(920px, 100svh);
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+
+  background: #030B14;
+}
+
+.aeris-hero-atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: -4;
+
+  background:
+    radial-gradient(
+      ellipse at 70% 45%,
+      rgba(0, 200, 255, 0.16) 0%,
+      rgba(40, 123, 255, 0.08) 35%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse at 20% 80%,
+      rgba(6, 21, 34, 0.8) 0%,
+      transparent 60%
+    );
+}
+
+.aeris-hero-atmosphere::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+
+  background:
+    radial-gradient(
+      circle at 68% 45%,
+      rgba(0, 200, 255, 0.09),
+      transparent 30%
+    );
+
+  filter: blur(35px);
+  animation: aeris-atmosphere 12s ease-in-out infinite;
+}
+
+.aeris-hero-grid {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+
+  opacity: 0.22;
+
+  background-image:
+    linear-gradient(
+      rgba(0, 200, 255, 0.08) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(0, 200, 255, 0.08) 1px,
+      transparent 1px
+    );
+
+  background-size: 64px 64px;
+
+  mask-image:
+    radial-gradient(
+      circle at 60% 50%,
+      black 0%,
+      transparent 80%
+    );
+}
+
+.aeris-hero-blueprint {
+  position: absolute;
+  right: -5%;
+  top: 10%;
+  width: 55%;
+  height: 70%;
+  z-index: -2;
+  opacity: 0.15;
+  background:
+    radial-gradient(
+      ellipse at center,
+      transparent 0 32%,
+      rgba(0, 200, 255, 0.3) 32.2%,
+      transparent 32.5%
+    ),
+    radial-gradient(
+      ellipse at center,
+      transparent 0 47%,
+      rgba(40, 123, 255, 0.25) 47.2%,
+      transparent 47.5%
+    );
+  transform: rotate(-12deg);
+}
+
+/* =========================================================
+   FADED SPACE STATION LABORATORY BACKGROUND CHAMBER
+   ========================================================= */
+
+.aeris-spacestation-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 1;
+}
+
+.lab-chamber-img {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  object-position: center;
+  filter: brightness(0.9) contrast(1.1);
+}
+
+.lab-truss-svg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+}
+
+/* Vertical Ambient Light Pillars of Space Hangar */
+.lab-light-pillar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 160px;
+  filter: blur(45px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.lab-pillar-left {
+  left: 2%;
+  background: linear-gradient(180deg, rgba(0, 200, 255, 0.4) 0%, rgba(40, 123, 255, 0.15) 60%, transparent 100%);
+}
+
+.lab-pillar-right {
+  right: 2%;
+  background: linear-gradient(180deg, rgba(0, 200, 255, 0.4) 0%, rgba(40, 123, 255, 0.15) 60%, transparent 100%);
+}
+
+/* Center Chamber Soft Sci-Fi Ambient Halo */
+.lab-center-chamber-glow {
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 850px;
+  height: 520px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(0, 200, 255, 0.18) 0%, rgba(40, 123, 255, 0.06) 50%, transparent 75%);
+  filter: blur(60px);
+}
+
+.aeris-hero-inner {
+  width: min(1480px, 100%);
+  min-height: min(920px, 100svh);
+
+  margin: 0 auto;
+
+  padding: 145px 5vw 90px;
+
+  display: grid;
+  grid-template-columns:
+    minmax(360px, 0.82fr)
+    minmax(540px, 1.18fr);
+
+  align-items: center;
+
+  gap: 2vw;
+}
+
+.aeris-hero-copy {
+  position: relative;
+  z-index: 5;
+
+  max-width: 620px;
+}
+
+.aeris-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  color: var(--aeris-cyan);
+
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.aeris-pulse-dot {
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+
+  background: var(--aeris-cyan);
+
+  box-shadow:
+    0 0 0 5px rgba(0, 168, 214, 0.1);
+
+  animation:
+    aeris-light-pulse 2.4s ease-in-out infinite;
+}
+
+.aeris-index {
+  margin-top: 30px;
+
+  color: #7890a1;
+  font-size: 9px;
+}
+
+.aeris-hero h1,
+.aeris-finale h2 {
+  margin: 23px 0 0;
+
+  font-family: var(--font-display);
+  font-weight: 500;
+
+  letter-spacing: -0.065em;
+  line-height: 0.94;
+
+  font-size: clamp(3.8rem, 6.2vw, 6.25rem);
+}
+
+.aeris-hero h1 em,
+.aeris-finale h2 em {
+  color: var(--aeris-blue);
+  font-style: normal;
+}
+
+.aeris-lede {
+  max-width: 460px;
+  margin-top: 30px;
+
+  color: var(--aeris-muted);
+
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.aeris-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  margin-top: 34px;
+}
+
+.aeris-button {
+  min-height: 45px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  padding: 0 17px;
+
+  border: 1px solid var(--aeris-cyan);
+
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.15em;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.25s ease,
+    background 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.aeris-button:hover {
+  transform: translateY(-2px);
+}
+
+.aeris-button-primary {
+  color: white !important;
+  background: var(--aeris-cyan);
+
+  box-shadow:
+    0 10px 30px rgba(0, 168, 214, 0.18);
+}
+
+.aeris-button-primary {
+  color: #030B14 !important;
+  background: #00C8FF;
+  border-color: #00C8FF;
+  font-weight: 700;
+
+  box-shadow:
+    0 10px 30px rgba(0, 200, 255, 0.35);
+}
+
+.aeris-button-primary:hover {
+  background: #38d6ff;
+
+  box-shadow:
+    0 14px 40px rgba(0, 200, 255, 0.55);
+}
+
+.aeris-button-quiet {
+  border-color: rgba(0, 200, 255, 0.3);
+
+  color: #EAF7FF !important;
+  background: rgba(10, 26, 40, 0.65);
+  backdrop-filter: blur(12px);
+}
+
+.aeris-button-quiet:hover {
+  background: rgba(10, 26, 40, 0.9);
+  border-color: #00C8FF;
+}
+
+.aeris-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 17px;
+
+  margin-top: 38px;
+
+  color: #7893A6;
+  font-size: 8px;
+}
+
+.aeris-online {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+
+  color: #00C8FF;
+}
+
+/* =========================================================
+   ENGINE
+   ========================================================= */
+
+.aeris-engine-stage {
+  position: relative;
+
+  min-height: 620px;
+}
+
+/* Glass HUD Cards matching reference image */
+.aeris-glass-hud {
+  position: absolute;
+  z-index: 15;
+  padding: 14px 18px;
+  background: rgba(10, 26, 40, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 200, 255, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), inset 0 0 20px rgba(0, 200, 255, 0.12);
+  font-family: var(--font-mono);
+  pointer-events: none;
+}
+
+.hud-top-left {
+  top: 4%;
+  left: 2%;
+  width: 200px;
+}
+
+.hud-top-right {
+  top: 6%;
+  right: 2%;
+  width: 210px;
+}
+
+.hud-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--aeris-cyan);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  margin-bottom: 10px;
+}
+
+.hud-title-right {
+  color: var(--aeris-cyan);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.hud-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.hud-target-icon {
+  color: var(--aeris-cyan);
+  font-size: 14px;
+}
+
+.hud-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aeris-cyan);
+  box-shadow: 0 0 8px var(--aeris-cyan);
+}
+
+.hud-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #7893A6;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+
+.hud-schematic-box {
+  background: rgba(0, 200, 255, 0.08);
+  border: 1px dashed rgba(0, 200, 255, 0.35);
+  border-radius: 5px;
+  padding: 8px;
+}
+
+.hud-schematic-svg {
+  width: 100%;
+  height: auto;
+  stroke: #00C8FF;
+  fill: none;
+  opacity: 0.9;
+}
+
+/* ---------------------------------------------------------
+   3D METALLIC STAND & UPWARD HOLOGRAM PROJECTION LIGHT BEAM
+   --------------------------------------------------------- */
+.aeris-stand-container {
+  position: absolute;
+  bottom: 2%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 540px;
+  height: 340px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+/* Upward Hologram Projection Cone */
+.hologram-light-cone {
+  position: absolute;
+  bottom: 58px;
+  width: 380px;
+  height: 280px;
+  background:
+    linear-gradient(to top, rgba(0, 210, 255, 0.42) 0%, rgba(0, 168, 214, 0.15) 50%, rgba(0, 168, 214, 0) 100%),
+    repeating-linear-gradient(90deg, transparent 0px, transparent 8px, rgba(0, 220, 255, 0.08) 9px, transparent 10px);
+  clip-path: polygon(18% 0%, 82% 0%, 100% 100%, 0% 100%);
+  filter: drop-shadow(0 0 30px rgba(0, 200, 255, 0.45));
+  animation: aeris-hologram-beam-pulse 4s ease-in-out infinite;
+}
+
+.hologram-vertical-laser {
+  position: absolute;
+  bottom: 58px;
+  width: 2px;
+  height: 280px;
+  background: linear-gradient(to top, rgba(0, 240, 255, 0.8), rgba(0, 168, 214, 0));
+  box-shadow: 0 0 15px #00c8ff;
+  animation: aeris-scan-vertical 6s ease-in-out infinite;
+}
+
+/* 3D Metallic Stand Body Structure - Dual-Tiered 2-Layer Stage */
+.stand-pedestal-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 520px;
+}
+
+/* TIER 1: Upper Stage Platform (Layer 1) */
+.stand-stage-upper {
+  position: relative;
+  z-index: 5;
+  width: 380px;
+  height: 28px;
+  background: linear-gradient(180deg, #374b5b 0%, #1c2e3a 60%, #101c24 100%);
+  border: 1.5px solid rgba(0, 220, 255, 0.8);
+  border-radius: 20px / 10px;
+  box-shadow:
+    inset 0 2px 4px rgba(255, 255, 255, 0.6),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.8),
+    0 8px 25px rgba(0, 200, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stand-upper-rim-glow {
+  position: absolute;
+  bottom: -2px;
+  width: 102%;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0, 220, 255, 0.5);
+  filter: blur(4px);
+}
+
+/* TIER 2: Lower Base Stage Platform (Layer 2) */
+.stand-stage-lower {
+  position: relative;
+  z-index: 3;
+  width: 480px;
+  height: 38px;
+  margin-top: -6px;
+  background: linear-gradient(180deg, #243542 0%, #13212b 45%, #081219 100%);
+  border: 1.5px solid rgba(0, 180, 230, 0.65);
+  border-radius: 24px / 14px;
+  box-shadow:
+    inset 0 2px 5px rgba(255, 255, 255, 0.4),
+    inset 0 -4px 10px rgba(0, 0, 0, 0.9),
+    0 15px 40px rgba(8, 23, 34, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stand-lower-plate {
+  position: absolute;
+  top: -10px;
+  width: 100%;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #324756 0%, #172733 100%);
+  border: 1px solid rgba(0, 180, 230, 0.5);
+}
+
+/* Metallic Top Surface Plate with Glowing Emitter Core */
+.stand-top-plate {
+  position: absolute;
+  top: -10px;
+  width: 100%;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #4c6374 0%, #203340 100%);
+  border: 1px solid rgba(0, 230, 255, 0.85);
+  box-shadow: inset 0 0 14px rgba(0, 210, 255, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stand-emitter-ring {
+  width: 82%;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 240, 255, 0.95);
+  background: radial-gradient(ellipse at center, rgba(0, 230, 255, 0.6) 0%, rgba(0, 168, 214, 0.25) 60%, transparent 80%);
+  box-shadow: 0 0 28px rgba(0, 220, 255, 0.9);
+}
+
+.stand-emitter-core {
+  position: absolute;
+  width: 60%;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, #ffffff 0%, rgba(0, 230, 255, 0.9) 50%, transparent 80%);
+  box-shadow: 0 0 40px #00e1ff;
+}
+
+/* Front Metallic Beveled Wall with Engraved Badge */
+.stand-front-wall {
+  position: relative;
+  z-index: 4;
+  width: 100%;
+  text-align: center;
+  padding-top: 2px;
+}
+
+.stand-engraved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  color: #eaf6fc;
+  text-shadow: 0 0 10px rgba(0, 210, 255, 0.9), 0 0 20px rgba(0, 168, 214, 0.6);
+}
+
+.badge-glow-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00d2ff;
+  box-shadow: 0 0 8px #00d2ff;
+}
+
+/* Base Outer Flange & Ground Reflection */
+.stand-bottom-flange {
+  position: absolute;
+  bottom: -4px;
+  width: 105%;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(10, 21, 29, 0.9);
+  border: 1px solid rgba(0, 168, 214, 0.35);
+}
+
+.stand-ground-reflection {
+  position: absolute;
+  bottom: -15px;
+  width: 115%;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(0, 200, 255, 0.4) 0%, rgba(0, 168, 214, 0.1) 50%, transparent 75%);
+  filter: blur(12px);
+  animation: aeris-light-pulse 3s ease-in-out infinite;
+}
+
+@keyframes aeris-hologram-beam-pulse {
+  0%, 100% {
+    opacity: 0.75;
+    transform: scaleX(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scaleX(1.03);
+  }
+}
+
+.aeris-engine-halo {
+  position: absolute;
+
+  left: 20%;
+  top: 20%;
+
+  width: 60%;
+  height: 52%;
+
+  border-radius: 50%;
+
+  background:
+    radial-gradient(
+      ellipse,
+      rgba(255, 255, 255, 0.95),
+      rgba(202, 230, 240, 0.42) 38%,
+      transparent 70%
+    );
+
+  filter: blur(5px);
+
+  z-index: 0;
+}
+
+.aeris-engine-canvas {
+  position: absolute;
+  inset: 1% 1% 1% -5%;
+
+  z-index: 10;
+
+  filter:
+    drop-shadow(0 30px 28px rgba(21, 70, 92, 0.17))
+    drop-shadow(0 0 25px rgba(0, 168, 214, 0.08));
+
+  animation:
+    aeris-engine-float 8s ease-in-out infinite;
+
+  pointer-events: auto;
+}
+
+.aeris-engine-canvas canvas {
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: auto !important;
+}
+
+.aeris-engine-loading {
+  position: absolute;
+  inset: 42% 0;
+
+  text-align: center;
+
+  color: var(--aeris-cyan);
+
+  font: 10px var(--font-mono);
+  letter-spacing: 0.18em;
+}
+
+.aeris-engine-loading span {
+  animation:
+    aeris-light-pulse 1.2s infinite;
+}
+
+/* =========================================================
+   ORBITS
+   ========================================================= */
+
+.aeris-orbits {
+  position: absolute;
+  inset: 6% 0 7% -1%;
+
+  z-index: 1;
+
+  pointer-events: none;
+}
+
+.aeris-scan {
+  position: absolute;
+
+  left: 10%;
+  right: 8%;
+  top: 47%;
+
+  height: 1px;
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(0, 168, 214, 0.5),
+      transparent
+    );
+
+  animation:
+    aeris-scan-horizontal 6s ease-in-out infinite;
+}
+
+.aeris-scan-vertical {
+  position: absolute;
+
+  top: 13%;
+  bottom: 12%;
+  left: 53%;
+
+  width: 1px;
+
+  background:
+    linear-gradient(
+      transparent,
+      rgba(0, 168, 214, 0.28),
+      transparent
+    );
+
+  animation:
+    aeris-scan-vertical 7s ease-in-out infinite;
+}
+
+/* =========================================================
+   OPEN FLOWING WHITE SINE WAVE RIBBONS AROUND ENGINE BASE
+   ========================================================= */
+
+.engine-white-waves-container {
+  position: absolute;
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+  width: 820px;
+  height: 240px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.engine-wave-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.wave-path-1 {
+  transform-origin: center;
+  animation: wave-flow-1 6s ease-in-out infinite alternate;
+}
+
+.wave-path-2 {
+  transform-origin: center;
+  animation: wave-flow-2 8s ease-in-out infinite alternate;
+}
+
+.wave-path-3 {
+  transform-origin: center;
+  animation: wave-flow-3 7s ease-in-out infinite alternate;
+}
+
+@keyframes wave-flow-1 {
+  0% {
+    transform: translateY(0px) scaleY(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateY(-14px) scaleY(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(8px) scaleY(0.92);
+    opacity: 0.75;
+  }
+}
+
+@keyframes wave-flow-2 {
+  0% {
+    transform: translateY(0px) scaleY(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(12px) scaleY(0.85);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-10px) scaleY(1.12);
+    opacity: 1;
+  }
+}
+
+@keyframes wave-flow-3 {
+  0% {
+    transform: translateY(0px);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-16px);
+    opacity: 0.95;
+  }
+}
+
+/* =========================================================
+   SCATTERED ROTATING 3D SPARKLES & STAR PARTICLES
+   ========================================================= */
+
+.engine-sparkle-field {
+  position: absolute;
+  left: 50%;
+  bottom: 14%;
+  transform: translateX(-50%);
+  width: 780px;
+  height: 280px;
+  pointer-events: none;
+  z-index: 6;
+  perspective: 1000px;
+}
+
+.sparkle-orbit-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  animation: sparkle-orbit-rotate 35s linear infinite;
+}
+
+.sparkle-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: #00d2ff;
+  box-shadow:
+    0 0 5px #00d2ff,
+    0 0 12px #0077ff,
+    0 0 20px #0044ff;
+  animation: sparkle-twinkle 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes sparkle-orbit-rotate {
+  from {
+    transform: rotateX(68deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateX(68deg) rotateZ(360deg);
+  }
+}
+
+@keyframes sparkle-twinkle {
+  0% {
+    opacity: 0.25;
+    transform: scale(0.5);
+    background: #0088ff;
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.5);
+    background: #00e1ff;
+    filter: brightness(1.5);
+    box-shadow:
+      0 0 8px #00f0ff,
+      0 0 16px #0077ff,
+      0 0 26px #0044ff;
+  }
+  100% {
+    opacity: 0.35;
+    transform: scale(0.6);
+    background: #2563eb;
+  }
+}
+
+/* =========================================================
+   ENGINE LABELS
+   ========================================================= */
+
+.aeris-engine-label {
+  position: absolute;
+
+  z-index: 5;
+
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+
+  color: #557184;
+
+  font-size: 9px;
+}
+
+.aeris-engine-label b {
+  color: var(--aeris-cyan);
+  font-weight: 500;
+}
+
+.aeris-engine-label-top {
+  top: 11%;
+  right: 13%;
+}
+
+/* Minimal technical callouts */
+
+.aeris-engine-callout {
+  position: absolute;
+
+  z-index: 6;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  color: #547083;
+
+  font-size: 8px;
+
+  white-space: nowrap;
+
+  opacity: 0.82;
+}
+
+.aeris-engine-callout i {
+  width: 5px;
+  height: 5px;
+
+  border-radius: 50%;
+
+  background: var(--aeris-cyan);
+
+  box-shadow:
+    0 0 9px rgba(0, 168, 214, 0.45);
+}
+
+.callout-one {
+  top: 23%;
+  left: 7%;
+}
+
+.callout-two {
+  top: 39%;
+  right: 0;
+}
+
+.callout-three {
+  bottom: 28%;
+  left: 5%;
+}
+
+.callout-four {
+  bottom: 17%;
+  right: 10%;
+}
+
+/* =========================================================
+   ENGINE CONTROLS
+   ========================================================= */
+
+.aeris-engine-controls {
+  position: absolute;
+
+  z-index: 40;
+
+  top: 3%;
+  left: 50%;
+  transform: translateX(-50%);
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  pointer-events: auto !important;
+}
+
+.aeris-engine-controls button {
+  position: relative;
+  z-index: 41;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  padding: 9px 14px;
+
+  border: 1px solid rgba(0, 200, 255, 0.4);
+
+  background: rgba(10, 26, 40, 0.85);
+
+  color: #EAF7FF;
+
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+
+  cursor: pointer !important;
+  pointer-events: auto !important;
+
+  backdrop-filter: blur(14px);
+
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    background 0.2s ease,
+    transform 0.15s ease;
+}
+
+.aeris-engine-controls button:hover {
+  border-color: var(--aeris-cyan);
+  color: var(--aeris-cyan);
+  background: rgba(10, 26, 40, 0.95);
+  transform: translateY(-2px);
+}
+
+.aeris-engine-status {
+  position: absolute;
+
+  right: 12%;
+  bottom: 7%;
+
+  z-index: 6;
+
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+
+  color: #7893A6;
+
+  font-size: 8px;
+}
+
+.aeris-engine-status strong {
+  color: var(--aeris-cyan);
+
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 500;
+
+  letter-spacing: -0.04em;
+}
+
+.aeris-engine-status small {
+  color: #7893A6;
+  font-size: 7px;
+}
+
+/* =========================================================
+   SCROLL
+   ========================================================= */
+
+.aeris-scroll-cue {
+  position: absolute;
+
+  bottom: 22px;
+  left: 50%;
+
+  z-index: 7;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+
+  color: #7893A6;
+
+  font-size: 8px;
+
+  transform: translateX(-50%);
+}
+
+.aeris-scroll-cue svg {
+  color: var(--aeris-cyan);
+
+  animation:
+    aeris-bob 2s ease-in-out infinite;
+}
+
+/* =========================================================
+   GENERAL SECTIONS
+   ========================================================= */
+
+.aeris-section {
+  position: relative;
+
+  padding: 135px 5vw;
+
+  background: var(--aeris-bg-light);
+
+  opacity: 0;
+  transform: translateY(25px);
+
+  transition:
+    opacity 0.9s ease,
+    transform 0.9s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.aeris-section.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.aeris-rule {
+  position: absolute;
+
+  top: 0;
+  left: 5vw;
+  right: 5vw;
+
+  height: 1px;
+
+  background: var(--aeris-line);
+}
+
+.aeris-section-inner {
+  width: min(1280px, 100%);
+  margin: 0 auto;
+}
+
+.aeris-section-heading {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 680px);
+
+  gap: 30px;
+
+  align-items: start;
+}
+
+.aeris-section-heading h2 {
+  margin: -8px 0 0;
+
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 4vw, 4.6rem);
+  font-weight: 500;
+
+  line-height: 0.98;
+  letter-spacing: -0.06em;
+  color: #EAF7FF;
+}
+
+.aeris-section-heading h2 span {
+  color: var(--aeris-cyan);
+}
+
+/* =========================================================
+   PROCESS
+   ========================================================= */
+
+.aeris-process-grid {
+  position: relative;
+
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+
+  gap: 22px;
+
+  margin-top: 105px;
+}
+
+.aeris-process-line {
+  position: absolute;
+
+  top: 283px;
+  left: 13%;
+  right: 13%;
+
+  border-top:
+    1px solid rgba(0, 200, 255, 0.25);
+}
+
+.aeris-process-step {
+  position: relative;
+
+  min-height: 190px;
+
+  padding: 50px 18px 24px;
+  background: rgba(10, 26, 40, 0.55);
+  border: 1px solid rgba(0, 200, 255, 0.16);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+}
+
+.aeris-step-num {
+  position: absolute;
+
+  top: 16px;
+  left: 18px;
+
+  color: #7893A6;
+  font-size: 9px;
+}
+
+.aeris-step-mark {
+  position: absolute;
+
+  top: 40px;
+  left: 18px;
+
+  width: 25px;
+  height: 25px;
+
+  border: 1px solid var(--aeris-cyan);
+  border-radius: 50%;
+
+  background: #061522;
+}
+
+.aeris-step-mark span {
+  position: absolute;
+  inset: 8px;
+
+  border-radius: 50%;
+
+  background: var(--aeris-cyan);
+
+  box-shadow:
+    0 0 14px rgba(0, 200, 255, 0.5);
+}
+
+.aeris-step-mark.mark-1 {
+  transform: scale(0.86);
+}
+
+.aeris-step-mark.mark-2 {
+  transform: scale(0.72);
+}
+
+.aeris-step-mark.mark-3 {
+  transform: scale(0.58);
+}
+
+.aeris-step-mark.mark-4 {
+  transform: scale(0.44);
+}
+
+.aeris-process-step h3,
+.aeris-intel-item h3 {
+  margin-top: 18px;
+
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 500;
+
+  letter-spacing: 0.12em;
+}
+
+.aeris-process-step p,
+.aeris-intel-item p {
+  max-width: 190px;
+
+  margin-top: 10px;
+
+  color: var(--aeris-muted);
+
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* =========================================================
+   MISSION
+   ========================================================= */
+
+.aeris-mission-section {
+  background: var(--aeris-bg);
+}
+
+.aeris-mission-layout {
+  display: grid;
+  grid-template-columns: 1.45fr 0.8fr;
+
+  gap: 8vw;
+
+  align-items: center;
+
+  margin-top: 85px;
+}
+
+.aeris-aircraft-plate {
+  position: relative;
+
+  min-height: 300px;
+
+  display: grid;
+  place-items: center;
+
+  overflow: hidden;
+
+  color: rgba(0, 200, 255, 0.85);
+  border: 1px solid rgba(0, 200, 255, 0.25);
+  border-radius: 8px;
+
+  background:
+    radial-gradient(
+      ellipse,
+      rgba(0, 200, 255, 0.12),
+      transparent 68%
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 39px,
+      rgba(0, 200, 255, 0.05) 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 39px,
+      rgba(0, 200, 255, 0.05) 40px
+    ),
+    linear-gradient(180deg, #0A1A28 0%, #030B14 100%);
+}
+
+.aeris-aircraft-plate::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent 49.9%,
+      rgba(0, 200, 255, 0.2) 50%,
+      transparent 50.1%
+    );
+}
+
+.aeris-aircraft-plate svg {
+  width: 90%;
+
+  opacity: 0.88;
+
+  filter:
+    drop-shadow(0 0 20px rgba(0, 200, 255, 0.4));
+
+  animation:
+    aeris-blueprint-float 8s ease-in-out infinite;
+}
+
+.aeris-aircraft-glow {
+  position: absolute;
+
+  width: 52%;
+  height: 25%;
+
+  border-radius: 50%;
+
+  background: rgba(0, 200, 255, 0.22);
+
+  filter: blur(32px);
+}
+
+.aeris-aircraft-caption {
+  position: absolute;
+
+  left: 22px;
+  bottom: 18px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  color: #7893A6;
+
+  font-size: 8px;
+}
+
+.aeris-aircraft-caption strong {
+  color: #EAF7FF;
+
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.aeris-mission-copy > p {
+  margin-top: 20px;
+
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 2.5vw, 2.5rem);
+  font-weight: 500;
+
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  color: #EAF7FF;
+}
+
+.aeris-stat-list {
+  display: grid;
+  gap: 12px;
+
+  margin-top: 34px;
+
+  color: #7893A6;
+  font-size: 8px;
+}
+
+.aeris-stat-list b {
+  margin-right: 12px;
+
+  color: var(--aeris-cyan);
+
+  font-weight: 500;
+}
+
+.aeris-text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  margin-top: 37px;
+
+  color: var(--aeris-cyan) !important;
+
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+/* =========================================================
+   INTELLIGENCE
+   ========================================================= */
+
+.aeris-intel-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+
+  margin-top: 85px;
+
+  border-top: 1px solid var(--aeris-line);
+}
+
+.aeris-intel-item {
+  min-height: 230px;
+
+  padding: 20px 22px 18px 22px;
+
+  border-right: 1px solid var(--aeris-line);
+
+  background: rgba(10, 26, 40, 0.4);
+
+  transition:
+    transform 0.3s ease,
+    background 0.3s ease;
+}
+
+.aeris-intel-item:hover {
+  transform: translateY(-5px);
+  background: rgba(10, 26, 40, 0.85);
+}
+
+.aeris-intel-item > span {
+  color: var(--aeris-cyan);
+
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.aeris-intel-item svg {
+  margin-top: 28px;
+
+  color: var(--aeris-cyan);
+}
+
+/* =========================================================
+   DIAGNOSTICS
+   ========================================================= */
+
+.aeris-diagnostic-preview {
+  display: grid;
+  grid-template-columns: 0.75fr 1.25fr;
+
+  gap: 7vw;
+
+  padding: 115px 5vw;
+
+  background: var(--aeris-bg-blue);
+}
+
+.aeris-diagnostic-copy {
+  max-width: 460px;
+}
+
+.aeris-diagnostic-copy h2 {
+  margin-top: 20px;
+
+  font-family: var(--font-display);
+  font-size: clamp(2.3rem, 3.7vw, 4.1rem);
+  font-weight: 500;
+
+  line-height: 1;
+  letter-spacing: -0.06em;
+  color: #EAF7FF;
+}
+
+.aeris-diagnostic-copy h2 span {
+  color: var(--aeris-cyan);
+}
+
+.aeris-diagnostic-copy p {
+  margin-top: 24px;
+
+  max-width: 390px;
+
+  color: var(--aeris-muted);
+
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.aeris-diagnostic-panel {
+  min-width: 0;
+}
+
+.aeris-diagnostic-panel .panel,
+.aeris-diagnostic-panel [class*="bg-panel"] {
+  background: rgba(10, 26, 40, 0.85) !important;
+  color: #EAF7FF !important;
+  border: 1px solid rgba(0, 200, 255, 0.25) !important;
+}
+
+.aeris-diagnostic-panel .text-muted-foreground {
+  color: var(--aeris-muted) !important;
+}
+
+/* =========================================================
+   INSPECTION
+   ========================================================= */
+
+.aeris-inspection-section {
+  background: var(--aeris-bg-light);
+}
+
+.aeris-inspection-layout {
+  display: grid;
+  grid-template-columns: 1.2fr 0.65fr;
+
+  gap: 9vw;
+
+  align-items: center;
+
+  margin-top: 85px;
+}
+
+.aeris-inspection-visual {
+  position: relative;
+
+  min-height: 390px;
+
+  display: grid;
+  place-items: center;
+
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 200, 255, 0.25);
+
+  background:
+    radial-gradient(
+      circle at center,
+      rgba(0, 200, 255, 0.18),
+      transparent 48%
+    ),
+    linear-gradient(
+      135deg,
+      #0A1A28,
+      #030B14
+    );
+}
+
+.aeris-inspection-visual::before,
+.aeris-inspection-visual::after {
+  content: "";
+
+  position: absolute;
+
+  width: 70%;
+  height: 1px;
+
+  background: rgba(0, 200, 255, 0.25);
+}
+
+.aeris-inspection-visual::after {
+  transform: rotate(90deg);
+}
+
+.aeris-inspection-glow {
+  position: absolute;
+
+  width: 55%;
+  height: 35%;
+
+  border-radius: 50%;
+
+  background: rgba(0, 200, 255, 0.2);
+
+  filter: blur(35px);
+}
+
+.aeris-wireframe-ring {
+  position: relative;
+
+  width: 250px;
+  height: 250px;
+
+  border: 1px solid rgba(0, 200, 255, 0.45);
+
+  border-radius: 50%;
+
+  transform:
+    rotate(-20deg)
+    scaleY(0.42);
+
+  box-shadow:
+    0 0 44px rgba(0, 200, 255, 0.25);
+
+  animation:
+    aeris-orbit-spin 16s linear infinite;
+}
+
+.aeris-inspection-crosshair {
+  position: absolute;
+
+  width: 17px;
+  height: 17px;
+
+  border: 1px solid var(--aeris-cyan);
+
+  border-radius: 50%;
+}
+
+.aeris-inspection-crosshair::before,
+.aeris-inspection-crosshair::after {
+  content: "";
+
+  position: absolute;
+
+  background: var(--aeris-cyan);
+}
+
+.aeris-inspection-crosshair::before {
+  width: 35px;
+  height: 1px;
+
+  left: -10px;
+  top: 7px;
+}
+
+.aeris-inspection-crosshair::after {
+  width: 1px;
+  height: 35px;
+
+  left: 7px;
+  top: -10px;
+}
+
+.aeris-inspection-engine-word {
+  position: absolute;
+
+  color: rgba(0, 200, 255, 0.1);
+
+  font-family: var(--font-display);
+  font-size: 190px;
+  font-weight: 500;
+
+  letter-spacing: -0.15em;
+}
+
+.aeris-inspection-tag {
+  position: absolute;
+
+  padding: 7px 11px;
+
+  background: rgba(10, 26, 40, 0.88);
+  border: 1px solid rgba(0, 200, 255, 0.35);
+  border-radius: 4px;
+
+  color: var(--aeris-cyan);
+
+  font-size: 8px;
+
+  backdrop-filter: blur(8px);
+}
+
+.tag-one {
+  top: 20%;
+  left: 9%;
+}
+
+.tag-two {
+  top: 31%;
+  right: 8%;
+}
+
+.tag-three {
+  bottom: 17%;
+  left: 34%;
+
+  color: var(--aeris-cyan);
+}
+
+.aeris-inspection-copy p {
+  color: var(--aeris-muted);
+
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.aeris-inspection-copy .aeris-button {
+  margin-top: 30px;
+}
+
+/* =========================================================
+   FINALE
+   ========================================================= */
+
+.aeris-finale {
+  position: relative;
+
+  min-height: 670px;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  padding: 40px 5vw;
+
+  text-align: center;
+
+  overflow: hidden;
+
+  background:
+    radial-gradient(
+      ellipse at center,
+      #0A1A28 0%,
+      #061522 55%,
+      #030B14 100%
+    );
+}
+
+.aeris-finale-atmosphere {
+  position: absolute;
+  inset: 0;
+
+  background:
+    radial-gradient(
+      circle at 50% 45%,
+      rgba(0, 200, 255, 0.15),
+      transparent 40%
+    );
+}
+
+.aeris-finale-grid {
+  position: absolute;
+  inset: 0;
+
+  opacity: 0.2;
+
+  background-image:
+    linear-gradient(
+      rgba(0, 200, 255, 0.08) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(0, 200, 255, 0.08) 1px,
+      transparent 1px
+    );
+
+  background-size: 64px 64px;
+
+  mask-image:
+    radial-gradient(
+      circle at center,
+      black,
+      transparent 72%
+    );
+}
+
+.aeris-finale h2 {
+  position: relative;
+
+  margin-top: 24px;
+
+  font-size: clamp(3.5rem, 6.2vw, 6.8rem);
+  color: #EAF7FF;
+}
+
+.aeris-finale p {
+  position: relative;
+
+  max-width: 420px;
+
+  margin-top: 25px;
+
+  color: var(--aeris-muted);
+
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.aeris-finale .aeris-button {
+  position: relative;
+  margin-top: 32px;
+}
+
+.aeris-finale-mark {
+  position: absolute;
+
+  bottom: 27px;
+
+  display: flex;
+  gap: 18px;
+
+  color: #7893A6;
+
+  font-size: 9px;
+}
+
+.aeris-finale-mark span:last-child {
+  color: var(--aeris-cyan);
+}
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.aeris-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+
+  padding: 24px 5vw;
+
+  color: #7893A6;
+
+  background: #030B14;
+  border-top: 1px solid rgba(0, 200, 255, 0.14);
+
+  font-size: 8px;
+}
+
+/* =========================================================
+   ANIMATION
+   ========================================================= */
+
+@keyframes aeris-engine-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes aeris-orbit-spin {
+  to {
+    transform:
+      rotate(378deg)
+      scaleY(0.45);
+  }
+}
+
+@keyframes aeris-scan-horizontal {
+  0%,
+  100% {
+    opacity: 0.08;
+    transform: translateX(-15%);
+  }
+
+  50% {
+    opacity: 0.7;
+    transform: translateX(15%);
+  }
+}
+
+@keyframes aeris-scan-vertical {
+  0%,
+  100% {
+    opacity: 0.05;
+    transform: translateY(-15%);
+  }
+
+  50% {
+    opacity: 0.55;
+    transform: translateY(15%);
+  }
+}
+
+@keyframes aeris-light-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes aeris-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(5px);
+  }
+}
+
+@keyframes aeris-atmosphere {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(-2%, 2%, 0) scale(1.03);
+  }
+}
+
+@keyframes aeris-blueprint-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.aeris-rise {
+  animation:
+    aeris-rise 0.85s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.aeris-rise:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+.aeris-rise:nth-child(3) {
+  animation-delay: 0.16s;
+}
+
+.aeris-rise:nth-child(4) {
+  animation-delay: 0.24s;
+}
+
+.aeris-rise:nth-child(5) {
+  animation-delay: 0.32s;
+}
+
+.aeris-rise:nth-child(6) {
+  animation-delay: 0.4s;
+}
+
+@keyframes aeris-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 1100px) {
+  .aeris-desktop-nav {
+    gap: 17px;
+  }
+
+  .aeris-hero-inner {
+    grid-template-columns:
+      minmax(330px, 0.85fr)
+      minmax(470px, 1.15fr);
+
+    gap: 0;
+  }
+
+  .aeris-engine-stage {
+    min-height: 560px;
+  }
+
+  .aeris-engine-callout {
+    display: none;
+  }
+}
+
+@media (max-width: 1000px) {
+  .aeris-desktop-nav {
+    display: none;
+  }
+
+  .aeris-menu {
+    display: block;
+  }
+
+  .aeris-hero {
+    min-height: auto;
+  }
+
+  .aeris-hero-inner {
+    grid-template-columns: 1fr;
+
+    padding-top: 120px;
+  }
+
+  .aeris-hero-copy {
+    max-width: 680px;
+  }
+
+  .aeris-engine-stage {
+    min-height: 560px;
+
+    margin-top: -10px;
+  }
+
+  .aeris-process-grid {
+    grid-template-columns: repeat(3, 1fr);
+    row-gap: 40px;
+  }
+
+  .aeris-process-line {
+    display: none;
+  }
+
+  .aeris-intel-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .aeris-intel-item:nth-child(4),
+  .aeris-intel-item:nth-child(5) {
+    border-top: 1px solid var(--aeris-line);
+  }
+
+  .aeris-diagnostic-preview,
+  .aeris-mission-layout,
+  .aeris-inspection-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .aeris-diagnostic-preview {
+    gap: 45px;
+  }
+
+  .aeris-mission-layout {
+    gap: 55px;
+  }
+
+  .aeris-inspection-layout {
+    gap: 50px;
+  }
+}
+
+@media (max-width: 640px) {
+  .aeris-nav {
+    height: 68px;
+    padding: 0 22px;
+  }
+
+  .aeris-mobile-nav {
+    inset: 68px 0 auto;
+  }
+
+  .aeris-hero-inner {
+    padding: 105px 22px 68px;
+  }
+
+  .aeris-hero h1 {
+    font-size: clamp(3.15rem, 15vw, 5rem);
+  }
+
+  .aeris-lede {
+    font-size: 14px;
+  }
+
+  .aeris-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .aeris-button {
+    width: 100%;
+  }
+
+  .aeris-engine-stage {
+    min-height: 425px;
+  }
+
+  .aeris-engine-canvas {
+    inset: 5% -14% 4% -14%;
+  }
+
+  .aeris-orbits {
+    inset: 5% -13% 6% -13%;
+  }
+
+  .aeris-engine-label-top {
+    top: 8%;
+    right: 4%;
+  }
+
+  .aeris-engine-controls {
+    bottom: 1%;
+    left: 0;
+  }
+
+  .aeris-engine-controls button {
+    padding: 7px 8px;
+    font-size: 7px;
+  }
+
+  .aeris-engine-status {
+    right: 0;
+    bottom: 1%;
+  }
+
+  .aeris-scroll-cue {
+    display: none;
+  }
+
+  .aeris-section,
+  .aeris-diagnostic-preview {
+    padding: 85px 22px;
+  }
+
+  .aeris-rule {
+    left: 22px;
+    right: 22px;
+  }
+
+  .aeris-section-heading {
+    grid-template-columns: 1fr;
+    gap: 17px;
+  }
+
+  .aeris-section-heading h2 {
+    font-size: clamp(2.4rem, 11vw, 4rem);
+  }
+
+  .aeris-process-grid {
+    grid-template-columns: 1fr 1fr;
+
+    margin-top: 60px;
+  }
+
+  .aeris-process-step {
+    min-height: 175px;
+  }
+
+  .aeris-process-step p {
+    font-size: 12px;
+  }
+
+  .aeris-intel-grid {
+    grid-template-columns: 1fr 1fr;
+
+    margin-top: 60px;
+  }
+
+  .aeris-intel-item {
+    min-height: 190px;
+  }
+
+  .aeris-intel-item + .aeris-intel-item {
+    padding-left: 14px;
+  }
+
+  .aeris-intel-item:nth-child(odd) {
+    padding-left: 0;
+  }
+
+  .aeris-aircraft-plate {
+    min-height: 240px;
+  }
+
+  .aeris-inspection-visual {
+    min-height: 320px;
+  }
+
+  .aeris-inspection-engine-word {
+    font-size: 145px;
+  }
+
+  .aeris-inspection-copy p {
+    font-size: 15px;
+  }
+
+  .aeris-finale {
+    min-height: 590px;
+    padding: 25px;
+  }
+
+  .aeris-finale h2 {
+    font-size: clamp(3rem, 14vw, 5rem);
+  }
+
+  .aeris-finale-mark {
+    flex-direction: column;
+    align-items: center;
+
+    text-align: center;
+  }
+
+  .aeris-footer {
+    flex-direction: column;
+    align-items: center;
+
+    padding: 22px;
+
+    text-align: center;
+  }
+}
+
+
+/* =========================================================
+   ANIMATED TOP DOCK — COMMAND BAR (MODERN VARIANT)
+   ========================================================= */
+
+.aeris-top-dock-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  pointer-events: none;
+  height: 0;
+  overflow: visible !important;
+}
+
+.aeris-top-dock-header .atd-modern__bar {
+  pointer-events: auto;
+}
+
+.animated-top-dock-component.atd-modern {
+  --atd-top: clamp(12px, 1.6cqw, 24px);
+  --atd-bar-width: min(1200px, calc(100% - clamp(16px, 3cqw, 48px)));
+  --atd-bar-height: clamp(38px, 2.6cqw, 48px);
+  --atd-bar-pad: clamp(4px, 0.35cqw, 6px);
+  --atd-bar-lead: clamp(10px, 0.8cqw, 16px);
+  --atd-item-height: clamp(26px, 1.8cqw, 34px);
+  --atd-item-pad: clamp(8px, 0.6cqw, 14px);
+  --atd-label: clamp(11px, 0.7cqw, 13px);
+  --atd-icon: clamp(12px, 0.8cqw, 15px);
+  --atd-gap: clamp(4px, 0.35cqw, 7px);
+  --atd-brand: clamp(11px, 0.75cqw, 14px);
+  --atd-mark: clamp(18px, 1.2cqw, 24px);
+  --atd-action-height: clamp(28px, 1.9cqw, 36px);
+  display: block;
+  overflow: hidden;
+  container-type: inline-size;
+  color: #ecece8;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+
+.atd-modern__bar {
+  position: absolute;
+  top: var(--atd-top);
+  right: clamp(16px, 2.5cqw, 36px);
+  left: auto;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transform: none;
+  width: max-content;
+  max-width: var(--atd-bar-width);
+  padding: var(--atd-bar-pad) var(--atd-bar-pad) var(--atd-bar-pad) var(--atd-bar-lead);
+  gap: clamp(8px, 1.2cqw, 20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(25, 27, 36, 0.88), rgba(12, 13, 18, 0.84));
+  box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.90), inset 0 1px rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+}
+
+.atd-modern__aurora {
+  position: absolute;
+  inset: -24% -12% auto -12%;
+  z-index: 1;
+  height: 82%;
+  pointer-events: none;
+  background:
+    radial-gradient(58% 62% at 22% 36%, rgba(0, 210, 255, 0.35), transparent 68%),
+    radial-gradient(46% 56% at 78% 20%, rgba(0, 168, 255, 0.25), transparent 70%),
+    radial-gradient(40% 48% at 52% 6%, rgba(56, 220, 214, 0.2), transparent 72%),
+    radial-gradient(34% 40% at 50% 14%, rgba(255, 255, 255, 0.07), transparent 76%);
+  filter: blur(8px);
+}
+
+.atd-modern__brand {
+  display: inline-flex;
+  flex: none;
+  gap: clamp(7px, 0.6cqw, 13px);
+  align-items: center;
+  text-decoration: none;
+  color: #f2f3f7;
+}
+
+.atd-modern__mark {
+  display: block;
+  width: var(--atd-mark);
+  height: var(--atd-mark);
+  overflow: hidden;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.42);
+}
+
+.atd-modern__mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.atd-modern__word {
+  font-size: var(--atd-brand);
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: #ffffff;
+}
+
+.atd-modern__dock {
+  display: flex;
+  flex: none;
+  gap: clamp(2px, 0.2cqw, 5px);
+  align-items: flex-start;
+  justify-content: center;
+  height: var(--atd-item-height);
+}
+
+.atd-modern__item {
+  display: inline-flex;
+  flex: none;
+  gap: var(--atd-gap);
+  align-items: center;
+  justify-content: center;
+  height: var(--atd-item-height);
+  padding: 0 var(--atd-item-pad);
+  outline: none;
+  white-space: nowrap;
+  transform-origin: 50% 0;
+  will-change: width, height, transform;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: #9b9fae;
+  background: transparent;
+  font: 500 var(--atd-label) / 1 inherit;
+  letter-spacing: -0.005em;
+  text-decoration: none;
+  transition: color 0.16s, border-color 0.18s, background 0.18s, box-shadow 0.18s, backdrop-filter 0.18s;
+}
+
+.atd-modern__item[data-dock-near="true"],
+.atd-modern__item:hover,
+.atd-modern__item:focus-visible {
+  color: #f4f5f9;
+  border-color: rgba(0, 210, 255, 0.25);
+  background: rgba(0, 210, 255, 0.08);
+  box-shadow: 0 8px 20px -14px rgba(0, 0, 0, 0.9), inset 0 1px rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+}
+
+.atd-modern__item[aria-pressed="true"] {
+  color: #0a0b10;
+  border-color: transparent;
+  background: linear-gradient(180deg, #ffffff, #00d2ff);
+  box-shadow: 0 10px 24px -12px rgba(0, 210, 255, 0.75), inset 0 -1px rgba(0, 0, 0, 0.14);
+}
+
+.atd-modern__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--atd-icon);
+  height: var(--atd-icon);
+  opacity: 0.72;
+  transition: opacity 0.16s;
+}
+
+.atd-modern__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.atd-modern__item[data-dock-near="true"] .atd-modern__icon,
+.atd-modern__item[aria-pressed="true"] .atd-modern__icon {
+  opacity: 1;
+}
+
+.atd-modern__actions {
+  display: inline-flex;
+  flex: none;
+  gap: clamp(4px, 0.34cqw, 8px);
+  align-items: center;
+}
+
+.atd-modern__cta {
+  height: var(--atd-action-height);
+  border-radius: 999px;
+  font: 600 var(--atd-label) / 1 inherit;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s;
+  cursor: pointer;
+  display: inline-flex;
+  gap: var(--atd-gap);
+  align-items: center;
+  padding: 0 var(--atd-bar-pad) 0 clamp(14px, 1.1cqw, 24px);
+  border: 0;
+  color: #0a0b10;
+  text-decoration: none;
+  background: linear-gradient(180deg, #ffffff, #00d2ff);
+  box-shadow: 0 10px 26px -14px rgba(0, 210, 255, 0.95), inset 0 -1px rgba(0, 0, 0, 0.16);
+}
+
+.atd-modern__cta svg {
+  box-sizing: border-box;
+  width: calc(var(--atd-action-height) - clamp(12px, 0.9cqw, 20px));
+  height: calc(var(--atd-action-height) - clamp(12px, 0.9cqw, 20px));
+  padding: clamp(4px, 0.3cqw, 7px);
+  border-radius: 999px;
+  background: rgba(10, 11, 16, 0.15);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.atd-modern__cta:hover {
+  box-shadow: 0 16px 32px -14px rgba(0, 210, 255, 1), inset 0 -1px rgba(0, 0, 0, 0.16);
+  transform: translateY(-1px);
+}
+
+@container (max-width: 900px) {
+  .atd-modern__item span:last-child {
+    display: none;
+  }
+  .atd-modern__cta span {
+    display: none;
+  }
+  .atd-modern__cta {
+    padding: 0 var(--atd-bar-pad);
+  }
+}
+
+@media (max-width: 600px) {
+  .atd-modern__word {
+    display: none;
+  }
+  .atd-modern__item {
+    height: 28px !important;
+    transform: none !important;
+  }
+}
+
+
+

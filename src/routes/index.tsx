@@ -1,65 +1,63 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Nav } from "@/components/landing/Nav";
-import { Hero } from "@/components/landing/Hero";
 import {
-  ArchitectureStrip,
-  ExplainSection,
+  AerisLandingHero,
+  DiagnosticPreview,
+  ForesightSection,
+  InspectionSection,
+  IntelligenceSection,
+  LandingFooter,
+  MissionContextSection,
   FinaleSection,
-  FleetSection,
-  Footer,
-  LiveSection,
-  MaintenanceSection,
-  MissionSection,
-  PhysicsSection,
-  PredictiveSection,
-  ProblemSection,
-  ReplaySection,
-  RulSection,
-  SimulationSection,
-} from "@/components/landing/sections";
+} from "@/components/landing/AerisLanding";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "AERIS-TWIN — Digital Twin for Aero Piston Engines" },
+      {
+        title: "AERIS-TWIN — Digital Engine Intelligence",
+      },
       {
         name: "description",
         content:
-          "AERIS-TWIN is a real-time digital twin for MALE UAV aero piston engines: live telemetry, physics residuals, explainable fault prediction, RUL estimation and mission-risk assessment.",
+          "Know the engine before it knows it's failing. Explainable predictive engine intelligence for mission reliability.",
       },
-      { property: "og:title", content: "AERIS-TWIN — Digital Twin for Aero Piston Engines" },
+      {
+        property: "og:title",
+        content:
+          "AERIS-TWIN — Digital Engine Intelligence",
+      },
       {
         property: "og:description",
-        content: "Know the engine before it knows it's failing. Explainable predictive engine intelligence for mission reliability.",
+        content:
+          "Know the engine before it knows it's failing.",
       },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      {
+        property: "og:type",
+        content: "website",
+      },
     ],
   }),
+
   component: Landing,
 });
 
 function Landing() {
   return (
-    <div className="relative">
+    <div className="aeris-landing">
       <Nav />
+
       <main>
-        <Hero />
-        <ProblemSection />
-        <LiveSection />
-        <PhysicsSection />
-        <PredictiveSection />
-        <ExplainSection />
-        <RulSection />
-        <MissionSection />
-        <SimulationSection />
-        <ReplaySection />
-        <MaintenanceSection />
-        <FleetSection />
-        <ArchitectureStrip />
+        <AerisLandingHero />
+        <ForesightSection />
+        <MissionContextSection />
+        <IntelligenceSection />
+        <DiagnosticPreview />
+        <InspectionSection />
         <FinaleSection />
       </main>
-      <Footer />
+
+      <LandingFooter />
     </div>
   );
 }

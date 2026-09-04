@@ -1,4 +1,5 @@
-import { useState, Suspense, lazy } from "react";
+import { useState, useEffect, Suspense, lazy } from "react";
+import { createPortal } from "react-dom";
 import { X, Expand, Shrink, Eye, EyeOff, RotateCw, Activity, Layers, Zap, Info, ShieldCheck, ChevronRight, Sliders, Box } from "lucide-react";
 import { engineViewerAudio } from "./engineViewerAudio";
 import type { PartHighlights } from "./EngineModel";
@@ -23,14 +24,25 @@ export function JARVISExplodeStudio({
   const [explodeAmount, setExplodeAmount] = useState(1.0);
   const [selectedPart, setSelectedPart] = useState<string | null>("CYLINDER HEAD");
 
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add("studio-modal-active");
+    } else {
+      document.body.classList.remove("studio-modal-active");
+    }
+    return () => {
+      document.body.classList.remove("studio-modal-active");
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const activeZone = ZONES.find((z) => z.name === selectedPart) ?? ZONES[0];
   const meta = ((selectedPart ? ZONE_DETAILS[selectedPart] : null) ?? ZONE_DETAILS["CYLINDER HEAD"])!;
   const telemetryItems = meta.getTelemetry(highlights);
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#070a0d] text-foreground animate-in fade-in duration-300 overflow-hidden select-none">
+  return createPortal(
+    <div className="fixed inset-0 z-[99999] flex flex-col bg-[#070a0d] text-foreground animate-in fade-in duration-300 overflow-hidden select-none">
       {/* Top HUD Control Bar */}
       <header className="relative z-30 flex h-14 items-center justify-between border-b border-cyan/30 bg-panel/90 px-5 backdrop-blur-md">
         <div className="flex items-center gap-3">
@@ -243,6 +255,7 @@ export function JARVISExplodeStudio({
           </div>
         </aside>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

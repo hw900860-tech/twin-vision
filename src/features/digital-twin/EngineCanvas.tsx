@@ -85,6 +85,7 @@ export type EngineCanvasProps = {
   rotationSync?: { angle: number };
   /** Cinematic handoff stance — tilts the twin to the video's final camera angle at the cut, easing to upright as it docks. */
   macroPose?: { yawDeg: number; pitchDeg: number; blend: number };
+  frameloop?: 'always' | 'demand' | 'never';
 };
 
 function CameraRig({ view, cameraZ, disabled }: { view: EngineCameraView; cameraZ: number; disabled: boolean }) {
@@ -189,6 +190,7 @@ function EngineCanvas({
   selectedZone,
   rotationSync,
   macroPose,
+  frameloop = 'always',
 }: EngineCanvasProps) {
   const controlsRef = useRef<any>(null);
   const setFocusedComponent = useFlightStore((s) => s.setFocusedComponent);
@@ -207,28 +209,28 @@ function EngineCanvas({
   return (
     <Canvas
       shadows
+      frameloop={frameloop}
       dpr={[1, 1.75]}
       camera={{ position: [1.6, 1.5, cameraZ], fov: 42 }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       className="cursor-grab active:cursor-grabbing"
     >
-      <fog attach="fog" args={['#070a0d', 12, 35]} />
+      <fog attach="fog" args={['#030b14', 18, 55]} />
       <CameraRig view={cameraView} cameraZ={cameraZ} disabled={interactive} />
       <CameraZoneFocusRig {...(selectedZone != null ? { selectedZone } : {})} controlsRef={controlsRef} />
 
-      {/* Studio lighting — neutral key + cyan brand rim. Materials are now
-          physical (red covers, silver alloy) so the wash is kept neutral. */}
-      <ambientLight intensity={0.85} />
-      <directionalLight position={[6, 9, 7]} intensity={2.6} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-      <directionalLight position={[-6, 3, -5]} intensity={1.0} color="#06b6d4" />
-      <directionalLight position={[0, -5, 4]} intensity={0.9} color="#f8fafc" />
-      <pointLight position={[2, -3.5, 4]} intensity={4.5} color="#ffe9cf" distance={16} />
+      {/* Cinematic dark aerospace hangar lighting — cyan rim + cool blue fill + bright white key */}
+      <ambientLight intensity={0.75} />
+      <directionalLight position={[6, 9, 7]} intensity={3.5} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} color="#eaf7ff" />
+      <directionalLight position={[-6, 3, -5]} intensity={2.6} color="#00c8ff" />
+      <directionalLight position={[0, -5, 4]} intensity={1.1} color="#287bff" />
+      <pointLight position={[2, -3.5, 4]} intensity={6.0} color="#00c8ff" distance={18} />
 
       <Suspense fallback={null}>
         <Environment>
-          <Lightformer intensity={2.6} position={[0, 5, 2]} scale={[12, 6, 1]} />
-          <Lightformer intensity={1.2} color="#06b6d4" position={[-6, 1, -2]} rotation-y={Math.PI / 2} scale={[16, 2, 1]} />
-          <Lightformer intensity={0.5} color="#fff3e2" position={[6, 0, 2]} rotation-y={-Math.PI / 2} scale={[12, 2, 1]} />
+          <Lightformer intensity={3.0} color="#eaf7ff" position={[0, 5, 2]} scale={[12, 6, 1]} />
+          <Lightformer intensity={2.0} color="#00c8ff" position={[-6, 1, -2]} rotation-y={Math.PI / 2} scale={[16, 2, 1]} />
+          <Lightformer intensity={1.2} color="#287bff" position={[6, 0, 2]} rotation-y={-Math.PI / 2} scale={[12, 2, 1]} />
         </Environment>
 
         <EngineFlowField />

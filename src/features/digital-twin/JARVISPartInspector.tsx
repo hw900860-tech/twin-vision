@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { X, Activity, Thermometer, ShieldAlert, Cpu, Layers, Radio, Zap } from "lucide-react";
 import type { PartHighlights } from "./EngineModel";
 
@@ -135,8 +136,8 @@ export function JARVISPartInspector({
 
   const telemetryItems = meta.getTelemetry(highlights);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200">
+  return createPortal(
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-200">
       <div
         className="relative w-full max-w-xl overflow-hidden border bg-panel/95 p-6 shadow-2xl transition-all"
         style={{
@@ -249,6 +250,7 @@ export function JARVISPartInspector({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

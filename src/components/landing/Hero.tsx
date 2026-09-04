@@ -475,127 +475,174 @@ export function Hero() {
       : "transform 300ms ease";
 
   return (
-    <section id="top" className="relative min-h-[100svh] overflow-hidden lg:h-[100svh]">
-      {/* ---- atmosphere (near-black engineering backdrop) ---- */}
-      <div className="absolute inset-0 grid-bg opacity-70" />
-      <div className="absolute inset-0 scanlines opacity-40" />
+    <section id="top" className="relative min-h-[100svh] overflow-hidden lg:h-[100svh] aeris-landing-theme">
+      {/* ---- LAYER 1: BRIGHT AEROSPACE LABORATORY CHAMBER BACKDROP ---- */}
+      <div className="absolute inset-0 bg-[#EBF2F7]" />
+      
+      {/* Soft radial cyan/white atmospheric chamber lighting */}
       <div
-        className="absolute inset-0"
+        className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse at 62% 48%, oklch(0.28 0.03 205 / 45%), transparent 62%)",
+            "radial-gradient(ellipse 75% 65% at 70% 45%, rgba(0, 200, 255, 0.22), rgba(235, 242, 247, 0.5) 55%, transparent 85%)",
         }}
       />
+      
+      {/* Fine engineering blueprint grid */}
+      <div className="pointer-events-none absolute inset-0 aeris-blueprint-grid opacity-50" />
 
-      {/* ---- right-side digital-twin frame (decorative, desktop) ---- */}
-      <div
-        className="pointer-events-none absolute inset-y-12 right-0 z-[1] hidden w-[55%] lg:block"
-        style={fadeStyle(now, uiStart, 260, 800)}
-      >
-        <div className="absolute inset-6 border-l border-border/60">
-          <div className="absolute inset-0 grid-bg-fine opacity-30" />
-          <div className="absolute inset-6 rounded-full border border-cyan/10" />
-          <div className="absolute inset-[16%] rounded-full border border-amber/10" />
+      {/* Chamber Hangar Arch & Flying UAV Ghost in Sky */}
+      <div className="pointer-events-none absolute top-0 right-0 z-0 opacity-25 select-none hidden lg:block w-[55vw] h-full">
+        <svg viewBox="0 0 1000 700" fill="none" className="w-full h-full text-[#00A8D6]">
+          <path d="M100 0 C400 300 700 300 1000 0 V700 H100 Z" fill="url(#chamberGradient)" opacity="0.15" />
+          <path d="M150 0 C450 280 750 280 1000 30" stroke="#00A8D6" strokeWidth="1.5" strokeDasharray="6 6" />
+          <g transform="translate(750, 90) scale(0.65)">
+            <path d="M0 20 L40 0 L80 20 L40 12 Z" fill="#0A1926" />
+            <path d="M-60 15 H140 M-20 15 L40 -15 L100 15" stroke="#00A8D6" strokeWidth="1.2" />
+          </g>
+          <defs>
+            <linearGradient id="chamberGradient" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#00A8D6" />
+              <stop offset="100%" stopColor="#EBF2F7" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      {/* LEFT MARGIN STEP NUMBERS (01, 02, 03, 04) */}
+      <div className="pointer-events-none absolute left-8 top-1/2 -translate-y-1/2 z-20 hidden lg:flex flex-col gap-6 font-mono text-xs font-semibold text-[#526B7E]/60">
+        <span className="text-[#00A8D6]">01</span>
+        <span>02</span>
+        <span>03</span>
+        <span>04</span>
+      </div>
+
+      {/* ---- LAYER 2: HOLOGRAPHIC ORBITAL RINGS & PEDESTAL ---- */}
+      <div className="pointer-events-none absolute top-1/2 right-[15%] z-[1] hidden -translate-y-1/2 lg:block">
+        <div className="relative grid h-[580px] w-[580px] place-items-center">
+          <div className="absolute inset-0 animate-orbit-slow rounded-full border border-[#00A8D6]/20 border-dashed" />
+          <div className="absolute inset-12 animate-orbit-reverse-slow rounded-full border border-[#0A1926]/10" />
+          <div className="absolute inset-24 rounded-full border border-[#00A8D6]/15" />
+          
+          {/* Holographic Glowing Pedestal Base */}
+          <div className="absolute -bottom-20 left-1/2 h-24 w-[380px] -translate-x-1/2 rounded-[100%] border border-[#00A8D6]/35 aeris-holographic-pedestal flex flex-col items-center justify-center">
+            <div className="h-full w-full rounded-[100%] border border-[#00C8FF]/40 animate-pulse" />
+            <div className="absolute -bottom-7 font-mono text-[9.5px] font-semibold tracking-[0.28em] text-[#00A8D6] uppercase whitespace-nowrap bg-[#EBF2F7]/90 px-4 py-0.5 rounded-full border border-[#00A8D6]/30">
+              REAL ENGINE. VIRTUAL INSIGHT.
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* ---- text column (enters from the left after the handoff) ---- */}
-      <div className="pointer-events-none relative z-10 mx-auto flex min-h-[76svh] max-w-[1600px] flex-col justify-center px-5 pt-24 pb-8 lg:min-h-0 lg:h-full lg:px-10 lg:pb-28 lg:pt-24">
-        <div className="pointer-events-auto w-full max-w-[660px]">
-          {/* 1 · platform label */}
-          <div style={entranceStyle(now, uiStart, 120)}>
-            <div className="mb-6 inline-flex items-center gap-2.5 border border-cyan/25 bg-cyan/[0.05] px-3 py-1.5 label-xs text-cyan">
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-cyan"
-                style={{ animation: "aeris-pulse 2.4s ease-in-out infinite" }}
-              />
-              TAPAS BH-201 · ROTAX 914 AERO ENGINE
-            </div>
+      {/* ---- LEFT HERO CONTENT COLUMN ---- */}
+      <div className="pointer-events-none relative z-10 mx-auto flex min-h-[88svh] max-w-[1600px] flex-col justify-center px-6 pt-28 pb-12 lg:min-h-0 lg:h-full lg:px-16 lg:pb-24 lg:pt-24">
+        <div className="pointer-events-auto w-full max-w-[600px]">
+          {/* Technical Tag */}
+          <div style={entranceStyle(now, uiStart, 120)} className="mb-5 flex items-center gap-2 font-mono text-xs font-semibold tracking-[0.2em] text-[#526B7E] uppercase">
+            <span className="text-[#00A8D6]">-</span> TAPAS BH-201 &nbsp;|&nbsp; ROTAX 914
           </div>
 
-          {/* 2 · wordmark */}
+          {/* Main Headline (1:1 with reference) */}
           <h1
-            style={entranceStyle(now, uiStart, 250)}
-            className="font-display text-[2.6rem] leading-[0.95] font-medium tracking-[0.04em] text-balance sm:text-6xl lg:text-[4.4rem]"
+            style={entranceStyle(now, uiStart, 280, 950)}
+            className="font-display text-4xl leading-[1.05] font-bold tracking-tight text-[#0A1926] sm:text-5xl lg:text-[4.1rem]"
           >
-            AERIS-TWIN
+            Know the engine<br />
+            before it knows<br />
+            it&apos;s <span className="text-[#00A8D6]">failing.</span><span className="inline-block w-1 h-10 ml-1 bg-[#00A8D6] animate-pulse" />
           </h1>
 
-          {/* 3 · headline */}
-          <h2
-            style={entranceStyle(now, uiStart, 390, 950)}
-            className="mt-5 max-w-[620px] font-display text-2xl leading-[1.16] font-medium tracking-tight text-balance sm:text-3xl lg:text-[2rem]"
-          >
-            Know the engine before it knows it&apos;s <span className="text-cyan">FAILING</span>.
-          </h2>
-
-          {/* 4 · supporting description */}
+          {/* Supporting Paragraph */}
           <p
-            style={entranceStyle(now, uiStart, 560, 950)}
-            className="mt-5 max-w-[560px] text-sm leading-relaxed text-muted-foreground sm:text-base"
+            style={entranceStyle(now, uiStart, 480, 950)}
+            className="mt-6 max-w-[520px] text-sm leading-relaxed text-[#526B7E] sm:text-base"
           >
-            AI-enabled Digital Engine Intelligence for MALE UAVs. An explainable twin that combines
-            live telemetry, physics-based engine modelling and predictive diagnostics to anticipate
-            degradation before conventional thresholds are crossed.
+            AERIS-TWIN is an AI-enabled Digital Twin for MALE UAVs, combining live telemetry, physics-based modelling and predictive diagnostics to anticipate failures before they happen.
           </p>
 
-          {/* 5 · CTAs */}
-          <div style={entranceStyle(now, uiStart, 760)} className="mt-9 flex flex-wrap gap-3">
+          {/* CTA Buttons */}
+          <div style={entranceStyle(now, uiStart, 680)} className="mt-8 flex flex-wrap items-center gap-4">
             <button
               type="button"
               onClick={() => setIsStudioOpen(true)}
-              className="group relative inline-flex items-center gap-3 border border-cyan/70 bg-cyan/15 px-6 py-3 font-mono text-[11px] tracking-[0.2em] uppercase text-cyan transition-colors hover:bg-cyan/25 cursor-pointer shadow-[0_0_20px_rgba(111,216,232,0.3)]"
+              className="inline-flex items-center gap-3 rounded-full bg-[#0A1926] px-7 py-3.5 font-mono text-xs font-semibold tracking-[0.16em] text-white transition-all hover:bg-[#00A8D6] cursor-pointer shadow-[0_4px_24px_rgba(10,25,38,0.2)] hover:shadow-[0_0_28px_rgba(0,168,214,0.5)]"
             >
-              <Zap className="h-4 w-4" /> Explore Digital Twin{" "}
-              <ArrowRight className="h-3.5 w-3.5" />
+              <span>Explore AERIS-TWIN</span>
+              <ArrowRight className="h-4 w-4 text-[#00A8D6] group-hover:text-white" />
             </button>
-            <Link to="/sim">
-              <TechButton variant="ghost">
-                <Plane className="h-3.5 w-3.5" /> Flight Simulator
-              </TechButton>
-            </Link>
-            <Link to="/gcs">
-              <TechButton variant="ghost">Ground Control</TechButton>
+
+            <Link
+              to="/sim"
+              className="inline-flex items-center gap-2 rounded-full border border-[#0A1926]/20 bg-white/80 px-6 py-3.5 font-mono text-xs font-semibold tracking-[0.14em] text-[#0A1926] backdrop-blur-sm transition-all hover:bg-white hover:border-[#00A8D6] shadow-2xs"
+            >
+              <span className="grid h-5 w-5 place-items-center rounded-full bg-[#00A8D6]/15 text-[#00A8D6]">▶</span>
+              <span>Watch Video</span>
             </Link>
           </div>
 
-          {/* 6 · status badges */}
+          {/* BUILT FOR BADGES ROW (1:1 with reference) */}
           <div
-            style={entranceStyle(now, uiStart, 940)}
-            className="mt-8 flex flex-wrap items-center gap-2 label-xs"
+            style={entranceStyle(now, uiStart, 880)}
+            className="mt-12 pt-6 border-t border-[#0A1926]/10 flex flex-wrap items-center gap-8"
           >
-            <span className="border border-amber/40 bg-amber/10 px-2 py-1 text-amber">
-              PROTOTYPE / RESEARCH DEMONSTRATOR
-            </span>
-            <span className="text-muted-foreground">REPRESENTATIVE ENGINE AE-P4</span>
+            <div className="font-mono text-[10px] font-bold text-[#526B7E] tracking-widest uppercase">BUILT FOR</div>
+            
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <span className="text-[#00A8D6]">🛡️</span>
+                <span className="font-mono text-[11px] font-bold text-[#0A1926] tracking-wider uppercase">SAFER FLIGHTS</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[#00A8D6]">⬢</span>
+                <span className="font-mono text-[11px] font-bold text-[#0A1926] tracking-wider uppercase">HIGHER AVAILABILITY</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[#00A8D6]">✈️</span>
+                <span className="font-mono text-[11px] font-bold text-[#0A1926] tracking-wider uppercase">LONGER MISSIONS</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ---- real 3D engine — warmed beneath the cinematic, live at the cut ---- */}
+      {/* ---- LAYER 3: 3D ROTAX 914 ENGINE SPECIMEN & GLASS HUD BOXES ---- */}
       <div
-        className="relative z-[2] h-[64svh] w-full lg:absolute lg:inset-0 lg:h-auto"
+        className="relative z-[2] h-[64svh] w-full lg:absolute lg:inset-0 lg:h-auto animate-engine-float-smooth"
         style={{
           transform: engineShift,
           transition: engineTransition,
           willChange: "transform",
         }}
       >
-        {/* mobile-only alignment rings */}
-        <div className="pointer-events-none absolute top-1/2 left-1/2 aspect-square w-[min(92vw,58svh)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan/10 lg:hidden" />
-        <div className="pointer-events-none absolute top-1/2 left-1/2 aspect-square w-[min(70vw,44svh)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber/10 lg:hidden" />
+        {/* TOP LEFT GLASS HUD BOX: DIGITAL TWIN */}
+        <div className="pointer-events-none absolute top-[20%] right-[42%] z-30 hidden lg:block">
+          <div className="aeris-glass-card rounded-lg p-3.5 w-48 shadow-lg backdrop-blur-md">
+            <div className="font-mono text-[11px] font-bold text-[#0A1926] tracking-wider uppercase border-b border-[#00A8D6]/20 pb-1.5 flex items-center justify-between">
+              <span>DIGITAL TWIN</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-[#00A8D6]" />
+            </div>
+            <div className="mt-2 space-y-1 font-mono text-[10px] text-[#526B7E]">
+              <div>• REAL-TIME</div>
+              <div>• PHYSICS-BASED</div>
+              <div>• AI DIAGNOSTICS</div>
+            </div>
+          </div>
+        </div>
 
-        {/* Holographic bloom behind the canvas — masks the video→twin seam. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            opacity: bloomP,
-            background:
-              "radial-gradient(ellipse 36% 30% at 50% 47%, oklch(0.7 0.17 205 / 0.55), transparent 70%)",
-          }}
-        />
+        {/* TOP RIGHT GLASS HUD BOX: ROTAX 914 */}
+        <div className="pointer-events-none absolute top-[24%] right-[10%] z-30 hidden lg:block">
+          <div className="aeris-glass-card rounded-lg p-3 w-40 shadow-lg backdrop-blur-md">
+            <div className="font-mono text-[11px] font-bold text-[#0A1926] tracking-wider uppercase border-b border-[#00A8D6]/20 pb-1 flex items-center justify-between">
+              <span>ROTAX 914</span>
+              <span className="text-[#00A8D6] text-xs">⚡</span>
+            </div>
+            <div className="mt-2 h-12 w-full border border-dashed border-[#00A8D6]/30 grid place-items-center rounded bg-[#00A8D6]/5">
+              <span className="font-mono text-[9px] text-[#00A8D6]">SCHEMATIC SYNC</span>
+            </div>
+          </div>
+        </div>
 
+        {/* 3D Canvas Container */}
         <div className="absolute inset-0" style={handoffFilter ? { filter: handoffFilter } : undefined}>
           <ClientOnly fallback={null}>
             {engineStageOn && (
@@ -603,7 +650,7 @@ export function Hero() {
                 <HeroEngineCanvas
                   interactive
                   autoRotate={false}
-                  autoRotateSpeed={0.6}
+                  autoRotateSpeed={0.4}
                   spin={!exploded}
                   rotationSync={rotationSync}
                   cameraView="overview"
@@ -613,10 +660,10 @@ export function Hero() {
                   physicalTone
                   xrayReveal={xrayStrength}
                   highlights={highlights}
-                  modelScale={modelScale}
+                  modelScale={modelScale * 1.08}
                   modelPosition={modelPosition}
                   macroPose={macroPose}
-                  cameraZ={isDesktop ? 7 : 7.4}
+                  cameraZ={isDesktop ? 6.6 : 7.2}
                   onSelectZone={(zoneName) => setSelectedZone(zoneName)}
                   selectedZone={selectedZone}
                 />
@@ -624,12 +671,20 @@ export function Hero() {
             )}
           </ClientOnly>
         </div>
+      </div>
 
-        {/* mobile telemetry + hint */}
-        <div className="absolute inset-x-3 bottom-3 lg:hidden">
-          <LiveTelemetry s={s} rul={rul} now={now} start={uiStart} />
+      {/* BOTTOM INDICATOR BAR (1:1 with reference) */}
+      <div className="pointer-events-none absolute bottom-6 inset-x-0 z-20 mx-auto max-w-[1600px] px-6 lg:px-12 flex items-center justify-between font-mono text-[10px] text-[#526B7E] font-medium tracking-widest">
+        <div className="flex items-center gap-2">
+          <span className="text-[#00A8D6]">◦—</span>
+          <span>ENGINE INTELLIGENCE &nbsp;—→&nbsp; MISSION CONFIDENCE</span>
+        </div>
+        <div className="flex items-center gap-1 text-[#0A1926]">
+          <span>SCROLL</span>
+          <ChevronDown className="h-3.5 w-3.5 text-[#00A8D6] animate-bounce" />
         </div>
       </div>
+
 
       {/* ---- engine HUD + live telemetry (desktop, right region) ---- */}
       <div className="pointer-events-none absolute inset-y-12 right-0 z-30 hidden w-[55%] lg:block">

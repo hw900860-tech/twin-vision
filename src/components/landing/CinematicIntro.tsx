@@ -388,7 +388,7 @@ export function CinematicIntro({
         aria-label="AERIS-TWIN cinematic introduction"
         onLoadedMetadata={onLoadedMetadata}
         className="absolute inset-0 h-full w-full object-cover transition-opacity duration-700"
-        style={{ opacity: videoOn ? 1 : 0 }}
+        style={{ opacity: videoOn ? 1 : 0, transform: "translateZ(0)", willChange: "opacity, transform" }}
       />
 
       {/* Gentle vignette so the cinematic bleeds into the site's near-black atmosphere. */}

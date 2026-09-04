@@ -54,11 +54,11 @@ function tempToColor(temp: number, warn = 170, crit = 200): string {
 export const ZONES = [
   {
     id: 'cylhead',
-    name: 'CYLINDER HEAD (ROTAX RED)',
-    sub: 'Iconic Red Rotax Valve Covers',
+    name: 'CYLINDER HEAD',
+    sub: 'Titanium Metallic Valve Covers',
     center: [-0.25, 0.35, 0.1] as [number, number, number],
     dir: [-0.6, 0.9, 0.2] as [number, number, number], // Tightly spaced dismantle vector
-    glow: '#ef4444',
+    glow: '#00d2ff',
     val: (h: PartHighlights) => `${Math.max(h.cyl1CHT, h.cyl2CHT, h.cyl3CHT, h.cyl4CHT).toFixed(0)}°C CHT`,
     valC: (h: PartHighlights) => tempToColor(Math.max(h.cyl1CHT, h.cyl2CHT, h.cyl3CHT, h.cyl4CHT)),
   },
@@ -149,13 +149,13 @@ interface FamilySpec {
 }
 
 const MAT_FAMILIES: Record<string, FamilySpec> = {
-  red:       { color: '#bf1624', metalness: 0.10, env: 0.5,  rough: { top: 0.30, wall: 0.38, shade: 0.55 } }, // glossy ROTAX covers
-  head:      { color: '#767d84', metalness: 0.85, env: 0.55, rough: { top: 0.42, wall: 0.52, shade: 0.70 } }, // machined head/deck alloy
-  crankcase: { color: '#8c939a', metalness: 0.90, env: 0.55, rough: { top: 0.30, wall: 0.46, shade: 0.66 } }, // cast aluminium case
-  intake:    { color: '#aeb4bb', metalness: 0.95, env: 0.75, rough: { top: 0.24, wall: 0.38, shade: 0.58 } }, // bright alloy intake/carbs
-  exhaust:   { color: '#474c53', metalness: 0.85, env: 0.5,  rough: { top: 0.50, wall: 0.62, shade: 0.78 } }, // heat-darkened steel
-  sump:      { color: '#30343a', metalness: 0.45, env: 0.35, rough: { top: 0.60, wall: 0.72, shade: 0.84 } }, // graphite sump
-  prop:      { color: '#3b4047', metalness: 0.80, env: 0.6,  rough: { top: 0.26, wall: 0.40, shade: 0.58 } }, // black gearbox / machined flange
+  red:       { color: '#00c8ff', metalness: 0.92, env: 0.95, rough: { top: 0.14, wall: 0.22, shade: 0.35 } }, // metallic titanium cyan valve covers
+  head:      { color: '#7893a6', metalness: 0.94, env: 0.90, rough: { top: 0.18, wall: 0.28, shade: 0.45 } }, // polished head alloy
+  crankcase: { color: '#cbd5e1', metalness: 0.96, env: 0.98, rough: { top: 0.12, wall: 0.24, shade: 0.40 } }, // bright aerospace aluminum core
+  intake:    { color: '#00c8ff', metalness: 0.92, env: 0.92, rough: { top: 0.12, wall: 0.20, shade: 0.35 } }, // electric cyan-anodized turbo/carbs
+  exhaust:   { color: '#334155', metalness: 0.90, env: 0.85, rough: { top: 0.25, wall: 0.38, shade: 0.55 } }, // tempered dark steel exhaust
+  sump:      { color: '#0f172a', metalness: 0.88, env: 0.80, rough: { top: 0.30, wall: 0.42, shade: 0.60 } }, // sleek dark slate metallic sump
+  prop:      { color: '#090d16', metalness: 0.94, env: 0.90, rough: { top: 0.15, wall: 0.25, shade: 0.45 } }, // midnight chrome gearbox
 };
 
 const ZONE_FAMILY: Record<string, string> = {
@@ -186,6 +186,15 @@ function buildEngineAssemblies(scene: THREE.Group): BuiltZone[] {
   if (!pos) return [];
 
   const bounds = new THREE.Box3().setFromBufferAttribute(pos as THREE.BufferAttribute);
+  const center = bounds.getCenter(new THREE.Vector3());
+
+  // Center engine geometry at (0, 0, 0) so rotation pivot passes exactly through the middle of the engine
+  for (let i = 0; i < pos.count; i++) {
+    pos.setXYZ(i, pos.getX(i) - center.x, pos.getY(i) - center.y, pos.getZ(i) - center.z);
+  }
+  (pos as THREE.BufferAttribute).needsUpdate = true;
+
+  bounds.setFromBufferAttribute(pos as THREE.BufferAttribute);
   const size = bounds.getSize(new THREE.Vector3());
   const minX = bounds.min.x, minY = bounds.min.y, minZ = bounds.min.z;
   const sx = Math.max(size.x, 1e-3), sy = Math.max(size.y, 1e-3), sz = Math.max(size.z, 1e-3);
@@ -610,7 +619,7 @@ export function EngineModel({
 
   return (
     <group ref={group} position={modelPosition} scale={modelScale} rotation={poseRotation}>
-      <group ref={motorRef} scale={[3, 3, 3]} position={[0, 0.1, 0.5]}>
+      <group ref={motorRef} scale={[3, 3, 3]} position={[0, 0, 0]}>
         {/* Render 6 physical sub-assemblies, each split into the real material
             surfaces that make up that component. */}
         {zoneAssemblies.map((za) => (
