@@ -374,6 +374,14 @@ export const flightAudio = {
     return !!ctx && ctx.state === "running";
   },
 
+  /** Mute/unmute all engine audio without stopping generators. */
+  set muted(on: boolean) {
+    if (master) master.gain.value = on ? 0 : 0.55;
+  },
+  get muted(): boolean {
+    return master ? master.gain.value < 0.01 : false;
+  },
+
   /** Call from a user gesture (first click/tap/key on the sim page). */
   async unlock(): Promise<void> {
     const c = ensureCtx();

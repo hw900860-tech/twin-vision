@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Plane, Activity, ShieldAlert, Zap } from "lucide-react";
+import { ArrowLeft, Plane, Activity, ShieldAlert, Zap, Volume2, VolumeX, Map, MapPinOff } from "lucide-react";
 import { useJarvisStore } from "@/features/jarvis/jarvisStore";
 import { ClientOnly } from "@/components/ClientOnly";
 import { StatusDot } from "@/components/hud/primitives";
 import { MiniMap } from "@/features/flight-sim/MiniMap";
+import { flightAudio } from "@/features/flight-sim/flightEngineAudio";
 import { installSortieRecorder, uninstallSortieRecorder } from "@/features/flight-sim/sortieRecorder";
 import { FlightSimulator } from "@/features/flight-sim/FlightSimulator";
 import { FlightHUD } from "@/features/flight-sim/FlightHUD";
@@ -234,6 +235,8 @@ function SimPageContent() {
 
   const s = useFlightStore();
   const [showControlDrawer, setShowControlDrawer] = useState(true);
+  const [audioMuted, setAudioMuted] = useState(false);
+  const [showMap, setShowMap] = useState(true);
 
   return (
     <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-[#040608] text-foreground select-none">
@@ -271,6 +274,22 @@ function SimPageContent() {
             <Activity className="h-3 w-3" /> GCS DASHBOARD
           </Link>
           <span className="hidden label-xs sm:inline">TAPAS BH-201 / ROTAX 914</span>
+          <button
+            type="button"
+            onClick={() => { setAudioMuted(m => { const v = !m; flightAudio.muted = v; return v; }); }}
+            className="flex h-7 w-7 items-center justify-center border border-cyan/40 bg-cyan/10 text-cyan hover:bg-cyan/25 transition-colors cursor-pointer"
+            title={audioMuted ? "Unmute Engine Audio" : "Mute Engine Audio"}
+          >
+            {audioMuted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowMap(m => !m)}
+            className="flex h-7 w-7 items-center justify-center border border-cyan/40 bg-cyan/10 text-cyan hover:bg-cyan/25 transition-colors cursor-pointer"
+            title={showMap ? "Hide Tactical Map" : "Show Tactical Map"}
+          >
+            {showMap ? <Map className="h-3 w-3" /> : <MapPinOff className="h-3 w-3" />}
+          </button>
           <span className="label-xs border border-amber/40 bg-amber/10 px-2 py-0.5 text-amber font-mono font-bold">SIM</span>
           <SignOutButton />
         </div>
@@ -286,12 +305,14 @@ function SimPageContent() {
           <FlightSimulator />
         </ClientOnly>
 
-        {/* Tactical mini-map (top-left) */}
-        <div className="pointer-events-none absolute left-2 top-2 z-20 w-[248px]">
-          <ClientOnly>
-            <MiniMap />
-          </ClientOnly>
-        </div>
+        {/* Tactical mini-map (top-left, closeable) */}
+        {showMap && (
+          <div className="pointer-events-none absolute left-2 top-2 z-20 w-[248px]">
+            <ClientOnly>
+              <MiniMap />
+            </ClientOnly>
+          </div>
+        )}
 
         {/* HUD overlay */}
         <div className="absolute inset-0 z-10 pointer-events-none">
