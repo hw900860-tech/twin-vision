@@ -133,8 +133,12 @@ function RootComponent() {
       nav: (path: string) => {
         try {
           if (path.includes("#")) {
-            const [baseRoute, hash] = path.split("#");
-            navigate({ to: (baseRoute || "/") as any, hash });
+            const [baseRoute, hash] = path.split("#", 2);
+            if (hash) {
+              navigate({ to: (baseRoute || "/") as any, hash });
+            } else {
+              navigate({ to: (baseRoute || "/") as any });
+            }
           } else {
             navigate({ to: path as any });
           }
