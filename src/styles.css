@@ -3086,3 +3086,722 @@ body.studio-modal-active .aeris-nav {
     transform: scale(1.002);
   }
 }
+
+/* =========================================================
+   LANDING MOTION SYSTEM — POINTER, SCROLL & VIEWPORT CHOREOGRAPHY
+   ========================================================= */
+
+.aeris-landing {
+  --aeris-pointer-x: 50vw;
+  --aeris-pointer-y: 50vh;
+  --aeris-shift-back-x: 0px;
+  --aeris-shift-back-y: 0px;
+  --aeris-shift-front-x: 0px;
+  --aeris-shift-front-y: 0px;
+  --aeris-scroll-shift: 0px;
+  position: relative;
+}
+
+.aeris-motion-controller {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.aeris-page-progress {
+  position: fixed;
+  top: 50%;
+  right: 18px;
+  z-index: 68;
+  width: 2px;
+  height: 124px;
+  overflow: hidden;
+  background: rgba(120, 147, 166, 0.18);
+  box-shadow: 0 0 0 1px rgba(0, 200, 255, 0.04);
+  transform: translateY(-50%);
+}
+
+.aeris-page-progress::before,
+.aeris-page-progress::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  width: 6px;
+  height: 1px;
+  background: rgba(0, 200, 255, 0.52);
+}
+
+.aeris-page-progress::before {
+  top: 0;
+}
+
+.aeris-page-progress::after {
+  bottom: 0;
+}
+
+.aeris-page-progress span {
+  position: absolute;
+  inset: 0;
+  display: block;
+  transform: scaleY(0);
+  transform-origin: 50% 0;
+  background: linear-gradient(180deg, #eaf7ff, var(--aeris-cyan));
+  box-shadow: 0 0 12px rgba(0, 200, 255, 0.9);
+  will-change: transform;
+}
+
+/* Hero effects live in their own compositor layer and never intercept input. */
+.aeris-hero-motion {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.aeris-hero-inner {
+  position: relative;
+  z-index: 2;
+}
+
+.aeris-pointer-aura {
+  position: absolute;
+  top: var(--aeris-pointer-y);
+  left: var(--aeris-pointer-x);
+  width: min(54vw, 760px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  opacity: 0.7;
+  background: radial-gradient(
+    circle,
+    rgba(0, 200, 255, 0.13) 0%,
+    rgba(40, 123, 255, 0.055) 30%,
+    transparent 69%
+  );
+  filter: blur(12px);
+  transform: translate(-50%, -50%);
+  will-change: top, left;
+}
+
+.aeris-energy-sweep {
+  position: absolute;
+  top: -30%;
+  bottom: -30%;
+  left: -18%;
+  width: 18%;
+  opacity: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 200, 255, 0.075),
+    rgba(234, 247, 255, 0.18),
+    transparent
+  );
+  filter: blur(8px);
+  transform: skewX(-14deg);
+  animation: aeris-energy-cross 10s ease-in-out infinite 2s;
+}
+
+.aeris-constellation {
+  position: absolute;
+  inset: -5%;
+  opacity: 0.72;
+  transform: translate3d(
+    var(--aeris-shift-back-x),
+    calc(var(--aeris-shift-back-y) + var(--aeris-scroll-shift)),
+    0
+  );
+  transition: transform 0.16s linear;
+  will-change: transform;
+}
+
+.aeris-constellation i {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  background: #c7f4ff;
+  box-shadow:
+    0 0 5px rgba(199, 244, 255, 0.95),
+    0 0 15px rgba(0, 200, 255, 0.7);
+  animation-name: aeris-particle-drift;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+.aeris-flight-paths {
+  position: absolute;
+  inset: -4%;
+  width: 108%;
+  height: 108%;
+  opacity: 0.24;
+  fill: none;
+  stroke: rgba(0, 200, 255, 0.5);
+  stroke-width: 1;
+  stroke-dasharray: 4 13;
+  transform: translate3d(
+    var(--aeris-shift-front-x),
+    calc(var(--aeris-shift-front-y) + var(--aeris-scroll-shift)),
+    0
+  );
+  animation: aeris-flight-dash 24s linear infinite;
+  will-change: transform, stroke-dashoffset;
+}
+
+.aeris-reticle {
+  position: absolute;
+  width: 72px;
+  height: 72px;
+  border: 1px solid rgba(0, 200, 255, 0.2);
+  border-radius: 50%;
+  opacity: 0.7;
+  animation: aeris-reticle-spin 14s linear infinite;
+}
+
+.aeris-reticle::before,
+.aeris-reticle::after {
+  content: "";
+  position: absolute;
+  background: rgba(0, 200, 255, 0.45);
+}
+
+.aeris-reticle::before {
+  top: 50%;
+  left: -9px;
+  width: calc(100% + 18px);
+  height: 1px;
+}
+
+.aeris-reticle::after {
+  top: -9px;
+  left: 50%;
+  width: 1px;
+  height: calc(100% + 18px);
+}
+
+.aeris-reticle-one {
+  top: 19%;
+  left: 47%;
+}
+
+.aeris-reticle-two {
+  right: 8%;
+  bottom: 13%;
+  width: 42px;
+  height: 42px;
+  animation-direction: reverse;
+  animation-duration: 9s;
+}
+
+/* The cinematic previously let the hero entrance finish behind the video.
+   Tie it to the handoff phase so the copy now visibly assembles at the cut. */
+.aeris-hero.is-cinematic .aeris-rise {
+  opacity: 0;
+  animation: none;
+}
+
+.aeris-hero.is-reveal .aeris-rise,
+.aeris-hero.is-live .aeris-rise {
+  animation: aeris-hero-materialize 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.aeris-hero.is-reveal .aeris-rise:nth-child(2),
+.aeris-hero.is-live .aeris-rise:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+.aeris-hero.is-reveal .aeris-rise:nth-child(3),
+.aeris-hero.is-live .aeris-rise:nth-child(3) {
+  animation-delay: 0.16s;
+}
+
+.aeris-hero.is-reveal .aeris-rise:nth-child(4),
+.aeris-hero.is-live .aeris-rise:nth-child(4) {
+  animation-delay: 0.24s;
+}
+
+.aeris-hero.is-reveal .aeris-rise:nth-child(5),
+.aeris-hero.is-live .aeris-rise:nth-child(5) {
+  animation-delay: 0.32s;
+}
+
+.aeris-hero.is-reveal .aeris-rise:nth-child(6),
+.aeris-hero.is-live .aeris-rise:nth-child(6) {
+  animation-delay: 0.4s;
+}
+
+.aeris-hero.is-cinematic
+  :is(
+    .aeris-glass-hud,
+    .aeris-orbits,
+    .aeris-stand-container,
+    .aeris-engine-controls,
+    .aeris-engine-status,
+    .aeris-scroll-cue
+  ) {
+  opacity: 0;
+}
+
+.aeris-hero.is-reveal .aeris-glass-hud,
+.aeris-hero.is-live .aeris-glass-hud {
+  animation: aeris-hud-lock 0.75s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+}
+
+.aeris-hero.is-reveal .hud-top-right,
+.aeris-hero.is-live .hud-top-right {
+  animation-delay: 0.42s;
+}
+
+.aeris-hero.is-reveal .aeris-orbits,
+.aeris-hero.is-live .aeris-orbits {
+  animation: aeris-orbit-materialize 1.2s ease-out 0.18s both;
+}
+
+.aeris-hero.is-reveal .aeris-stand-container,
+.aeris-hero.is-live .aeris-stand-container {
+  animation: aeris-pedestal-arrive 1s cubic-bezier(0.16, 1, 0.3, 1) 0.46s both;
+}
+
+.aeris-hero.is-reveal .aeris-engine-controls,
+.aeris-hero.is-reveal .aeris-engine-status,
+.aeris-hero.is-reveal .aeris-scroll-cue,
+.aeris-hero.is-live .aeris-engine-controls,
+.aeris-hero.is-live .aeris-engine-status,
+.aeris-hero.is-live .aeris-scroll-cue {
+  animation: aeris-soft-appear 0.7s ease-out 0.72s both;
+}
+
+/* Cascading viewport reveals. The ready class means SSR/no-JS content remains
+   readable while enhanced clients receive the full choreography. */
+.aeris-motion-ready .aeris-section-heading > *,
+.aeris-motion-ready .aeris-process-step,
+.aeris-motion-ready .aeris-mission-layout > *,
+.aeris-motion-ready .aeris-intel-item,
+.aeris-motion-ready .aeris-inspection-layout > * {
+  opacity: 0;
+  transform: translateY(28px);
+}
+
+.aeris-motion-ready .aeris-section.is-visible .aeris-section-heading > * {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.7s ease,
+    transform 0.85s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.aeris-motion-ready .aeris-section.is-visible .aeris-section-heading h2 {
+  transition-delay: 0.1s;
+}
+
+.aeris-process-line {
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 1.5s cubic-bezier(0.16, 1, 0.3, 1) 0.32s;
+}
+
+.aeris-section.is-visible .aeris-process-line {
+  transform: scaleX(1);
+}
+
+.aeris-motion-ready .aeris-section.is-visible .aeris-process-step,
+.aeris-motion-ready .aeris-section.is-visible .aeris-mission-layout > *,
+.aeris-motion-ready .aeris-section.is-visible .aeris-intel-item,
+.aeris-motion-ready .aeris-section.is-visible .aeris-inspection-layout > * {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.65s ease,
+    transform 0.85s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.3s ease,
+    background 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.aeris-motion-ready .aeris-section.is-visible .aeris-process-step:nth-child(1),
+.aeris-motion-ready .aeris-section.is-visible .aeris-intel-item:nth-child(1) {
+  transition-delay: 0.16s;
+}
+
+.aeris-motion-ready .aeris-section.is-visible .aeris-process-step:nth-child(2),
+.aeris-motion-ready .aeris-section.is-visible .aeris-intel-item:nth-child(2) {
+  transition-delay: 0.24s;
+}
+
+.aeris-motion-ready .aeris-section.is-visible .aeris-process-step:nth-child(3),
+.aeris-motion-ready .aeris-section.is-visible .aeris-intel-item:nth-child(3) {
+  transition-delay: 0.32s;
+}
+
+.aeris-motion-ready .aeris-section.is-visible .aeris-process-step:nth-child(4),
+.aeris-motion-ready .aeris-section.is-visible .aeris-intel-item:nth-child(4) {
+  transition-delay: 0.4s;
+}
+
+.aeris-motion-ready .aeris-section.is-visible .aeris-process-step:nth-child(5),
+.aeris-motion-ready .aeris-section.is-visible .aeris-intel-item:nth-child(5) {
+  transition-delay: 0.48s;
+}
+
+.aeris-motion-ready .aeris-section.is-visible .aeris-mission-layout > :nth-child(1),
+.aeris-motion-ready .aeris-section.is-visible .aeris-inspection-layout > :nth-child(1) {
+  transition-delay: 0.18s;
+}
+
+.aeris-motion-ready .aeris-section.is-visible .aeris-mission-layout > :nth-child(2),
+.aeris-motion-ready .aeris-section.is-visible .aeris-inspection-layout > :nth-child(2) {
+  transition-delay: 0.34s;
+}
+
+.aeris-process-step,
+.aeris-intel-item {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.aeris-process-step::before,
+.aeris-intel-item::before {
+  content: "";
+  position: absolute;
+  inset: -60% -90%;
+  z-index: -1;
+  opacity: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 40%,
+    rgba(0, 200, 255, 0.12) 50%,
+    transparent 60%
+  );
+  transform: translateX(-35%);
+  transition:
+    opacity 0.3s ease,
+    transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.aeris-section.is-visible .aeris-process-step:hover,
+.aeris-section.is-visible .aeris-intel-item:hover {
+  border-color: rgba(0, 200, 255, 0.48);
+  box-shadow:
+    0 20px 44px rgba(0, 0, 0, 0.32),
+    inset 0 0 28px rgba(0, 200, 255, 0.055);
+  transform: translateY(-8px) perspective(700px) rotateX(1.5deg);
+  transition-delay: 0s;
+}
+
+.aeris-process-step:hover::before,
+.aeris-intel-item:hover::before {
+  opacity: 1;
+  transform: translateX(35%);
+}
+
+.aeris-step-mark::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border: 1px solid rgba(0, 200, 255, 0.36);
+  border-radius: inherit;
+  animation: aeris-node-ping 2.8s ease-out infinite;
+}
+
+.aeris-process-step:nth-child(2) .aeris-step-mark::after {
+  animation-delay: 0.35s;
+}
+
+.aeris-process-step:nth-child(3) .aeris-step-mark::after {
+  animation-delay: 0.7s;
+}
+
+.aeris-process-step:nth-child(4) .aeris-step-mark::after {
+  animation-delay: 1.05s;
+}
+
+.aeris-process-step:nth-child(5) .aeris-step-mark::after {
+  animation-delay: 1.4s;
+}
+
+.aeris-section.is-visible .aeris-aircraft-plate svg path {
+  stroke-dasharray: 1300;
+  stroke-dashoffset: 1300;
+  animation: aeris-blueprint-draw 2.2s cubic-bezier(0.16, 1, 0.3, 1) 0.42s forwards;
+}
+
+.aeris-aircraft-glow {
+  animation: aeris-aircraft-glow 4.5s ease-in-out infinite;
+}
+
+.aeris-inspection-tag {
+  animation: aeris-tag-hover 4s ease-in-out infinite;
+}
+
+.aeris-inspection-tag.tag-two {
+  animation-delay: -1.2s;
+}
+
+.aeris-inspection-tag.tag-three {
+  animation-delay: -2.4s;
+}
+
+/* Sections outside the shared Section wrapper get their own observer class. */
+.aeris-motion-ready .aeris-diagnostic-preview > *,
+.aeris-motion-ready .aeris-finale > :is(.aeris-eyebrow, h2, p, .aeris-button),
+.aeris-motion-ready .aeris-footer > * {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+.aeris-motion-ready .aeris-diagnostic-preview.is-motion-visible > *,
+.aeris-motion-ready .aeris-finale.is-motion-visible > :is(.aeris-eyebrow, h2, p, .aeris-button),
+.aeris-motion-ready .aeris-footer.is-motion-visible > * {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.7s ease,
+    transform 0.85s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.aeris-motion-ready .aeris-diagnostic-preview.is-motion-visible > :nth-child(2) {
+  transition-delay: 0.18s;
+}
+
+.aeris-motion-ready .aeris-finale.is-motion-visible > h2 {
+  transition-delay: 0.1s;
+}
+
+.aeris-motion-ready .aeris-finale.is-motion-visible > p {
+  transition-delay: 0.2s;
+}
+
+.aeris-motion-ready .aeris-finale.is-motion-visible > .aeris-button {
+  transition-delay: 0.3s;
+}
+
+.aeris-motion-ready .aeris-footer.is-motion-visible > :nth-child(2) {
+  transition-delay: 0.08s;
+}
+
+.aeris-motion-ready .aeris-footer.is-motion-visible > :nth-child(3) {
+  transition-delay: 0.16s;
+}
+
+.aeris-finale::before,
+.aeris-finale::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(64vw, 760px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(0, 200, 255, 0.12);
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.72);
+  animation: aeris-finale-ring 7s ease-in-out infinite;
+}
+
+.aeris-finale::after {
+  width: min(42vw, 500px);
+  border-style: dashed;
+  animation-direction: reverse;
+  animation-duration: 11s;
+}
+
+@keyframes aeris-energy-cross {
+  0%,
+  12% {
+    opacity: 0;
+    transform: translateX(0) skewX(-14deg);
+  }
+  30% {
+    opacity: 0.7;
+  }
+  58%,
+  100% {
+    opacity: 0;
+    transform: translateX(760%) skewX(-14deg);
+  }
+}
+
+@keyframes aeris-particle-drift {
+  0% {
+    opacity: 0.15;
+    transform: translate3d(0, 0, 0) scale(0.7);
+  }
+  50% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0.25;
+    transform: translate3d(12px, -34px, 0) scale(1.3);
+  }
+}
+
+@keyframes aeris-flight-dash {
+  to {
+    stroke-dashoffset: -220;
+  }
+}
+
+@keyframes aeris-reticle-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes aeris-hero-materialize {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translate3d(-26px, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+@keyframes aeris-hud-lock {
+  from {
+    opacity: 0;
+    filter: blur(7px);
+    transform: translateY(-12px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+@keyframes aeris-orbit-materialize {
+  from {
+    opacity: 0;
+    filter: blur(9px);
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+@keyframes aeris-pedestal-arrive {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateX(-50%) translateY(36px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes aeris-soft-appear {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes aeris-node-ping {
+  0% {
+    opacity: 0.75;
+    transform: scale(0.72);
+  }
+  75%,
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
+@keyframes aeris-blueprint-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes aeris-aircraft-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.14);
+  }
+}
+
+@keyframes aeris-tag-hover {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(0, 200, 255, 0);
+    transform: translateY(0);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 200, 255, 0.18);
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes aeris-finale-ring {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translate(-50%, -50%) scale(0.72) rotate(0deg);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(1) rotate(90deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .aeris-page-progress {
+    right: 7px;
+    height: 88px;
+  }
+
+  .aeris-pointer-aura,
+  .aeris-reticle {
+    display: none;
+  }
+
+  .aeris-constellation {
+    opacity: 0.44;
+  }
+
+  .aeris-section.is-visible .aeris-process-step:hover,
+  .aeris-section.is-visible .aeris-intel-item:hover {
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aeris-page-progress,
+  .aeris-hero-motion {
+    display: none;
+  }
+
+  .aeris-motion-ready .aeris-section-heading > *,
+  .aeris-motion-ready .aeris-process-step,
+  .aeris-motion-ready .aeris-mission-layout > *,
+  .aeris-motion-ready .aeris-intel-item,
+  .aeris-motion-ready .aeris-inspection-layout > *,
+  .aeris-motion-ready .aeris-diagnostic-preview > *,
+  .aeris-motion-ready .aeris-finale > :is(.aeris-eyebrow, h2, p, .aeris-button),
+  .aeris-motion-ready .aeris-footer > * {
+    opacity: 1;
+    transform: none;
+  }
+}

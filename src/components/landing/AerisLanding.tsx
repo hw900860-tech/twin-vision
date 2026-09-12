@@ -23,10 +23,11 @@ import {
 } from "lucide-react";
 import { ClientOnly } from "@/components/ClientOnly";
 import { CinematicIntro } from "./CinematicIntro";
+import { HeroMotionBackdrop } from "./LandingMotion";
 import { JARVISExplodeStudio } from "@/features/digital-twin/JARVISExplodeStudio";
 import { JARVISPartInspector } from "@/features/digital-twin/JARVISPartInspector";
 import type { PartHighlights } from "@/features/digital-twin/EngineModel";
-import { ENGINE_SPIN_RATE, engineSpinAngle } from "@/features/digital-twin/EngineModel";
+import { engineSpinAngle } from "@/features/digital-twin/EngineModel";
 import { engineViewerAudio } from "@/features/digital-twin/engineViewerAudio";
 import {
   simulate,
@@ -83,7 +84,10 @@ function useReveal() {
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry) setVisible(entry.isIntersecting);
+        if (entry?.isIntersecting) {
+          setVisible(true);
+          observer.unobserve(node);
+        }
       },
       { threshold: 0.12 }
     );
@@ -340,9 +344,10 @@ function SpaceStationLabBackground() {
 }
 
   return (
-    <section id="top" className="aeris-hero">
+    <section id="top" className={`aeris-hero is-${phase}`}>
       {phase !== "live" && <CinematicIntro phase={phase} onCut={handleCut} />}
       <div className="aeris-hero-atmosphere" aria-hidden="true" />
+      <HeroMotionBackdrop />
       <div className="aeris-hero-grid" aria-hidden="true" />
       <div className="aeris-hero-blueprint" aria-hidden="true" />
       <SpaceStationLabBackground />
