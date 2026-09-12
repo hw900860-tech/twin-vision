@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Nav } from "@/components/landing/Nav";
+import { LandingMotionController } from "@/components/landing/LandingMotion";
 import {
   AerisLandingHero,
   DiagnosticPreview,
@@ -45,6 +46,7 @@ export const Route = createFileRoute("/")({
 function Landing() {
   return (
     <div className="aeris-landing">
+      <LandingMotionController />
       <Nav />
 
       <main>
