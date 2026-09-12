@@ -131,7 +131,6 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
       // Reveal HUD
       set({ isOpen: true });
 
-<<<<<<< Updated upstream
       if (spokenCommand && spokenCommand.trim().length > 2) {
         // User said command along with wake-word: e.g. "Jarvis what is our altitude"
         get().submitQuery(spokenCommand.trim());
@@ -146,43 +145,24 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
         const phrase =
           ackPhrases[Math.floor(Math.random() * ackPhrases.length)] ||
           "Online, Commander. Listening.";
-=======
-      const command = spokenCommand?.trim();
-      const isJustWakeWord =
-        !command ||
-        /^(jarvis|jarvus|jervis|garvis|travis|hey jarvis|ok jarvis|okay jarvis|hi jarvis|hello jarvis|wake up|wake up jarvis|j\.a\.r\.v\.i\.s)$/i.test(
-          command
-        );
->>>>>>> Stashed changes
 
-      if (!isJustWakeWord && command.length > 2) {
-        // User spoke an actual command along with wake-word: e.g. "Jarvis show graphs"
-        get().submitQuery(command);
-      } else {
-        // User just called "Jarvis!" -> Speak verbal acknowledgment out loud!
-        const responses = [
-          "Yes, Commander. Standing by.",
-          "At your service, Commander.",
-          "Online, Commander. Command?",
-          "Systems nominal. Ready, Commander."
-        ];
-        const spokenGreeting = responses[Math.floor(Math.random() * responses.length)];
-
-        set({ isSpeaking: true });
-        jarvisSpeaker.speak(spokenGreeting, {
-          onStart: () => set({ isSpeaking: true }),
-          onEnd: () => {
-            set({ isSpeaking: false });
-            // Small 150ms buffer so speaker sound doesn't echo into mic
-            setTimeout(() => {
+        if (get().voiceEnabled) {
+          set({ isSpeaking: true });
+          jarvisSpeaker.speak(phrase, {
+            onStart: () => set({ isSpeaking: true }),
+            onEnd: () => {
+              set({ isSpeaking: false });
+              // Seamlessly transition to voice command listening
               get().startListening();
-            }, 150);
-          },
-          onError: () => {
-            set({ isSpeaking: false });
-            get().startListening();
-          }
-        });
+            },
+            onError: () => {
+              set({ isSpeaking: false });
+              get().startListening();
+            },
+          });
+        } else {
+          get().startListening();
+        }
       }
     });
   },
@@ -205,49 +185,10 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
     const { isListening, submitQuery } = get();
     if (isListening) return;
 
-    if ((get() as any)._listeningTimer) {
-      clearTimeout((get() as any)._listeningTimer);
-    }
-
     jarvisWakeWord.pause();
     jarvisSpeaker.stop();
-    set({ isSpeaking: false, isListening: true, transcriptInput: "" });
+    set({ isSpeaking: false, isListening: true });
 
-    let hasHandledFinish = false;
-
-    const handleFinish = (finalText: string) => {
-      if (hasHandledFinish) return;
-      hasHandledFinish = true;
-
-      if ((get() as any)._listeningTimer) {
-        clearTimeout((get() as any)._listeningTimer);
-      }
-
-      jarvisRecognizer.stop();
-      set({ isListening: false, transcriptInput: "" });
-
-      const clean = finalText.trim();
-      if (clean.length > 1) {
-        console.log("[JARVIS Voice Input Captured]:", clean);
-        submitQuery(clean);
-      } else {
-        console.log("[JARVIS Voice] No speech captured. Returning to wake-word mode.");
-        if (get().wakeWordEnabled) {
-          jarvisWakeWord.resume();
-        }
-      }
-    };
-
-    // Auto-Sleep Timer: If woken up but no speech command received within 8 seconds, go back to sleep (Wake Word Standby)
-    const timer = setTimeout(() => {
-      if (get().isListening) {
-        console.log("[JARVIS] Inactivity timeout: Returning to Standby wake word mode.");
-        handleFinish(get().transcriptInput);
-      }
-    }, 8000);
-    (get() as any)._listeningTimer = timer;
-
-<<<<<<< Updated upstream
     // 120ms safety margin ensures Chromium's native microphone pipe is released cleanly
     setTimeout(() => {
       if (!get().isListening) return;
@@ -286,31 +227,9 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
         },
       });
     }, 120);
-=======
-    jarvisRecognizer.start({
-      onStart: () => {
-        set({ isListening: true });
-      },
-      onResult: (transcript, isFinal) => {
-        const text = transcript.trim();
-        set({ transcriptInput: text });
-        if (isFinal && text.length > 1) {
-          handleFinish(text);
-        }
-      },
-      onError: (err) => {
-        console.warn("Speech recognition error:", err);
-        handleFinish(get().transcriptInput);
-      },
-      onEnd: () => {
-        handleFinish(get().transcriptInput);
-      },
-    });
->>>>>>> Stashed changes
   },
 
   stopListening: () => {
-    if ((get() as any)._listeningTimer) clearTimeout((get() as any)._listeningTimer);
     jarvisRecognizer.stop();
     set({ isListening: false });
     if (get().wakeWordEnabled) {

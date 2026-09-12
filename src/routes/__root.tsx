@@ -134,7 +134,11 @@ function RootComponent() {
         try {
           if (path.includes("#")) {
             const [baseRoute, hash] = path.split("#");
-            navigate({ to: (baseRoute || "/") as any, hash });
+            // exactOptionalPropertyTypes forbids passing `hash: undefined`, so only
+            // attach the option when the JARVIS route request actually carries one.
+            const navOptions: any = { to: baseRoute || "/" };
+            if (hash) navOptions.hash = hash;
+            navigate(navOptions);
           } else {
             navigate({ to: path as any });
           }
