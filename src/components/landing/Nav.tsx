@@ -67,7 +67,21 @@ const ITEMS: readonly DockItem[] = [
       </svg>
     ),
   },
+  {
+    // Static asset in public/ — downloads the 6-slide SIH idea submission deck.
+    id: "deck",
+    label: "Deck PDF",
+    href: "/sih-idea-submission.pdf",
+    icon: (
+      <svg viewBox="0 0 16 16">
+        <path d="M3.6 1.9h6.2l2.6 2.6v4.1M3.6 1.9v12.2h4.1" />
+        <path d="M9.8 1.9v2.6h2.6M7.9 8.4v4.6M6.1 11.2l1.8 1.8 1.8-1.8" />
+      </svg>
+    ),
+  },
 ];
+
+const DECK_DOWNLOAD_NAME = "AERIS-TWIN-SIH-Idea-Submission.pdf";
 
 const BRAND_MARK = (
   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -125,21 +139,26 @@ export function Nav() {
           data-dock-state="idle"
           data-dock-max="0.00"
         >
-          {ITEMS.map((item) => (
-            <a
-              key={item.id}
-              href={item.href}
-              className="atd-modern__item"
-              data-dock-item
-              aria-pressed={active === item.id}
-              onClick={(e) => handleNavClick(e, item.href, item.id)}
-            >
-              <span className="atd-modern__icon" aria-hidden="true">
-                {item.icon}
-              </span>
-              <span>{item.label}</span>
-            </a>
-          ))}
+          {ITEMS.map((item) => {
+            const isDeck = item.id === "deck";
+            return (
+              <a
+                key={item.id}
+                href={item.href}
+                className="atd-modern__item"
+                data-dock-item
+                download={isDeck ? DECK_DOWNLOAD_NAME : undefined}
+                title={isDeck ? "Download the 6-slide SIH idea submission deck (PDF)" : undefined}
+                aria-pressed={isDeck ? undefined : active === item.id}
+                onClick={isDeck ? undefined : (e) => handleNavClick(e, item.href, item.id)}
+              >
+                <span className="atd-modern__icon" aria-hidden="true">
+                  {item.icon}
+                </span>
+                <span>{item.label}</span>
+              </a>
+            );
+          })}
         </nav>
 
         <div className="atd-modern__actions">
