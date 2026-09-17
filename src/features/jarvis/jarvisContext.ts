@@ -28,6 +28,7 @@ export interface SystemSnapshot {
     healthIndex_pct: number;
     rul_hours: number;
     throttle_pct: number;
+    injectionTiming_btdc: number;
   };
   flight: {
     altitude_ft: number;
@@ -36,6 +37,7 @@ export interface SystemSnapshot {
     pitch_deg: number;
     roll_deg: number;
     heading_deg: number;
+    rudder: number;
     emergencyState: string;
     activeMissionPreset: string;
   };
@@ -53,6 +55,8 @@ export interface SystemSnapshot {
     primaryFaultSubsystem: string;
     diagnosisText: string;
     recommendedAction: string;
+    missionRisk: string;
+    activeAdvisoriesCount: number;
     subsystemHealths: Record<string, { health: number; status: string }>;
     activeAlerts: Array<{ title: string; desc: string; tone: string }>;
   };
@@ -152,6 +156,7 @@ export function captureSystemSnapshot(): SystemSnapshot {
       healthIndex_pct: Number(((flightState.healthIndex || 1.0) * 100).toFixed(1)),
       rul_hours: Number((flightState.rul || 420).toFixed(1)),
       throttle_pct: Math.round(flightState.throttle || 0),
+      injectionTiming_btdc: Number((flightState.injectionTiming || 27).toFixed(1)),
     },
     flight: {
       altitude_ft: Math.round(flightState.altitude || 0),
@@ -160,6 +165,7 @@ export function captureSystemSnapshot(): SystemSnapshot {
       pitch_deg: Number((flightState.pitchAngle || 0).toFixed(1)),
       roll_deg: Number((flightState.bankAngle || 0).toFixed(1)),
       heading_deg: Math.round(flightState.heading || 0),
+      rudder: Number((flightState.rudder || 0).toFixed(2)),
       emergencyState: flightState.emergencyState || "nominal",
       activeMissionPreset: flightState.missionPreset || "nominalRoutine",
     },
@@ -177,6 +183,8 @@ export function captureSystemSnapshot(): SystemSnapshot {
       primaryFaultSubsystem: decision?.primaryFaultSubsystem || "NONE",
       diagnosisText: decision?.diagnosisText || "Nominal parameters",
       recommendedAction: decision?.recommendedAction || "Maintain profile",
+      missionRisk: (flightState.healthIndex || 1.0) > 0.75 ? "LOW" : (flightState.healthIndex || 1.0) > 0.45 ? "MEDIUM" : "HIGH",
+      activeAdvisoriesCount: activeAlerts.length,
       subsystemHealths,
       activeAlerts,
     },

@@ -246,32 +246,25 @@ function OrbitalRings() {
 
 export function AerisLandingHero() {
   const [phase, setPhase] = useState<"cinematic" | "reveal" | "live">("cinematic");
-  const [exploded, setExploded] = useState(false);
+  const exploded = useJarvisStore((s) => s.isExploded);
+  const setExploded = useJarvisStore((s) => s.setIsExploded);
+  const isStudioOpen = useJarvisStore((s) => s.isStudioOpen);
+  const setIsStudioOpen = useJarvisStore((s) => s.setIsStudioOpen);
+  const selectedZone = useJarvisStore((s) => s.selectedPart);
+  const setSelectedZone = useJarvisStore((s) => s.setSelectedPart);
   const [showLabels, setShowLabels] = useState(false);
-  const [selectedZone, setSelectedZone] = useState<string | null>(null);
-  const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [blend, setBlend] = useState(1.0);
 
-  // Sync state with JARVIS store so copilot knows hero 3D status
-  useEffect(() => {
-    useJarvisStore.getState().setIsExploded(exploded);
-    useJarvisStore.getState().setIsStudioOpen(isStudioOpen);
-    useJarvisStore.getState().setSelectedPart(selectedZone);
-  }, [exploded, isStudioOpen, selectedZone]);
-
-  // Register Landing page 3D engine command handlers with JARVIS
+  // Register Landing page 3D sound effects handler with JARVIS
   useEffect(() => {
     useJarvisStore.getState().registerHandlers({
       explode: (exp) => {
-        setExploded(exp);
         if (exp) {
           engineViewerAudio.explode();
         } else {
           engineViewerAudio.assemble();
         }
       },
-      studio: (open) => setIsStudioOpen(open),
-      partSelect: (part) => setSelectedZone(part),
     });
   }, []);
 
@@ -602,12 +595,6 @@ function SpaceStationLabBackground() {
           }}
         />
       )}
-
-      <JARVISExplodeStudio
-        isOpen={isStudioOpen}
-        onClose={() => setIsStudioOpen(false)}
-        highlights={highlights}
-      />
     </section>
   );
 }

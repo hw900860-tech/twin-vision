@@ -114,7 +114,10 @@ export class JarvisSpeechRecognizer {
       const rec = new SpeechRecognition();
       rec.continuous = true;
       rec.interimResults = true;
-      rec.lang = "en-US";
+      const navLang = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en-US";
+      rec.lang = navLang.startsWith("en") ? navLang : "en-US";
+
+      let accumulatedTranscript = "";
 
       rec.onstart = () => {
         this.isListening = true;
@@ -123,38 +126,35 @@ export class JarvisSpeechRecognizer {
       };
 
       rec.onresult = (event: any) => {
-        let interimTranscript = "";
-        let finalTranscript = "";
+        let fullTranscript = "";
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
+        // Concatenate all results from index 0 so nothing is dropped or cut off in between
+        for (let i = 0; i < event.results.length; ++i) {
+          fullTranscript += event.results[i][0].transcript + " ";
         }
+        fullTranscript = fullTranscript.replace(/\s+/g, " ").trim();
 
-        if (finalTranscript && finalTranscript.trim().length > 1) {
-          if (this.silenceTimer) {
-            clearTimeout(this.silenceTimer);
+        if (!fullTranscript) return;
+        accumulatedTranscript = fullTranscript;
+
+        // Stream live transcript to UI input field
+        handlers.onResult?.(fullTranscript, false);
+
+        // Adaptive silence countdown:
+        // - If Web Speech has already determined finality on a phrase, commit quickly in 900ms
+        // - If user is speaking or pausing mid-thought (interim), give a generous 1800ms window
+        const hasFinal = Array.from(event.results).some((r: any) => r.isFinal);
+        const silenceDelay = hasFinal ? 900 : 1800;
+
+        if (this.silenceTimer) {
+          clearTimeout(this.silenceTimer);
+        }
+        this.silenceTimer = setTimeout(() => {
+          if (this.isListening && accumulatedTranscript.length > 1) {
             this.silenceTimer = null;
+            handlers.onResult?.(accumulatedTranscript, true);
           }
-          handlers.onResult?.(finalTranscript.trim(), true);
-          return;
-        }
-
-        if (interimTranscript) {
-          handlers.onResult?.(interimTranscript, false);
-
-          // Fast auto-commit: If user pauses speech for 750ms, auto-commit as final
-          if (this.silenceTimer) clearTimeout(this.silenceTimer);
-          this.silenceTimer = setTimeout(() => {
-            if (this.isListening && interimTranscript.trim().length > 1) {
-              this.silenceTimer = null;
-              handlers.onResult?.(interimTranscript.trim(), true);
-            }
-          }, 750);
-        }
+        }, silenceDelay);
       };
 
       rec.onerror = (event: any) => {
@@ -165,6 +165,9 @@ export class JarvisSpeechRecognizer {
         this.isListening = false;
         // no-speech or aborted are benign timeouts in Chromium
         if (event.error === "no-speech" || event.error === "aborted") {
+          if (accumulatedTranscript && accumulatedTranscript.length > 1) {
+            handlers.onResult?.(accumulatedTranscript, true);
+          }
           handlers.onEnd?.();
         } else {
           handlers.onError?.(event.error || "Speech recognition error");
@@ -178,6 +181,9 @@ export class JarvisSpeechRecognizer {
         }
         this.isListening = false;
         jarvisAudio.playChime("deactivate");
+        if (accumulatedTranscript && accumulatedTranscript.length > 1) {
+          handlers.onResult?.(accumulatedTranscript, true);
+        }
         handlers.onEnd?.();
       };
 
@@ -209,11 +215,12 @@ export class JarvisSpeechRecognizer {
   }
 }
 
-// --- Text to Speech (TTS) ---
 export class JarvisSpeechSynthesizer {
   private activeToken = 0;
   private cachedVoice: SpeechSynthesisVoice | null = null;
   private speakTimeout: any = null;
+  private keepAliveTimer: any = null;
+  private currentUtterance: SpeechSynthesisUtterance | null = null;
   private channel: BroadcastChannel | null = null;
 
   constructor() {
@@ -273,26 +280,26 @@ export class JarvisSpeechSynthesizer {
       return;
     }
 
-    // Immediately cancel previous utterance and increment token to invalidate stale callbacks
-    this.stop(true);
+    const wasSpeaking =
+      typeof window !== "undefined" &&
+      "speechSynthesis" in window &&
+      (window.speechSynthesis.speaking || window.speechSynthesis.pending);
+
+    // Cancel any previous utterance if still active
+    if (wasSpeaking) {
+      this.stop(true);
+    }
     const token = ++this.activeToken;
 
-    // Clean markdown symbols from spoken text
+    // Clean markdown symbols and special notation from spoken text
     let cleanText = text
+      .replace(/\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/gi, "")
       .replace(/[*_#`~[\]]/g, "")
       .replace(/https?:\/\/\S+/g, "")
+      .replace(/>\s*/g, "")
       .replace(/\n+/g, " ")
+      .replace(/\s+/g, " ")
       .trim();
-
-    // Keep voice transmission punchy & fast (1-2 sentences max, <= 28 words)
-    const sentences = cleanText.split(/(?<=[.?!])\s+/);
-    if (sentences.length > 2) {
-      cleanText = sentences.slice(0, 2).join(" ");
-    }
-    const words = cleanText.split(/\s+/);
-    if (words.length > 28) {
-      cleanText = words.slice(0, 28).join(" ") + ".";
-    }
 
     if (!cleanText) {
       options?.onEnd?.();
@@ -304,10 +311,19 @@ export class JarvisSpeechSynthesizer {
       this.channel?.postMessage({ type: "SILENCE_SPEECH" });
     } catch {}
 
-    // 40ms micro-delay gives Chromium audio thread time to settle cancel() before queuing
+    // Delay: if previous speech was canceled, give 60ms for audio device release; else speak in 10ms
+    const delay = wasSpeaking ? 60 : 10;
+
     this.speakTimeout = setTimeout(() => {
       if (this.activeToken !== token) return;
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+      // Force resume any paused Chromium speech queue before dispatching
+      try {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+      } catch {}
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.rate = JARVIS_CONFIG.speechRate;
@@ -316,20 +332,49 @@ export class JarvisSpeechSynthesizer {
       const preferredVoice = this.resolveVoice();
       if (preferredVoice) {
         utterance.voice = preferredVoice;
+        utterance.lang = preferredVoice.lang || "en-US";
+      } else {
+        utterance.lang = "en-US";
       }
 
+      this.currentUtterance = utterance;
+
+      let hasStarted = false;
+
+      // Keepalive timer ensures Chromium speech engine does not stall on longer multi-sentence debriefs
+      if (this.keepAliveTimer) clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = setInterval(() => {
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.pause();
+            window.speechSynthesis.resume();
+          }
+        }
+      }, 5000);
+
       utterance.onstart = () => {
+        hasStarted = true;
         if (this.activeToken !== token) return;
         options?.onStart?.();
       };
 
       utterance.onend = () => {
+        if (this.keepAliveTimer) {
+          clearInterval(this.keepAliveTimer);
+          this.keepAliveTimer = null;
+        }
+        this.currentUtterance = null;
         if (this.activeToken !== token) return;
         this.activeToken = 0;
         options?.onEnd?.();
       };
 
       utterance.onerror = (e) => {
+        if (this.keepAliveTimer) {
+          clearInterval(this.keepAliveTimer);
+          this.keepAliveTimer = null;
+        }
+        this.currentUtterance = null;
         if (this.activeToken !== token) return;
         // Do not propagate intentional cancellations or interrupts
         if (e.error === "canceled" || e.error === "interrupted") {
@@ -339,8 +384,32 @@ export class JarvisSpeechSynthesizer {
         options?.onError?.(e);
       };
 
-      window.speechSynthesis.speak(utterance);
-    }, 40);
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.warn("speechSynthesis.speak error:", err);
+        options?.onError?.(err);
+      }
+
+      // CRITICAL CHROMIUM FIX: Kick synthesis engine 50ms & 200ms later to unblock pending queue
+      setTimeout(() => {
+        if (!hasStarted && typeof window !== "undefined" && "speechSynthesis" in window) {
+          try {
+            window.speechSynthesis.resume();
+          } catch {}
+        }
+      }, 50);
+
+      setTimeout(() => {
+        if (!hasStarted && typeof window !== "undefined" && "speechSynthesis" in window) {
+          try {
+            if (window.speechSynthesis.paused) {
+              window.speechSynthesis.resume();
+            }
+          } catch {}
+        }
+      }, 200);
+    }, delay);
   }
 
   stop(broadcast = true) {
@@ -348,6 +417,11 @@ export class JarvisSpeechSynthesizer {
       clearTimeout(this.speakTimeout);
       this.speakTimeout = null;
     }
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
+    this.currentUtterance = null;
     this.activeToken++;
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       try {
@@ -445,16 +519,15 @@ export class JarvisWakeWordDetector {
 
   private startWatchdog() {
     this.stopWatchdog();
-    // Heartbeat every 2.5 seconds: ensures JARVIS never stays in a zombie sleep state
+    // Heartbeat every 2.0 seconds: ensures JARVIS never stays in a dropped or zombie state
     this.watchdogInterval = setInterval(() => {
       if (this.isRunning && !this.isPaused) {
-        const now = Date.now();
         // If the native speech recognition ended or dropped out due to silence
-        if (!this.isActivelyListening || (now - this.lastActiveTimestamp > 9000)) {
+        if (!this.isActivelyListening) {
           this.recreateAndStart();
         }
       }
-    }, 2500);
+    }, 2000);
   }
 
   private stopWatchdog() {
@@ -468,6 +541,8 @@ export class JarvisWakeWordDetector {
     if (this.recognition) {
       try {
         this.recognition.onstart = null;
+        this.recognition.onaudiostart = null;
+        this.recognition.onsoundstart = null;
         this.recognition.onresult = null;
         this.recognition.onerror = null;
         this.recognition.onend = null;
@@ -490,9 +565,20 @@ export class JarvisWakeWordDetector {
       const rec = new SpeechRecognition();
       rec.continuous = true;
       rec.interimResults = true;
-      rec.lang = "en-US";
+      const navLang = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en-US";
+      rec.lang = navLang.startsWith("en") ? navLang : "en-US";
 
       rec.onstart = () => {
+        this.isActivelyListening = true;
+        this.lastActiveTimestamp = Date.now();
+      };
+
+      rec.onaudiostart = () => {
+        this.isActivelyListening = true;
+        this.lastActiveTimestamp = Date.now();
+      };
+
+      rec.onsoundstart = () => {
         this.isActivelyListening = true;
         this.lastActiveTimestamp = Date.now();
       };
@@ -502,15 +588,15 @@ export class JarvisWakeWordDetector {
         if (this.isPaused) return;
 
         const now = Date.now();
-        // Debounce wake events by at least 2000ms
-        if (now - this.lastWakeTimestamp < 2000) return;
+        // Debounce wake events by at least 700ms
+        if (now - this.lastWakeTimestamp < 700) return;
 
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           const transcript = event.results[i][0].transcript.toLowerCase();
 
-          // Extended wake pattern: "hey jarvis", "ok jarvis", "hi jarvis", "jarvis", "wake up jarvis"
+          // Comprehensive wake pattern: supports simple names ("Aeris", "Nova", "Iris", "Computer", "Copilot", "Friday", "Alexa", "Jarvis")
           const wakeRegex =
-            /\b(hey\s+jarvis|ok\s+jarvis|okay\s+jarvis|hi\s+jarvis|hello\s+jarvis|wake\s+up\s+jarvis|jarvis\s+wake\s+up|wake\s+up|jarvis|jaarvis|javis|jarves|j\.a\.r\.v\.i\.s)\b/i;
+            /\b(hey\s+aeris|ok\s+aeris|okay\s+aeris|hi\s+aeris|hello\s+aeris|aeris|aris|airis|ayris|eris|ares|air\s*is|hey\s+nova|nova|hey\s+iris|iris|hey\s+friday|friday|hey\s+alexa|alexa|hey\s+alex|alex|hey\s+computer|ok\s+computer|computer|hey\s+copilot|copilot|hey\s+assistant|assistant|hey\s+jarvis|ok\s+jarvis|okay\s+jarvis|hi\s+jarvis|hello\s+jarvis|wake\s+up\s+jarvis|jarvis\s+wake\s+up|wake\s+up|jarvis|jaarvis|javis|jahvis|jah\s*vis|jarves|jervis|jerwis|jarviss|jarvise|jar\s*vis|jar\s*is|jar\s*this|service|services|travis|charvis|garvis|darvis|starvis|harvest|j\.a\.r\.v\.i\.s)\b/i;
           const match = wakeRegex.exec(transcript);
 
           if (match) {
@@ -534,12 +620,13 @@ export class JarvisWakeWordDetector {
         this.lastActiveTimestamp = Date.now();
         this.isActivelyListening = false;
 
-        // If mic permission blocked before user gesture, listen for next click
+        // If mic permission blocked before user gesture, request on next click
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           window.addEventListener(
             "pointerdown",
-            () => {
+            async () => {
               if (this.isRunning && !this.isPaused) {
+                await requestMicrophoneAccess();
                 this.recreateAndStart();
               }
             },
@@ -587,3 +674,21 @@ export class JarvisWakeWordDetector {
 export const jarvisRecognizer = new JarvisSpeechRecognizer();
 export const jarvisSpeaker = new JarvisSpeechSynthesizer();
 export const jarvisWakeWord = new JarvisWakeWordDetector();
+
+/**
+ * Prompts user for browser microphone access cleanly via getUserMedia,
+ * ensuring background SpeechRecognition has granted permission without throwing 'not-allowed'.
+ */
+export async function requestMicrophoneAccess(): Promise<boolean> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    return false;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+    return true;
+  } catch (err) {
+    console.warn("Microphone access prompt dismissed or not yet granted:", err);
+    return false;
+  }
+}

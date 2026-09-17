@@ -90,18 +90,18 @@ function GcsPage() {
     ];
     return validKeys.includes(jarvisTab) ? jarvisTab : "LIVE TWIN";
   });
-  const [exploded, setExploded] = useState(false);
+  const exploded = useJarvisStore((s) => s.isExploded);
+  const setExploded = useJarvisStore((s) => s.setIsExploded);
+  const isStudioOpen = useJarvisStore((s) => s.isStudioOpen);
+  const setIsStudioOpen = useJarvisStore((s) => s.setIsStudioOpen);
   const [showLabels, setShowLabels] = useState(true);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
-  const [isStudioOpen, setIsStudioOpen] = useState(false);
 
   // Sync state with JARVIS Copilot store
   useEffect(() => {
     useJarvisStore.getState().setActiveGcsTab(tab);
     useJarvisStore.getState().setSelectedPart(selectedZone);
-    useJarvisStore.getState().setIsExploded(exploded);
-    useJarvisStore.getState().setIsStudioOpen(isStudioOpen);
-  }, [tab, selectedZone, exploded, isStudioOpen]);
+  }, [tab, selectedZone]);
 
   // Subscribe to JARVIS copilot tab updates
   useEffect(() => {
@@ -117,8 +117,6 @@ function GcsPage() {
   useEffect(() => {
     useJarvisStore.getState().registerHandlers({
       gcsTab: (newTab) => setTab(newTab as NavKey),
-      explode: (exp) => setExploded(exp),
-      studio: (open) => setIsStudioOpen(open),
       partSelect: (part) => setSelectedZone(part),
     });
   }, []);
@@ -508,13 +506,6 @@ function GcsPage() {
               isExploded={exploded}
             />
           )}
-
-          <JARVISExplodeStudio
-            isOpen={isStudioOpen}
-            onClose={() => setIsStudioOpen(false)}
-            highlights={highlights}
-          />
-
 
           {tab === "FLEET" && <FleetPanel />}
           {tab === "DIAGNOSTICS" && (

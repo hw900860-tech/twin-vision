@@ -29,6 +29,7 @@ import type { PartHighlights } from "@/features/digital-twin/EngineModel";
 import { JARVISPartInspector } from "@/features/digital-twin/JARVISPartInspector";
 import { JARVISExplodeStudio } from "@/features/digital-twin/JARVISExplodeStudio";
 import { engineViewerAudio } from "@/features/digital-twin/engineViewerAudio";
+import { useJarvisStore } from "@/features/jarvis/jarvisStore";
 import { CinematicIntro } from "./CinematicIntro";
 
 const EngineCanvas = lazy(() => import("@/features/digital-twin/EngineCanvas"));
@@ -254,10 +255,12 @@ function LiveTelemetry({
 
 export function Hero() {
   const [phase, setPhase] = useState<HeroPhase>("cinematic");
-  const [exploded, setExploded] = useState(false);
+  const exploded = useJarvisStore((s) => s.isExploded);
+  const setExploded = useJarvisStore((s) => s.setIsExploded);
+  const isStudioOpen = useJarvisStore((s) => s.isStudioOpen);
+  const setIsStudioOpen = useJarvisStore((s) => s.setIsStudioOpen);
   const [showLabels, setShowLabels] = useState(true);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
-  const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
 
   // Engine stage: mounted ("warmed") beneath the opaque video a short beat
@@ -782,13 +785,6 @@ export function Hero() {
           isExploded={exploded}
         />
       )}
-
-      {/* Full-Screen JARVIS Explode Studio */}
-      <JARVISExplodeStudio
-        isOpen={isStudioOpen}
-        onClose={() => setIsStudioOpen(false)}
-        highlights={highlights}
-      />
     </section>
   );
 }

@@ -11,7 +11,12 @@ export function GlobalSimulationLoop() {
     // A GROUND window (/gcs receiving over the datalink) does NOT run its own
     // physics — it renders only what crossed the wire. AIRBORNE / OFFLINE windows tick.
     const interval = setInterval(() => {
-      if (useLinkStore.getState().role === "ground") {
+      const link = useLinkStore.getState();
+      // If an airborne stream is actively transmitting frames over the network link,
+      // let the remote network packets drive the GCS display.
+      // Otherwise, keep the 20Hz Rotax 914 engine physics running locally so the
+      // GCS dashboard live dials, RPM, CHT, oil, and flight metrics dynamically update in real time!
+      if (link.role === "ground" && link.airborneOnline && link.rxFrames > 0 && link.lastFrameAgeMs < 2000) {
         lastTime = performance.now();
         return;
       }

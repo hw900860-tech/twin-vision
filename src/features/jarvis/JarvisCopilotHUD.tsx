@@ -21,13 +21,20 @@ import { useJarvisStore } from "./jarvisStore";
 import { useFlightStore } from "@/features/flight-sim/flightStore";
 
 const QUICK_PROMPTS = [
-  "Why is the engine health dropping?",
-  "What am I looking at right now?",
-  "What changed in the last 30 seconds?",
-  "Is the high temperature because of altitude?",
-  "Take me to predictive diagnostics and explain RUL",
-  "Open Live Engine and inspect Cylinder Head",
-  "What happens next if this continues?",
+  "🔍 Start 3D engine inspection tour",
+  "What is the present situation of the engine?",
+  "🚨 Emergency Protocol (Red Alert)",
+  "🧪 What if we lose turbo boost at 25,000 feet?",
+  "What are your voice commands?",
+  "Explain the GCS dashboard and engine status",
+  "What is our altitude and airspeed?",
+  "Where are we flying right now?",
+  "Take me to the 3D Flight Simulator",
+  "Open Sensor Matrix",
+  "Open Predictive Diagnostics",
+  "Explode the engine for inspection",
+  "Inject cylinder 2 overheat",
+  "Return to base (RTB)",
 ];
 
 export function JarvisCopilotHUD() {
@@ -152,7 +159,7 @@ export function JarvisCopilotHUD() {
                 ) : wakeWordEnabled ? (
                   <span className="text-emerald-400/90 flex items-center gap-1 font-semibold">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                    SAY "JARVIS" · ONLINE
+                    SAY "AERIS" OR "JARVIS" · ONLINE
                   </span>
                 ) : (
                   <span>ACTIVE · CLICK TO COMMAND</span>
@@ -240,12 +247,12 @@ export function JarvisCopilotHUD() {
                 }`}
                 title={
                   wakeWordEnabled
-                    ? "Hands-free Wake Word ACTIVE: Call 'Jarvis' anytime"
+                    ? "Hands-free Wake Word ACTIVE: Call 'Aeris' or 'Jarvis' (or 'Computer') anytime"
                     : "Hands-free Wake Word PAUSED: Click to enable"
                 }
               >
                 <Radio className={`h-3 w-3 ${wakeWordEnabled ? "text-emerald-400 animate-pulse" : ""}`} />
-                <span>{wakeWordEnabled ? 'WAKE: "JARVIS"' : "WAKE: OFF"}</span>
+                <span>{wakeWordEnabled ? 'WAKE: "AERIS" / "JARVIS"' : "WAKE: OFF"}</span>
               </button>
 
               {/* Voice toggle */}
