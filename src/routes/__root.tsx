@@ -120,6 +120,7 @@ function RootShell({ children }: { children: ReactNode }) {
 
 import { MouseEffect } from "@/components/MouseEffect";
 import { JarvisCopilotHUD } from "@/features/jarvis/JarvisCopilotHUD";
+import { JARVISExplodeStudio } from "@/features/digital-twin/JARVISExplodeStudio";
 import { useJarvisStore } from "@/features/jarvis/jarvisStore";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -127,6 +128,8 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const navigate = useNavigate();
   const registerHandlers = useJarvisStore((s) => s.registerHandlers);
+  const isStudioOpen = useJarvisStore((s) => s.isStudioOpen);
+  const setIsStudioOpen = useJarvisStore((s) => s.setIsStudioOpen);
 
   useEffect(() => {
     registerHandlers({
@@ -158,6 +161,10 @@ function RootComponent() {
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
       <JarvisCopilotHUD />
+      <JARVISExplodeStudio
+        isOpen={isStudioOpen}
+        onClose={() => setIsStudioOpen(false)}
+      />
     </QueryClientProvider>
   );
 }

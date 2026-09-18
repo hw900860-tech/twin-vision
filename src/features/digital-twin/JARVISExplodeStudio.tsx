@@ -5,6 +5,7 @@ import { engineViewerAudio } from "./engineViewerAudio";
 import type { PartHighlights } from "./EngineModel";
 import { ZONES } from "./EngineModel";
 import { ZONE_DETAILS } from "./JARVISPartInspector";
+import { useFlightStore } from "@/features/flight-sim/flightStore";
 
 const EngineCanvas = lazy(() => import("./EngineCanvas"));
 
@@ -15,7 +16,7 @@ export function JARVISExplodeStudio({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  highlights: PartHighlights;
+  highlights?: PartHighlights;
 }) {
   const [exploded, setExploded] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
@@ -23,6 +24,19 @@ export function JARVISExplodeStudio({
   const [wireframe, setWireframe] = useState(false);
   const [explodeAmount, setExplodeAmount] = useState(1.0);
   const [selectedPart, setSelectedPart] = useState<string | null>("CYLINDER HEAD");
+
+  const flight = useFlightStore();
+  const activeHighlights: PartHighlights = highlights ?? {
+    cyl1CHT: flight.cht?.[0] ?? 140,
+    cyl2CHT: flight.cht?.[1] ?? 140,
+    cyl3CHT: flight.cht?.[2] ?? 140,
+    cyl4CHT: flight.cht?.[3] ?? 140,
+    egt: flight.egt ?? 680,
+    rpm: flight.rpm ?? 5400,
+    vibration: flight.vibrationRMS ?? 0.8,
+    oilTemp: flight.oilTemp ?? 95,
+    health: (flight.healthIndex ?? 0.96) * 100,
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -39,7 +53,7 @@ export function JARVISExplodeStudio({
 
   const activeZone = ZONES.find((z) => z.name === selectedPart) ?? ZONES[0];
   const meta = ((selectedPart ? ZONE_DETAILS[selectedPart] : null) ?? ZONE_DETAILS["CYLINDER HEAD"])!;
-  const telemetryItems = meta.getTelemetry(highlights);
+  const telemetryItems = meta.getTelemetry(activeHighlights);
 
   return createPortal(
     <div className="fixed inset-0 z-[99999] flex flex-col bg-[#070a0d] text-foreground animate-in fade-in duration-300 overflow-hidden select-none">
@@ -191,7 +205,7 @@ export function JARVISExplodeStudio({
               cameraView="overview"
               modelScale={1.1}
               modelPosition={[0, -0.2, 0]}
-              highlights={highlights}
+              highlights={activeHighlights}
               exploded={exploded}
               wireframe={wireframe}
               explodeAmount={explodeAmount}

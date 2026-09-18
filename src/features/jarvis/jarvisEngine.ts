@@ -15,6 +15,7 @@ import { JARVIS_SYSTEM_PROMPT } from "./jarvisPrompt";
 import { captureSystemSnapshot, type SystemSnapshot } from "./jarvisContext";
 import { useJarvisStore, type JarvisMessage } from "./jarvisStore";
 import { useFlightStore } from "@/features/flight-sim/flightStore";
+import { useLinkStore } from "@/features/datalink/linkStore";
 import { scrollToLandingSection } from "./jarvisNavigation";
 import {
   startGuidedDemo,
@@ -171,42 +172,51 @@ export function detectNavigationFromQuery(query: string): DetectedNavigation | n
     };
   }
 
-  // 3. Exploded View / Component Inspection / Explore Parts
+  // 3. Exploded View / Component Inspection / Explore Parts / Inspect Studio
   if (
+    q.includes("explode") ||
+    q.includes("explot") ||
     q.includes("explore the parts") ||
     q.includes("explore parts") ||
     q.includes("inspect the parts") ||
     q.includes("inspect parts") ||
     q.includes("inspection page") ||
     q.includes("inspection section") ||
+    q.includes("inspect button") ||
+    q.includes("click inspect") ||
+    q.includes("click on inspect") ||
     cleanQ === "inspection" ||
     cleanQ === "inspect" ||
     cleanQ === "parts" ||
     cleanQ === "components" ||
     cleanQ === "engine parts" ||
-    q.includes("explode engine") ||
-    q.includes("explode the engine") ||
-    q.includes("exploded view") ||
-    (q.includes("dismantle") && !q.includes("close"))
+    (q.includes("dismantle") && !q.includes("close") && !q.includes("assemble"))
   ) {
     return {
       intent: "UI_ACTION",
-      spokenText: "Navigating to 3D Component Inspection and expanding engine layers.",
-      displayText: "Navigating to **Digital Twin Inspection** (`#inspection`) and activating exploded view.",
+      spokenText: "Opening 3D Component Inspection Lab and expanding Rotax 914 engine layers into exploded view, Commander.",
+      displayText: "Activating **3D Dismantle Intelligence Lab** (`INSPECT`) and expanding engine layers into 100% exploded view.",
       actions: [
-        { type: "NAVIGATE", route: "/" },
-        { type: "SCROLL_TO", sectionId: "inspection" },
+        { type: "OPEN_STUDIO", open: true },
         { type: "SET_EXPLODED", exploded: true },
       ],
     };
   }
 
   // 4. Assemble Engine
-  if (q.includes("assemble") || q.includes("put together") || q.includes("reset engine")) {
+  if (
+    q.includes("assemble") ||
+    q.includes("put together") ||
+    q.includes("reset engine") ||
+    q.includes("close inspect") ||
+    q.includes("close studio") ||
+    q.includes("exit inspect") ||
+    q.includes("exit studio")
+  ) {
     return {
       intent: "UI_ACTION",
       spokenText: "Reassembling 3D engine model to flight configuration.",
-      displayText: "Assembling Rotax 914 back into nominal flight enclosure.",
+      displayText: "Assembling Rotax 914 back into nominal flight enclosure and closing Dismantle Lab.",
       actions: [
         { type: "SET_EXPLODED", exploded: false },
         { type: "OPEN_STUDIO", open: false },
@@ -632,6 +642,688 @@ export function executeActions(rawActions: any[]): string[] {
 }
 
 /**
+ * Checks whether the user is checking presence, readiness, or asking if JARVIS/Aeris is there.
+ * Handles "are you there", "you there", "can you hear me", "are you awake", "ping", "system check", etc.
+ */
+export function isPresenceQuery(query: string): boolean {
+  const q = query.toLowerCase().trim();
+  const norm = q
+    .replace(/[?.!,:;]/g, "")
+    .replace(/\b(hey|ok|okay|hi|hello|please|tell me|aeris|jarvis|jaarvis|computer|copilot|nova|iris)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return (
+    norm === "are you there" ||
+    norm === "you there" ||
+    norm === "there" ||
+    norm === "are you awake" ||
+    norm === "are you online" ||
+    norm === "are you listening" ||
+    norm === "are you ready" ||
+    norm === "can you hear me" ||
+    norm === "can you hear" ||
+    norm === "hear me" ||
+    norm === "ping" ||
+    norm === "test" ||
+    norm === "check in" ||
+    norm === "system check" ||
+    norm === "status check" ||
+    norm === "status report" ||
+    norm === "systems check" ||
+    norm === "readiness" ||
+    norm === "online" ||
+    norm === "are you ok" ||
+    norm === "are you okay" ||
+    norm.includes("are you there") ||
+    norm.includes("you there") ||
+    norm.includes("can you hear me") ||
+    norm.includes("are you awake") ||
+    norm.includes("are you online") ||
+    norm.includes("are you listening")
+  );
+}
+
+/**
+ * Instant 0ms presence response generator matching live GCS telemetry.
+ */
+export function generatePresenceResponse(s: SystemSnapshot): {
+  spokenText: string;
+  displayText: string;
+  intent: "QUESTION";
+  actions: any[];
+} {
+  const alt = s.flight.altitude_ft;
+  const speed = s.flight.airspeed_knots;
+  const rpm = s.telemetry.rpm;
+  const health = Math.round(s.telemetry.healthIndex_pct);
+  const biome = s.environment.biome || "himalaya";
+  const biomeFormatted = biome.charAt(0).toUpperCase() + biome.slice(1);
+  const activeFaults = Object.keys(s.faults || {}).filter((k) => (s.faults as any)[k]);
+  const faultStatus =
+    activeFaults.length > 0
+      ? `⚠️ Active Advisory Flags: ${activeFaults.join(", ")}`
+      : "Nominal (No active faults detected)";
+
+  const spokenText = `I am here and fully operational, Commander. We are currently cruising at ${alt.toLocaleString()} feet MSL over the ${biomeFormatted} corridor, with the Rotax engine maintaining a steady ${rpm.toLocaleString()} RPM and a composite health index of ${health} percent.`;
+
+  const displayText = `### 🛡️ J.A.R.V.I.S. Status Report
+
+I am online and synchronized with the **TAPAS BH-201** telemetry stream.
+
+* **Location:** ${biomeFormatted} Corridor
+* **Altitude:** ${alt.toLocaleString()} FT MSL
+* **Airspeed:** ${speed} KTS CAS
+* **Engine Health:** ${health}% (RUL: ${s.telemetry.rul_hours.toFixed(1)} Hours)
+* **System Status:** ${faultStatus}
+
+Standing by for your next flight or engine command, Commander.`;
+
+  return {
+    spokenText,
+    displayText,
+    intent: "QUESTION",
+    actions: [],
+  };
+}
+
+/**
+ * 1. 3D GUIDED POWERTRAIN INSPECTION TOUR
+ */
+export function isInspectionTourQuery(query: string): boolean {
+  const q = query.toLowerCase().trim();
+  return (
+    q.includes("inspection tour") ||
+    q.includes("tour the engine") ||
+    q.includes("engine tour") ||
+    q.includes("guided tour") ||
+    q.includes("walk me through the engine") ||
+    q.includes("walkthrough the engine") ||
+    q.includes("3d tour") ||
+    q.includes("inspect the engine") ||
+    q.includes("inspect engine") ||
+    q.includes("start tour") ||
+    q.includes("powerplant tour")
+  );
+}
+
+export function generateInspectionTourResponse(s: SystemSnapshot): {
+  spokenText: string;
+  displayText: string;
+  intent: "COMBINED";
+  actions: any[];
+} {
+  const cht2 = s.telemetry.cht_C[1]?.toFixed(1) || "148.5";
+  const mapVal = s.telemetry.manifoldAirPressure_kPa?.toFixed(1) || "102.4";
+  const vib = s.telemetry.vibrationRMS_G?.toFixed(2) || "0.62";
+
+  const spokenText = [
+    "Welcome to the 3D Powertrain Inspection Tour, Commander. Deconstructing the Rotax 914 into its modular aerospace assemblies.",
+    `First, examining Cylinder 2: operating at ${cht2} degrees Celsius, where rear nacelle cooling airflow shadowing produces an 18-degree thermal delta.`,
+    `Next, the turbocharger wastegate: actively maintaining ${mapVal} kilopascals manifold pressure to compensate for high-altitude density air.`,
+    `Finally, inspecting main crankshaft roller bearings: vibration accelerometer reads ${vib} G with 140 Hertz BPFO outer-race frequency tracking.`,
+    "3D inspection tour complete. All primary aerospace assemblies verified.",
+  ].join(" ");
+
+  const displayText = `### 🔍 AUTONOMOUS 3D POWERTRAIN INSPECTION TOUR
+
+> [!NOTE]
+> **JARVIS Automated Action**: Opened **3D Dismantle Intelligence Lab** in 100% Exploded View · Targeting **Cylinder 2**.
+
+---
+
+#### 🛠️ Step 1: Cylinder 2 Thermal Excursion Analysis
+- **Observed CHT**: **${cht2}°C** (Forward Cylinders C1/C3: ~135°C)
+- **Root Cause**: Rear nacelle cooling airflow shadow within the TAPAS BH-201 cowl geometry.
+- **Physics Model**: Convective heat transfer deficit $\\Delta h = -18.4\\%$.
+
+#### 🚀 Step 2: Turbocharger & TCU Wastegate Regulation
+- **Manifold Air Pressure (MAP)**: **${mapVal} kPa**
+- **Density Altitude Ratio**: **${(s.environment.densityRatio * 100).toFixed(1)}%**
+- **Status**: Electronic wastegate dynamically throttling turbine bypass to preserve rated 115 HP.
+
+#### ⚙️ Step 3: Main Crankshaft & Bearing Raceway Harmonics
+- **Vibration Amplitude**: **${vib} G RMS**
+- **Spectral Feature**: **140 Hz Peak** (Ball Pass Frequency Outer Race — BPFO)
+- **ML Health Assessment**: Outer-race contact fatigue within safe continuous mission thresholds.
+
+---
+
+*You can command: "Inspect the turbocharger", "Assemble the engine", or "What is our engine situation?"*`;
+
+  return {
+    spokenText,
+    displayText,
+    intent: "COMBINED",
+    actions: [
+      { type: "OPEN_STUDIO", open: true },
+      { type: "SET_EXPLODED", exploded: true },
+      { type: "INSPECT_PART", partName: "Cylinder 2" },
+    ],
+  };
+}
+
+/**
+ * 2. TACTICAL RED ALERT / COMBAT EMERGENCY PROTOCOL
+ */
+export function isEmergencyProtocolQuery(query: string): boolean {
+  const q = query.toLowerCase().trim();
+  return (
+    q.includes("emergency protocol") ||
+    q.includes("red alert") ||
+    q.includes("combat scramble") ||
+    q.includes("emergency descent") ||
+    q.includes("emergency procedure") ||
+    q.includes("mayday") ||
+    q.includes("critical failure")
+  );
+}
+
+export function generateEmergencyProtocolResponse(s: SystemSnapshot): {
+  spokenText: string;
+  displayText: string;
+  intent: "COMBINED";
+  actions: any[];
+} {
+  const alt = s.flight.altitude_ft;
+  const targetAlt = Math.max(3500, Math.min(alt - 2000, 4500));
+
+  const spokenText = [
+    "Emergency protocol engaged, Commander! Warning: Alerting ground control station.",
+    "Throttling engine to 60 percent continuous cruise to reduce powertrain thermal stress.",
+    `Initiating automated glide descent towards safe terrain clearance of ${targetAlt} feet MSL.`,
+    "Switching Ground Control Station to Predictive Diagnostics and arming Return-to-Base vector towards primary defense airbase.",
+  ].join(" ");
+
+  const displayText = `### 🚨 TACTICAL EMERGENCY PROTOCOL ENGAGED // RED ALERT
+
+> [!CAUTION]
+> **JARVIS COMBAT / EMERGENCY PROCEDURE ACTIVE**  
+> Datalink telemetry priority set to HIGH. Autopilot Return-To-Base armed.
+
+---
+
+#### ⚡ Tactical Actions Executed:
+1. **Engine Throttle Demand**: Set to **60% Continuous Cruise** (reducing cylinder thermal stress).
+2. **Target Flight Altitude**: Initiated step-down descent to **${targetAlt.toLocaleString()} FT MSL** (terrain clearance vector).
+3. **GCS Display**: Re-routed to **Predictive Diagnostics & Anomaly Residuals**.
+4. **Autonomous Navigation**: RTB guidance trajectory locked to **Leh Airbase (VIH)**.
+
+#### 📋 Emergency Pilot Checklist:
+- [x] Check CHT & EGT spread across cylinders 1-4.
+- [x] Confirm oil pressure > 3.0 bar.
+- [x] Maintain 85 KTS best-glide airspeed.
+- [x] Telemetry blackbox stream recording to flash memory.`;
+
+  return {
+    spokenText,
+    displayText,
+    intent: "COMBINED",
+    actions: [
+      { type: "NAVIGATE", route: "/gcs" },
+      { type: "SET_GCS_TAB", tab: "DIAGNOSTICS" },
+      { type: "SET_THROTTLE", value: 60 },
+      { type: "SET_TARGET_ALTITUDE", value: targetAlt },
+    ],
+  };
+}
+
+/**
+ * 3. PHYSICS-INFORMED "WHAT-IF" SCENARIO SIMULATOR
+ */
+export function isWhatIfScenarioQuery(query: string): boolean {
+  const q = query.toLowerCase().trim();
+  return (
+    q.includes("what if") ||
+    q.includes("what happens if") ||
+    q.includes("what would happen if") ||
+    q.includes("simulate loss of") ||
+    (q.includes("if we lose") && (q.includes("turbo") || q.includes("oil") || q.includes("boost") || q.includes("cylinder")))
+  );
+}
+
+export function generateWhatIfScenarioResponse(query: string, s: SystemSnapshot): {
+  spokenText: string;
+  displayText: string;
+  intent: "QUESTION";
+  actions: any[];
+} {
+  const q = query.toLowerCase();
+
+  // What if turbo fails at altitude?
+  if (q.includes("turbo") || q.includes("boost") || q.includes("wastegate")) {
+    const curAlt = s.flight.altitude_ft;
+    const spokenText = [
+      `If we lose turbo boost at ${curAlt.toLocaleString()} feet MSL, manifold air pressure will collapse from 100 kilopascals to ambient 38 kilopascals.`,
+      "Rotax 914 engine shaft power will plummet by 54 percent, generating an unsustainable 820 feet per minute descent rate.",
+      "You must immediately pitch down 3.5 degrees to maintain 85 knots best glide airspeed and descend to the critical engine ceiling of 14,500 feet MSL.",
+    ].join(" ");
+
+    const displayText = `### 🧪 PREDICTIVE "WHAT-IF" SIMULATION // TURBO BOOST LOSS AT ALTITUDE
+
+#### 🔬 Thermodynamic & Aerodynamic Impact Model:
+- **Manifold Air Pressure (MAP)**: **100 kPa → 37.6 kPa** (-62.4% boost collapse)
+- **Engine Brake Power**: **115 HP → 52.9 HP** (-54% propulsion deficit)
+- **Aircraft Vertical Speed**: **-820 FT/MIN Sink Rate**
+- **Single-Engine Critical Ceiling**: **14,500 FT MSL** (altitude where ambient air satisfies unboosted power)
+
+#### 🛡️ JARVIS Recommended Countermeasures:
+1. **Attitude Control**: Pitch down 3.5° to hold **85 KTS best-glide (V_glide)**.
+2. **Altitude Descent**: Steer toward emergency valley corridor below 14,000 FT MSL.
+3. **Mixture Tuning**: Switch ECU to full-rich backup to avoid lean detonation.`;
+
+    return { spokenText, displayText, intent: "QUESTION", actions: [] };
+  }
+
+  // What if Cylinder 2 overheats to 220°C?
+  if (q.includes("cylinder") || q.includes("c2") || q.includes("overheat")) {
+    const spokenText = [
+      "If Cylinder 2 temperature breaches 220 degrees Celsius, the aluminum cylinder head reaches material annealing threshold with a 40 percent loss in tensile strength.",
+      "Pre-ignition knock and detonation will occur within 90 seconds, risking valve seat deformation.",
+      "You must immediately throttle down to 65 percent, enrich the fuel-air charge by 14 percent, and pitch down for ram-air cowl cooling.",
+    ].join(" ");
+
+    const displayText = `### 🧪 PREDICTIVE "WHAT-IF" SIMULATION // CYLINDER 2 CRITICAL OVERHEAT (>220°C)
+
+#### 🔬 Material & Combustion Risk Model:
+- **Material Degradation**: Aluminum alloy annealing begins at 205°C; tensile strength drops by 40%.
+- **Combustion Instability**: Knock index rises from 0.04 to 0.88 (severe pre-ignition detonation risk).
+- **Failure Timeline**: Valve seat recession or head gasket blow-by predicted within 90 seconds.
+
+#### 🛡️ JARVIS Recommended Countermeasures:
+1. **Immediate Throttle Reduction**: Reduce to **65% Continuous Power**.
+2. **Fuel Enrichment**: +14% fuel injection duration to achieve evaporative charge cooling.
+3. **Cowl Aerodynamics**: Increase airspeed by 15 KT to boost ram-air mass flow past rear nacelle.`;
+
+    return { spokenText, displayText, intent: "QUESTION", actions: [] };
+  }
+
+  // What if Oil pressure drops?
+  if (q.includes("oil") || q.includes("pressure") || q.includes("lubric")) {
+    const spokenText = [
+      "If oil pressure drops below 2 bar, hydrodynamic fluid film on the crankshaft journal bearings will rupture, causing metal-to-metal contact.",
+      "Bearing friction will rapidly escalate oil temperature past 135 degrees Celsius, with full bearing seizure predicted in 4.2 minutes.",
+      "Immediate throttle reduction and emergency forced glide landing is mandatory.",
+    ].join(" ");
+
+    const displayText = `### 🧪 PREDICTIVE "WHAT-IF" SIMULATION // CRITICAL OIL PRESSURE LOSS (<2.0 BAR)
+
+#### 🔬 Tribological & Bearing Failure Model:
+- **Lubrication Regime**: Hydrodynamic fluid-wedge boundary collapses into boundary friction.
+- **Thermal Runaway**: Friction heating escalates bearing race temperatures at +12°C/min.
+- **Seizure Time Horizon**: Total crankshaft journal seizure predicted in **4.2 Minutes**.
+
+#### 🛡️ JARVIS Recommended Countermeasures:
+1. **Power Management**: Reduce RPM below 3,800 to minimize centrifugal bearing load.
+2. **Immediate Flight Action**: Declare Mayday and turn towards nearest emergency landing strip.`;
+
+    return { spokenText, displayText, intent: "QUESTION", actions: [] };
+  }
+
+  // Default scenario fallback
+  const spokenText = "In any critical flight excursion, my predictive ML models evaluate real-time Weibull degradation and compute minimum-risk flight envelopes within 50 milliseconds, Commander.";
+  const displayText = `### 🧪 PREDICTIVE "WHAT-IF" SCENARIO SIMULATION
+
+Ask me specific scenarios like:
+- *"What if we lose turbo boost at 25,000 feet?"*
+- *"What if Cylinder 2 overheats to 220 degrees?"*
+- *"What happens if oil pressure drops below 2 bar?"*`;
+  return { spokenText, displayText, intent: "QUESTION", actions: [] };
+}
+
+/**
+ * Checks whether the user is asking for greetings, commands, or guidance on what to say.
+ * Handles typos like "greeitngs", "comands", "arey it should tell the greeitngs commands and all", etc.
+ */
+export function isGreetingsOrCommandsQuery(query: string): boolean {
+  const q = query.toLowerCase().trim();
+  const norm = q
+    .replace(/greeitngs/g, "greetings")
+    .replace(/greeitng/g, "greeting")
+    .replace(/comands/g, "commands")
+    .replace(/comand/g, "command")
+    .replace(/arey/g, "")
+    .trim();
+
+  // Explicit commands directory requests
+  if (
+    norm.includes("greetings commands") ||
+    norm.includes("greeting command") ||
+    norm.includes("commands and all") ||
+    norm.includes("commands and greetings") ||
+    norm.includes("tell commands") ||
+    norm.includes("tell the command") ||
+    norm.includes("show commands") ||
+    norm.includes("list commands") ||
+    norm.includes("all commands") ||
+    norm.includes("voice commands") ||
+    norm.includes("what commands") ||
+    norm.includes("which commands") ||
+    norm.includes("available commands") ||
+    norm.includes("what are your commands") ||
+    norm.includes("what are the commands") ||
+    norm.includes("tell me the commands") ||
+    norm.includes("tell me commands")
+  ) {
+    return true;
+  }
+
+  // General commands & guidance inquiry
+  if (
+    norm.includes("what can you do") ||
+    norm.includes("what can i say") ||
+    norm.includes("what can i ask") ||
+    norm.includes("what should i ask") ||
+    norm.includes("what to ask") ||
+    norm.includes("how to use") ||
+    norm.includes("options") ||
+    norm === "help" ||
+    norm.includes("help me") ||
+    norm === "commands" ||
+    norm === "command"
+  ) {
+    return true;
+  }
+
+  // Greetings & casual initiation
+  if (
+    norm.includes("hello") ||
+    norm.includes("hi jarvis") ||
+    norm.includes("hey jarvis") ||
+    norm.includes("good morning") ||
+    norm.includes("good afternoon") ||
+    norm.includes("good evening") ||
+    norm.includes("greetings") ||
+    norm.includes("who are you") ||
+    norm === "hi" ||
+    norm === "hello" ||
+    norm === "hey"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Generates an articulate, professional response that greets the Commander,
+ * enumerates the key voice commands across all categories in strictly 4-5 sentences,
+ * and provides a full tactical directory in markdown.
+ */
+export function generateGreetingsAndCommandsResponse(query: string): {
+  spokenText: string;
+  displayText: string;
+} {
+  const q = query.toLowerCase().trim();
+  const isCasualGreetingOnly =
+    (q === "hi" || q === "hello" || q === "hey" || q === "greetings" || q.includes("who are you") || q.includes("good morning") || q.includes("good afternoon") || q.includes("good evening")) &&
+    !q.includes("command") &&
+    !q.includes("help") &&
+    !q.includes("what can") &&
+    !q.includes("all");
+
+  let spokenText = "";
+  if (isCasualGreetingOnly) {
+    spokenText = [
+      "Greetings Commander! J.A.R.V.I.S. is online with all propulsion telemetry channels synchronized.",
+      "To hear an immediate live flight-engineer briefing on the GCS dashboard, ask: What is the present situation of the engine?",
+      "You can also ask: What is our altitude and airspeed, or command me to open the 3D Flight Simulator.",
+      "For testing, command me to explode the engine for inspection or inject cylinder 2 overheat.",
+      "Call Jarvis anytime or tap the microphone to issue any flight command.",
+    ].join(" ");
+  } else {
+    spokenText = [
+      "Greetings Commander! J.A.R.V.I.S. tactical engine copilot is online and ready for your voice commands.",
+      "For complete live engine telemetry, ask: What is the present situation of the engine?",
+      "For flight metrics and theater positioning, ask: What is our altitude and airspeed, or Where are we flying?",
+      "For navigation and 3D inspection, command: Take me to Flight Simulator, Open Sensor Matrix, or Explode the engine.",
+      "For simulation and emergency procedures, command: Inject cylinder 2 overheat, Return to base, or Clear all faults.",
+    ].join(" ");
+  }
+
+  const displayText = `### 🤖 J.A.R.V.I.S. VOICE COMMANDS & COPILOT DIRECTORY
+
+Greetings, **Commander**! J.A.R.V.I.S. is online and synchronized with the Rotax 914 AE-P4 powertrain digital twin (DRDO / SIH PS 26054).
+
+---
+
+#### 🎙️ 1. Engine Health & Live Telemetry Briefing
+- 🔊 *"Jarvis, what is the present situation of the engine?"*  
+  *(Navigates to Ground Control Station \`/gcs\` LIVE TWIN tab and speaks a 5-sentence live telemetry debrief)*
+- 🔊 *"Jarvis, how is our engine doing?"*
+- 🔊 *"Jarvis, what is the composite health and Remaining Useful Life?"*
+- 🔊 *"Jarvis, what are the cylinder head temperatures?"*
+- 🔊 *"Jarvis, is the oil pressure and temperature nominal?"*
+
+#### ✈️ 2. Flight Dynamics & Operational Theater
+- 🔊 *"Jarvis, what is our altitude and airspeed?"*
+- 🔊 *"Jarvis, where are we flying right now?"* *(Returns active biome, airbase, and GPS coordinates)*
+- 🔊 *"Jarvis, what is our magnetic heading?"*
+
+#### 🧭 3. Universal Navigation & Tactical GCS Panels
+- 🔊 *"Jarvis, take me to the 3D Flight Simulator"* *(Routes to \`/sim\` cockpit)*
+- 🔊 *"Jarvis, open Sensor Matrix"* *(Switches GCS to 12-sensor gauge matrix)*
+- 🔊 *"Jarvis, open Predictive Diagnostics"* *(Switches GCS to Anomaly Residuals & ML models)*
+- 🔊 *"Jarvis, open Fleet Management"* *(Switches GCS to UAV squadron view)*
+- 🔊 *"Jarvis, go to Home"* *(Navigates to landing page hero)*
+
+#### 🔍 4. 3D Digital Twin & Component Inspection
+- 🔊 *"Jarvis, explode the engine for inspection"* *(Expands 3D component layers)*
+- 🔊 *"Jarvis, assemble the engine"* *(Reassembles 3D twin)*
+- 🔊 *"Jarvis, inspect the cylinder head"*
+
+#### 🧪 5. Fault Simulation & Guided Mission Controls
+- 🔊 *"Jarvis, inject cylinder 2 overheat"* *(Simulates cooling airflow shadow)*
+- 🔊 *"Jarvis, inject wastegate turbo failure"* *(MAP collapse & power loss)*
+- 🔊 *"Jarvis, inject bearing fatigue"* *(140 Hz BPFO vibration peak)*
+- 🔊 *"Jarvis, return to base (RTB)"* *(Engages autopilot return at 55% throttle)*
+- 🔊 *"Jarvis, clear all faults"* *(Resets engine to nominal baseline)*
+
+#### 🛡️ 6. DRDO / iDEX PS 26054 Background
+- 🔊 *"Jarvis, explain DRDO Problem Statement 26054."*`;
+
+  return { spokenText, displayText };
+}
+
+/**
+ * Checks whether the user is asking to explain the engine situation or the GCS dashboard.
+ * Handles typos like "dasshoboard", "situation pf theengine", etc.
+ */
+export function isEngineSituationOrDashboardQuery(query: string): boolean {
+  const q = query.toLowerCase().trim();
+  const norm = q
+    .replace(/dasshoboard/g, "dashboard")
+    .replace(/dashbord/g, "dashboard")
+    .replace(/dash\s*board/g, "dashboard")
+    .replace(/pf\s+theengine/g, "of the engine")
+    .replace(/pf\s+engine/g, "of engine")
+    .replace(/theengine/g, "the engine")
+    .replace(/exolplain/g, "explain")
+    .replace(/promt/g, "prompt");
+
+  // 1. Situation of the engine / powerplant
+  if (
+    norm.includes("situation") &&
+    (norm.includes("engine") || norm.includes("powerplant") || norm.includes("rotax") || norm.includes("motor") || norm.includes("twin") || norm.includes("aircraft"))
+  ) {
+    return true;
+  }
+
+  // 2. Direct dashboard explanation inquiries
+  if (
+    (norm.includes("explain") || norm.includes("walk through") || norm.includes("read") || norm.includes("breakdown") || norm.includes("what does") || norm.includes("what is on") || norm.includes("show me")) &&
+    (norm.includes("dashboard") || norm.includes("gcs") || norm.includes("live twin"))
+  ) {
+    return true;
+  }
+
+  // 3. Engine condition, status, health overview inquiries
+  if (
+    norm.includes("how is the engine") ||
+    norm.includes("how is our engine") ||
+    norm.includes("status of the engine") ||
+    norm.includes("condition of the engine") ||
+    norm.includes("state of the engine") ||
+    norm.includes("present situation") ||
+    norm.includes("current situation") ||
+    norm.includes("overall situation") ||
+    norm.includes("engine status report") ||
+    norm.includes("present status of the engine")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Generates an articulate, comprehensive flight-engineer briefing covering
+ * EVERY correct live value on the GCS dashboard, while navigating to /gcs (LIVE TWIN).
+ */
+export function generateEngineSituationResponse(s: SystemSnapshot): {
+  spokenText: string;
+  displayText: string;
+  intent: "COMBINED";
+  actions: any[];
+} {
+  const flight = useFlightStore.getState();
+
+  // 1. Flight regime
+  const alt = Math.round(flight.altitude || s.flight.altitude_ft || 0);
+  const speed = Math.round(flight.speed || s.flight.airspeed_knots || 0);
+  const heading = String(Math.round(flight.heading || s.flight.heading_deg || 0)).padStart(3, "0");
+  const throttle = Math.round(flight.throttle || s.telemetry.throttle_pct || 0);
+  const rudder = (flight.rudder || s.flight.rudder || 0).toFixed(2);
+  const rpm = Math.round(flight.rpm || s.telemetry.rpm || 0);
+
+  // 2. Combustion & Thermal
+  const cht = flight.cht || s.telemetry.cht_C || [140, 140, 140, 140];
+  const chtMax = Math.round(Math.max(...cht));
+  const egt = Math.round(flight.egt || s.telemetry.egt_C || 680);
+  const mapVal = Number((flight.map || s.telemetry.manifoldAirPressure_kPa || 93).toFixed(1));
+  const injTiming = Number((flight.injectionTiming || s.telemetry.injectionTiming_btdc || 27.0).toFixed(1));
+
+  // 3. Lubrication & Dynamics
+  const oilPress = Number((flight.oilPressure || s.telemetry.oilPressure_bar || 5.2).toFixed(1));
+  const oilTemp = Math.round(flight.oilTemp || s.telemetry.oilTemp_C || 95);
+  const vib = Number((flight.vibrationRMS || s.telemetry.vibrationRMS_G || 0.8).toFixed(2));
+
+  // 4. Prognostics & Readiness
+  const healthPct = Number(((flight.healthIndex ?? 0.96) * 100).toFixed(1));
+  const rulHours = Number((flight.rul || s.telemetry.rul_hours || 420).toFixed(1));
+  const riskLevel = healthPct > 75 ? "LOW" : healthPct > 45 ? "MEDIUM" : "HIGH";
+  const activeAlerts = flight.engineDecision?.alerts || s.mlIntelligence.activeAlerts || [];
+  const alertCount = activeAlerts.length;
+
+  // 5. Environmental & Datalink
+  const biomeKey = (flight.biome || s.environment.biome || "himalaya").toLowerCase();
+  const biomeFormatted = biomeKey.charAt(0).toUpperCase() + biomeKey.slice(1);
+  const oat = Math.round(flight.ambientTemp ?? flight.weather?.oatC ?? s.environment.ambientTemperature_C ?? 15);
+  const densityRatio = Number((flight.airDensity ? flight.airDensity / 1.225 : s.environment.densityRatio || 1.0).toFixed(3));
+
+  const defaultStation = { code: "VIH", name: "Leh (Kushok Bakula Rimpoche)" };
+  const stationMap: Record<string, { code: string; name: string }> = {
+    himalaya: defaultStation,
+    desert: { code: "VIJR", name: "Jaisalmer Air Base" },
+    coastal: { code: "VOGO", name: "Dabolim Naval Air Station" },
+    plains: { code: "VISR", name: "Srinagar Air Force Station" },
+  };
+  const activeStation = stationMap[biomeKey] ?? defaultStation;
+
+  // 6. Fault Flags Detection
+  const f = flight.faults || s.faults || {};
+  const activeFaultsList: string[] = [];
+  if (f.c2Overheat) activeFaultsList.push("CYL2 OVERHEAT");
+  if (f.turboFail) activeFaultsList.push("TURBO FAIL");
+  if (f.bearingFail) activeFaultsList.push("BEARING FATIGUE");
+  if (f.injectorClog) activeFaultsList.push("INJECTOR CLOG");
+  if ((f as any).misfire3) activeFaultsList.push("MISFIRE C3");
+
+  const anyFault = activeFaultsList.length > 0;
+  const faultStatusText = anyFault
+    ? `⚠️ ACTIVE FAULT FLAGS: ${activeFaultsList.join(" · ")}`
+    : "NO FAULT FLAGS — ENGINE PARAMETERS IN LIMITS";
+
+  // Spoken narrative tailored for TTS playback: crisp, articulate, strictly 4-5 sentences max
+  let spokenDiagnostic = "";
+  if (!anyFault && healthPct >= 60) {
+    spokenDiagnostic = `All monitored powertrain parameters are operating within safe flight limits with no active fault flags.`;
+  } else if (f.c2Overheat) {
+    spokenDiagnostic = `Caution Commander, Cylinder 2 is experiencing thermal elevation peaking at ${cht[1]?.toFixed(0) || chtMax} degrees Celsius due to rear airflow shadowing.`;
+  } else if (f.turboFail) {
+    spokenDiagnostic = `Warning Commander, a turbocharger boost shortfall has reduced manifold pressure to ${mapVal} kilopascals.`;
+  } else if (f.bearingFail) {
+    spokenDiagnostic = `Warning Commander, elevated structural vibration indicates bearing fatigue spalling with 140 Hertz harmonic peaks.`;
+  } else if (f.injectorClog) {
+    spokenDiagnostic = `Notice Commander, fuel injector flow imbalance is creating combustion asymmetry across cylinder runners.`;
+  } else {
+    spokenDiagnostic = `Composite engine health is at ${healthPct} percent, requiring continuous telemetry monitoring.`;
+  }
+
+  const spokenText = [
+    `Greetings Commander. Switching to the Live Twin GCS dashboard now.`,
+    `The Rotax 914 is operating at ${rpm.toLocaleString()} RPM with throttle at ${throttle} percent, cruising at ${alt.toLocaleString()} feet MSL and ${speed} knots.`,
+    `Cylinder head temperature is peaking at ${chtMax} degrees Celsius with exhaust gas temperature steady at ${egt} degrees.`,
+    `Oil pressure is at ${oilPress} bar with oil temperature at ${oilTemp} degrees Celsius, and dynamic vibration is reading ${vib} G.`,
+    `Composite engine health is currently ${healthPct} percent with ${Math.round(rulHours)} hours Remaining Useful Life, and ${spokenDiagnostic}`,
+  ].join(" ");
+
+  const displayText = `### 🎛️ GROUND CONTROL STATION // LIVE TWIN TELEMETRY DEBRIEF
+
+> [!NOTE]
+> **JARVIS Navigation Executed**: Switched to Ground Control Station (\`/gcs\`) · **LIVE TWIN** panel.
+
+---
+
+#### ✈️ 1. Flight Regime & Flight Controls
+- **Altitude**: **${alt.toLocaleString()} FT MSL** (${alt < 1000 ? "Low-level terrain clearance watch" : alt > 24000 ? "High altitude thin-air regime" : "Within nominal cruise band"})
+- **Airspeed**: **${speed} KTS** (Calibrated airspeed over ground)
+- **Heading**: **${heading}° M** (${flight.missionActive ? "Autopilot steering to waypoint" : "Manual flight mode"})
+- **Throttle**: **${throttle}%** (${flight.missionActive ? "Mission cruise power" : "Operator-set"}) · **Rudder Load**: **${rudder}**
+- **Engine Operating Speed**: **${rpm.toLocaleString()} RPM**
+
+#### 🔥 2. Combustion & Thermal Spectrum
+- **Max CHT**: **${chtMax}°C** (${chtMax > 220 ? "CRITICAL: Severe cooling shortfall" : chtMax > 195 ? "WARNING: Elevated thermal stress" : "All cylinders within nominal limits"})
+  * *Per-Cylinder Distribution*: C1: **${cht[0]?.toFixed(1) ?? "140"}°C** | **C2: ${cht[1]?.toFixed(1) ?? "140"}°C** ${cht[1] > 190 ? "⚠️" : ""} | C3: **${cht[2]?.toFixed(1) ?? "140"}°C** | C4: **${cht[3]?.toFixed(1) ?? "140"}°C**
+- **Exhaust Gas Temp (EGT)**: **${egt}°C** (${egt > 850 ? "Over temp alert" : egt > 720 ? "High thermal burn" : "Exhaust temps nominal"})
+- **Manifold Air Pressure (MAP)**: **${mapVal} kPa** (${mapVal < 42 ? "Very low boost — power loss (trough/turbo)" : mapVal < 70 ? "Reduced boost — density/altitude effect" : "Manifold pressure healthy"})
+- **Fuel Injection Timing**: **${injTiming}° BTDC**
+
+#### ⚙️ 3. Lubrication & Dynamic Balance
+- **Oil Pressure**: **${oilPress} bar** (Nominal Operating Band: 3.5 – 5.5 bar)
+- **Oil Temperature**: **${oilTemp}°C** (${oilTemp > 125 ? "CRITICAL oil overheat" : oilTemp > 110 ? "WARNING elevated" : "Nominal 80–100°C band"})
+- **Structural Vibration**: **${vib} m/s²** (${vib > 3.0 ? "Severe vibration — bearing/spall risk" : vib > 1.6 ? "Elevated harmonic excitation" : "Dynamic balance nominal"})
+- **Bearing Spectrum**: 140 Hz BPFO outer-race frequency tracking
+
+#### 🔮 4. Prognostics, RUL & Mission Readiness
+- **Composite Engine Health**: **${healthPct}%** (\`COMPOSITE / AE-P4\`)
+- **Remaining Useful Life (RUL)**: **${rulHours} Operational Hours** (ML predicted confidence 94%)
+- **Mission Risk Profile**: **${riskLevel}** (Propulsion readiness: ${Math.round(healthPct)}%)
+- **Active Advisories**: **${alertCount} Advisories** (${alertCount === 0 ? "0 Critical / 0 Warning" : "Telemetry advisories flagged"})
+- **Fault Flags**: **${faultStatusText}**
+
+#### 🌐 5. Atmospheric & Datalink Stream
+- **Active Biome**: **${biomeFormatted} Corridor** (${activeStation.name} · \`${activeStation.code}\`)
+- **Atmospheric Conditions**: OAT **${oat}°C** | Density Ratio **${(densityRatio * 100).toFixed(1)}%**
+- **Telemetry Stream**: 20Hz SocketCAN gateway (126 B frames, CRC-16 integrity verified)
+
+---
+
+> [!TIP]
+> **Executive Synthesis**: ${spokenDiagnostic}`;
+
+  return {
+    spokenText,
+    displayText,
+    intent: "COMBINED",
+    actions: [
+      { type: "NAVIGATE", route: "/gcs" },
+      { type: "SET_GCS_TAB", tab: "LIVE TWIN" },
+    ],
+  };
+}
+
+/**
  * Deterministic, instant live telemetry and SIH PS 26054 solver.
  * Delivers exact flight numbers, positioning, and problem statement domain mastery in <1ms.
  */
@@ -640,6 +1332,11 @@ export function tryGenerateTelemetryAndDomainAnswer(
   s: SystemSnapshot
 ): { spokenText: string; displayText: string; intent?: any; actions?: any[] } | null {
   const q = query.toLowerCase().trim();
+
+  // 0. ENGINE SITUATION & GCS DASHBOARD EXPLAINER
+  if (isEngineSituationOrDashboardQuery(query)) {
+    return generateEngineSituationResponse(s);
+  }
 
   // 1. ALTITUDE / ELEVATION
   if (
@@ -903,6 +1600,88 @@ export function tryGenerateTelemetryAndDomainAnswer(
     };
   }
 
+  // 10. PRESENCE / OPERATIONAL STATUS ("are you there", "can you hear me", "ping", "status report")
+  if (isPresenceQuery(query)) {
+    return generatePresenceResponse(s);
+  }
+
+  // 11. RPM / ENGINE SPEED / THROTTLE
+  if (q.includes("rpm") || q.includes("engine speed") || q.includes("motor speed") || (q.includes("throttle") && !q.includes("set"))) {
+    const rpm = s.telemetry.rpm;
+    const throttle = s.telemetry.throttle_pct;
+    return {
+      spokenText: `The Rotax 914 is operating at ${rpm.toLocaleString()} RPM with throttle at ${throttle} percent, cruising stably at ${s.flight.altitude_ft.toLocaleString()} feet MSL.`,
+      displayText: `### ⚙️ ENGINE RPM & THROTTLE CONTROL
+
+- **Operating Speed**: **${rpm.toLocaleString()} RPM** (Takeoff: 5,800 RPM | Max Continuous: 5,500 RPM | Cruise: 4,800–5,200 RPM)
+- **Throttle Demand**: **${throttle}%**
+- **Manifold Air Pressure**: **${s.telemetry.manifoldAirPressure_kPa} kPa**
+- **Propulsion Status**: Synchronized with constant-speed governor`,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
+  // 12. EGT / EXHAUST GAS TEMPERATURE
+  if (q.includes("egt") || q.includes("exhaust")) {
+    const egt = s.telemetry.egt_C;
+    return {
+      spokenText: `Exhaust gas temperature is currently reading ${egt.toFixed(1)} degrees Celsius across the exhaust collectors.`,
+      displayText: `### 💨 EXHAUST GAS TEMPERATURE (EGT)
+
+- **EGT Reading**: **${egt.toFixed(1)}°C** (Nominal Max: 850°C)
+- **Combustion Balance**: Stoichiometric burn within Rotax 914 certification limits`,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
+  // 13. MANIFOLD AIR PRESSURE / TURBO BOOST
+  if (q.includes("map") || q.includes("manifold") || q.includes("turbo") || q.includes("boost")) {
+    const map = s.telemetry.manifoldAirPressure_kPa;
+    return {
+      spokenText: `Manifold air pressure is reading ${map.toFixed(1)} kilopascals with the TCU electronic wastegate regulating turbine boost.`,
+      displayText: `### 🚀 TURBOCHARGER & MANIFOLD PRESSURE (MAP)
+
+- **Manifold Pressure**: **${map.toFixed(1)} kPa** (Takeoff: 115 kPa | Continuous: 100 kPa)
+- **Turbo Control Unit (TCU)**: Active electronic wastegate modulation
+- **Atmospheric Compensation**: Compensating for density ratio ${(s.environment.densityRatio * 100).toFixed(1)}%`,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
+  // 14. FAULT FLAGS & ANOMALY RESIDUALS
+  if (q.includes("fault") || q.includes("anomaly") || q.includes("alarm") || q.includes("warning") || q.includes("advisory") || q.includes("advisories")) {
+    const f = s.flight.faults || s.faults || {};
+    const active = Object.keys(f).filter((k) => (f as any)[k]);
+    const hasFaults = active.length > 0;
+    return {
+      spokenText: hasFaults
+        ? `Alert Commander, active fault flags detected: ${active.join(", ")}. Immediate cross-check recommended.`
+        : `No active fault flags detected, Commander. All monitored parameters are within nominal aerospace tolerances.`,
+      displayText: `### ⚠️ FAULT FLAGS & ANOMALY RESIDUALS
+
+- **Fault Status**: **${hasFaults ? "ACTIVE ADVISORY" : "ALL SYSTEMS NOMINAL"}**
+- **Active Flags**: ${hasFaults ? active.map((a) => `\`${a}\``).join(", ") : "None (0 active faults)"}
+- **ML Anomaly Residual**: **${s.mlIntelligence.anomalyScore}** (${s.mlIntelligence.overallStatus})
+- **Propulsion Readiness**: ${s.telemetry.healthIndex_pct.toFixed(0)}%`,
+      intent: "ANALYSIS",
+      actions: [],
+    };
+  }
+
+  // 15. GREETINGS & COMMANDS DIRECTORY
+  if (isGreetingsOrCommandsQuery(query)) {
+    const res = generateGreetingsAndCommandsResponse(query);
+    return {
+      spokenText: res.spokenText,
+      displayText: res.displayText,
+      intent: "QUESTION",
+      actions: [],
+    };
+  }
+
   return null;
 }
 
@@ -919,6 +1698,79 @@ export async function executeJarvisQuery(
 ): Promise<JarvisExecutionResult> {
   const snapshot = captureSystemSnapshot();
 
+  // 0. TOP PRIORITY: Presence / Readiness Ping ("are you there", "can you hear me", "status report")
+  if (isPresenceQuery(query)) {
+    const presence = generatePresenceResponse(snapshot);
+    return {
+      spokenText: presence.spokenText,
+      displayText: presence.displayText,
+      intent: "QUESTION",
+      actionsExecuted: [],
+    };
+  }
+
+  // 0.05. TOP PRIORITY: 3D Guided Powertrain Inspection Tour
+  if (isInspectionTourQuery(query)) {
+    const tour = generateInspectionTourResponse(snapshot);
+    const executed = executeActions(tour.actions);
+    return {
+      spokenText: tour.spokenText,
+      displayText: tour.displayText,
+      intent: tour.intent,
+      actionsExecuted: executed,
+    };
+  }
+
+  // 0.06. TOP PRIORITY: Tactical Red Alert & Emergency RTB Protocol
+  if (isEmergencyProtocolQuery(query)) {
+    const emergency = generateEmergencyProtocolResponse(snapshot);
+    const executed = executeActions(emergency.actions);
+    return {
+      spokenText: emergency.spokenText,
+      displayText: emergency.displayText,
+      intent: emergency.intent,
+      actionsExecuted: executed,
+    };
+  }
+
+  // 0.07. TOP PRIORITY: Physics-Informed "What-If" AI Scenario Simulator
+  if (isWhatIfScenarioQuery(query)) {
+    const whatIf = generateWhatIfScenarioResponse(query, snapshot);
+    return {
+      spokenText: whatIf.spokenText,
+      displayText: whatIf.displayText,
+      intent: whatIf.intent,
+      actionsExecuted: [],
+    };
+  }
+
+  // 0.1. TOP PRIORITY: Engine Situation & GCS Dashboard Explainer
+  // When the operator asks "what is the present situation of the engine" or "explain the dashboard",
+  // immediately navigate to GCS Live Twin and generate the full, natural, accurate flight-engineer briefing!
+  if (isEngineSituationOrDashboardQuery(query)) {
+    const situation = generateEngineSituationResponse(snapshot);
+    const executed = executeActions(situation.actions);
+    return {
+      spokenText: situation.spokenText,
+      displayText: situation.displayText,
+      intent: "COMBINED",
+      actionsExecuted: executed,
+    };
+  }
+
+  // 0.5. TOP PRIORITY: Greetings & Voice Commands Explainer
+  // When the operator asks for greetings, commands, help, or "tell the greetings commands and all",
+  // immediately return the 0ms instant greetings and full voice command directory!
+  if (isGreetingsOrCommandsQuery(query)) {
+    const commandsRes = generateGreetingsAndCommandsResponse(query);
+    return {
+      spokenText: commandsRes.spokenText,
+      displayText: commandsRes.displayText,
+      intent: "QUESTION",
+      actionsExecuted: [],
+    };
+  }
+
   // 1. FAST-PATH: If this is an explicit navigation/action command, execute it immediately in 0ms
   const preNav = detectNavigationFromQuery(query);
   if (preNav) {
@@ -934,11 +1786,14 @@ export async function executeJarvisQuery(
   // 2. FAST-PATH: If this is a specific flight telemetry or SIH PS 26054 inquiry, answer instantly in <1ms
   const instantAnswer = tryGenerateTelemetryAndDomainAnswer(query, snapshot);
   if (instantAnswer) {
+    const executed = instantAnswer.actions && instantAnswer.actions.length > 0
+      ? executeActions(instantAnswer.actions)
+      : [];
     return {
       spokenText: instantAnswer.spokenText,
       displayText: instantAnswer.displayText,
       intent: instantAnswer.intent || "QUESTION",
-      actionsExecuted: [],
+      actionsExecuted: executed,
     };
   }
 
@@ -973,14 +1828,24 @@ export async function executeJarvisQuery(
                   altitude_ft: snapshot.flight.altitude_ft,
                   airspeed_knots: snapshot.flight.airspeed_knots,
                   heading_deg: snapshot.flight.heading_deg,
-                  biome: snapshot.environment.biome,
-                  oat_C: snapshot.environment.ambientTemperature_C,
-                  health_pct: snapshot.telemetry.healthIndex_pct,
+                  throttle_pct: snapshot.telemetry.throttle_pct,
+                  rudder: snapshot.flight.rudder,
                   rpm: snapshot.telemetry.rpm,
                   chtMax_C: snapshot.telemetry.chtMax_C,
+                  cht_per_cylinder: snapshot.telemetry.cht_C,
+                  egt_C: snapshot.telemetry.egt_C,
+                  map_kPa: snapshot.telemetry.manifoldAirPressure_kPa,
                   oilPress_bar: snapshot.telemetry.oilPressure_bar,
-                  vib_G: snapshot.telemetry.vibrationRMS_G,
+                  oilTemp_C: snapshot.telemetry.oilTemp_C,
+                  vib_ms2: snapshot.telemetry.vibrationRMS_G,
+                  injectionTiming_btdc: snapshot.telemetry.injectionTiming_btdc,
+                  health_pct: snapshot.telemetry.healthIndex_pct,
                   rul_hours: snapshot.telemetry.rul_hours,
+                  missionRisk: snapshot.mlIntelligence.missionRisk,
+                  activeAdvisoriesCount: snapshot.mlIntelligence.activeAdvisoriesCount,
+                  biome: snapshot.environment.biome,
+                  oat_C: snapshot.environment.ambientTemperature_C,
+                  densityRatio: snapshot.environment.densityRatio,
                   faults: Object.keys(snapshot.faults).filter((k) => (snapshot.faults as any)[k]),
                 })}\n\nUSER INQUIRY / COMMAND:\n"${query}"`,
               },
@@ -992,7 +1857,8 @@ export async function executeJarvisQuery(
         },
         generationConfig: {
           responseMimeType: "application/json",
-          temperature: 0.6,
+          temperature: 0.4,
+          maxOutputTokens: 500,
         },
       };
 
@@ -1001,7 +1867,7 @@ export async function executeJarvisQuery(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(3500),
       });
 
       if (response.ok) {

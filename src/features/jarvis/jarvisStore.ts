@@ -4,7 +4,13 @@
  */
 
 import { create } from "zustand";
-import { jarvisAudio, jarvisRecognizer, jarvisSpeaker, jarvisWakeWord } from "./jarvisAudio";
+import {
+  jarvisAudio,
+  jarvisRecognizer,
+  jarvisSpeaker,
+  jarvisWakeWord,
+  requestMicrophoneAccess,
+} from "./jarvisAudio";
 import { executeJarvisQuery } from "./jarvisEngine";
 
 export interface JarvisMessage {
@@ -82,9 +88,21 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
     {
       id: "init-1",
       role: "jarvis",
-      content:
-        "**J.A.R.V.I.S. ONLINE** · Digital Engine Intelligence Copilot active.\n\nI am connected directly to the Rotax 914 AE-P4 digital twin, 20Hz telemetry link, and predictive ML models.\n\n*Speak or call \"Jarvis\" anytime to ask regarding live engine health, telemetry trends, fault diagnosis, or navigation.*",
-      spokenText: "J.A.R.V.I.S. online. Digital Engine Intelligence system standing by. Say Jarvis anytime to activate.",
+      content: `### 🤖 J.A.R.V.I.S. ONLINE // TACTICAL ENGINE COPILOT
+Greetings, **Commander**! Active and synchronized with the Rotax 914 AE-P4 digital twin and 20Hz telemetry stream (DRDO / SIH PS 26054).
+
+---
+
+#### 🎙️ Primary Voice Commands:
+- 🔊 *"Jarvis, what is the present situation of the engine?"* → Switches to GCS Live Twin & speaks 5-sentence telemetry debrief
+- ✈️ *"Jarvis, what is our altitude and airspeed?"*
+- 🧭 *"Jarvis, take me to the 3D Flight Simulator"*
+- 📊 *"Jarvis, open Sensor Matrix"*
+- 🔍 *"Jarvis, explode the engine for inspection"*
+- 🧪 *"Jarvis, inject cylinder 2 overheat"*
+
+*Say **"Jarvis"** anytime or tap the microphone to command.*`,
+      spokenText: "Greetings Commander. J.A.R.V.I.S. is online and ready. Ask for the present situation of the engine or command navigation across any panel.",
       intent: "QUESTION",
       timestamp: Date.now(),
     },
@@ -121,48 +139,28 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
     const next = !get().wakeWordEnabled;
     get().setWakeWordEnabled(next);
   },
-  initWakeWord: () => {
+  initWakeWord: async () => {
     if (!jarvisWakeWord.isSupported()) return;
     if (get().isWakeWordActive) return;
 
     set({ isWakeWordActive: true });
 
+    // Ensure browser microphone permission is granted so Chrome doesn't reject background wake word
+    await requestMicrophoneAccess();
+
     jarvisWakeWord.start((spokenCommand) => {
-      // Reveal HUD
+      // Reveal HUD immediately
       set({ isOpen: true });
 
       if (spokenCommand && spokenCommand.trim().length > 2) {
-        // User said command along with wake-word: e.g. "Jarvis what is our altitude"
+        // User said command along with wake-word: e.g. "Aeris what is our altitude"
         get().submitQuery(spokenCommand.trim());
       } else {
-        // User just summoned: "Jarvis!"
+        // User summoned: "Aeris!" / "Jarvis!"
         jarvisAudio.playChime("activate");
-        const ackPhrases = [
-          "Online, Commander. Listening.",
-          "Yes Commander, ready for instructions.",
-          "Listening, go ahead.",
-        ];
-        const phrase =
-          ackPhrases[Math.floor(Math.random() * ackPhrases.length)] ||
-          "Online, Commander. Listening.";
 
-        if (get().voiceEnabled) {
-          set({ isSpeaking: true });
-          jarvisSpeaker.speak(phrase, {
-            onStart: () => set({ isSpeaking: true }),
-            onEnd: () => {
-              set({ isSpeaking: false });
-              // Seamlessly transition to voice command listening
-              get().startListening();
-            },
-            onError: () => {
-              set({ isSpeaking: false });
-              get().startListening();
-            },
-          });
-        } else {
-          get().startListening();
-        }
+        // Open HUD and immediately start listening with zero latency
+        get().startListening();
       }
     });
   },
@@ -189,7 +187,7 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
     jarvisSpeaker.stop();
     set({ isSpeaking: false, isListening: true });
 
-    // 120ms safety margin ensures Chromium's native microphone pipe is released cleanly
+    // 30ms micro-delay gives Chromium audio thread time to settle before opening recognizer
     setTimeout(() => {
       if (!get().isListening) return;
 
@@ -226,7 +224,7 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
           }
         },
       });
-    }, 120);
+    }, 35);
   },
 
   stopListening: () => {
