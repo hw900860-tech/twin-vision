@@ -35,8 +35,17 @@ function stripTsdSourceAttrs(): Plugin {
   };
 }
 
+/**
+ * Deployment target override: `NITRO_PRESET=vercel bun run build` (the
+ * build:vercel script used by Vercel CI) hard-pins Nitro's server output to
+ * Vercel's Build Output API (.vercel/output). Unset → the sandbox default
+ * (cloudflare-module) applies, so local dev and Freebuff previews are untouched.
+ */
+const nitroPreset = process.env["NITRO_PRESET"];
+
 export default defineConfig({
   plugins: [stripTsdSourceAttrs()],
+  ...(nitroPreset ? { nitro: { preset: nitroPreset } } : {}),
   vite: {
     server: {
       port: 8080,
