@@ -1284,7 +1284,7 @@ export function generateEngineSituationResponse(s: SystemSnapshot): {
 
 #### 🔥 2. Combustion & Thermal Spectrum
 - **Max CHT**: **${chtMax}°C** (${chtMax > 220 ? "CRITICAL: Severe cooling shortfall" : chtMax > 195 ? "WARNING: Elevated thermal stress" : "All cylinders within nominal limits"})
-  * *Per-Cylinder Distribution*: C1: **${cht[0]?.toFixed(1) ?? "140"}°C** | **C2: ${cht[1]?.toFixed(1) ?? "140"}°C** ${cht[1] > 190 ? "⚠️" : ""} | C3: **${cht[2]?.toFixed(1) ?? "140"}°C** | C4: **${cht[3]?.toFixed(1) ?? "140"}°C**
+  * *Per-Cylinder Distribution*: C1: **${cht[0]?.toFixed(1) ?? "140"}°C** | **C2: ${cht[1]?.toFixed(1) ?? "140"}°C** ${(cht[1] ?? 140) > 190 ? "⚠️" : ""} | C3: **${cht[2]?.toFixed(1) ?? "140"}°C** | C4: **${cht[3]?.toFixed(1) ?? "140"}°C**
 - **Exhaust Gas Temp (EGT)**: **${egt}°C** (${egt > 850 ? "Over temp alert" : egt > 720 ? "High thermal burn" : "Exhaust temps nominal"})
 - **Manifold Air Pressure (MAP)**: **${mapVal} kPa** (${mapVal < 42 ? "Very low boost — power loss (trough/turbo)" : mapVal < 70 ? "Reduced boost — density/altitude effect" : "Manifold pressure healthy"})
 - **Fuel Injection Timing**: **${injTiming}° BTDC**
@@ -1653,7 +1653,7 @@ export function tryGenerateTelemetryAndDomainAnswer(
 
   // 14. FAULT FLAGS & ANOMALY RESIDUALS
   if (q.includes("fault") || q.includes("anomaly") || q.includes("alarm") || q.includes("warning") || q.includes("advisory") || q.includes("advisories")) {
-    const f = s.flight.faults || s.faults || {};
+    const f = s.faults;
     const active = Object.keys(f).filter((k) => (f as any)[k]);
     const hasFaults = active.length > 0;
     return {
