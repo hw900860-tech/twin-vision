@@ -29,9 +29,9 @@ const CHANNELS: Channel[] = [
   { key: "inj", label: "INJECTION EFF.", unit: "%", get: (s) => s.injectorEfficiency * 100, digits: 0 },
 ];
 
-function Sparkline({ data, tone }: { data: { v: number }[]; tone: string }) {
+export function Sparkline({ data, tone, height = 44 }: { data: { v: number }[]; tone: string; height?: number }) {
   return (
-    <ResponsiveContainer width="100%" height={44}>
+    <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 4, bottom: 2, left: 0, right: 0 }}>
         <YAxis hide domain={["dataMin", "dataMax"]} />
         <Line type="monotone" dataKey="v" stroke={tone} strokeWidth={1.2} dot={false} isAnimationActive={false} />

@@ -14,23 +14,23 @@ type BiomeConfig = {
 
 const BIOME_LIGHTING: Record<string, BiomeConfig> = {
   himalaya: {
-    ambient: 0.42, ambientColor: '#a8bcd4',
-    sun: [80, 120, 60], sunIntensity: 1.4, sunColor: '#edf3fa',
-    fog: '#1e2d42', fogNear: 120, fogFar: 1200, bg: '#0d1726',
+    ambient: 0.85, ambientColor: '#cfe0ee',
+    sun: [80, 120, 60], sunIntensity: 2.0, sunColor: '#ffffff',
+    fog: '#dce9f2', fogNear: 160, fogFar: 1600, bg: '#cfe3f0',
   },
   thar: {
-    ambient: 0.55, ambientColor: '#ebd0a0',
-    sun: [90, 100, 40], sunIntensity: 1.5, sunColor: '#ffebc4',
-    fog: '#302014', fogNear: 90, fogFar: 1000, bg: '#1c120a',
+    ambient: 0.9, ambientColor: '#f5e3c0',
+    sun: [90, 100, 40], sunIntensity: 2.1, sunColor: '#fff6df',
+    fog: '#ecd9b8', fogNear: 130, fogFar: 1400, bg: '#e8d4ae',
   },
   coastal: {
-    ambient: 0.48, ambientColor: '#a4b8cc',
-    sun: [70, 110, 50], sunIntensity: 1.35, sunColor: '#d8e8f8',
-    fog: '#16283a', fogNear: 100, fogFar: 1100, bg: '#0a1828',
+    ambient: 0.85, ambientColor: '#cfe2f0',
+    sun: [70, 110, 50], sunIntensity: 1.9, sunColor: '#ffffff',
+    fog: '#d4e6f2', fogNear: 140, fogFar: 1500, bg: '#c8dff0',
   },
 };
 
-const DEFAULT_CONFIG: BiomeConfig = { ambient: 0.42, ambientColor: '#a8bcd4', sun: [80, 120, 60], sunIntensity: 1.4, sunColor: '#edf3fa', fog: '#1e2d42', fogNear: 120, fogFar: 1200, bg: '#0d1726' };
+const DEFAULT_CONFIG: BiomeConfig = BIOME_LIGHTING["himalaya"]!;
 
 function SceneContent() {
   const biome = useFlightStore((s) => s.biome);
@@ -50,7 +50,7 @@ function SceneContent() {
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
       />
-      <hemisphereLight args={[config.ambientColor, '#12161c', 0.45]} />
+      <hemisphereLight args={[config.ambientColor, '#9db4c4', 0.6]} />
 
       <Stars radius={300} depth={120} count={3500} factor={4} saturation={0} />
 

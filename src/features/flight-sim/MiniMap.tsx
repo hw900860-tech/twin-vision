@@ -178,7 +178,7 @@ export function MiniMap() {
   return (
     <div
       className="pointer-events-none rounded border border-cyan/30 bg-panel/95 backdrop-blur-md font-mono"
-      style={{ boxShadow: "0 4px 18px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(34,211,238,0.06)" }}
+      style={{ boxShadow: "0 4px 18px rgba(19,43,58,0.25), inset 0 0 0 1px rgba(0,131,179,0.12)" }}
     >
       {/* header */}
       <div className="flex items-center justify-between border-b border-cyan/20 px-2 py-1 text-[7.5px] tracking-widest text-cyan">
@@ -190,7 +190,7 @@ export function MiniMap() {
 
       <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="block h-auto w-full">
         {/* subtle grid + frame */}
-        <rect x={0} y={0} width={VIEW_W} height={VIEW_H} fill="rgba(2,6,10,0.55)" rx={2} />
+        <rect x={0} y={0} width={VIEW_W} height={VIEW_H} fill="rgba(255,255,255,0.72)" rx={2} />
         <g stroke="rgba(148,163,184,0.07)" strokeWidth={1}>
           {[150, 300, 450, 600, 750].map((gx) => (
             <line key={`gx${gx}`} x1={gx} y1={0} x2={gx} y2={VIEW_H} />
@@ -244,7 +244,7 @@ export function MiniMap() {
               <g key={leg.index}>
                 <line x1={a.split(",")[0]} y1={a.split(",")[1]} x2={b.split(",")[0]} y2={b.split(",")[1]} stroke={FLOWN} strokeWidth={5} strokeLinecap="round" />
                 {ticks.map((t, i) => (
-                  <circle key={i} cx={toX(t.x)} cy={toZ(t.z)} r={2.6} fill="#04121c" stroke={FLOWN} strokeWidth={1.2} />
+                  <circle key={i} cx={toX(t.x)} cy={toZ(t.z)} r={2.6} fill="#ffffff" stroke={FLOWN} strokeWidth={1.2} />
                 ))}
               </g>
             );
@@ -271,9 +271,9 @@ export function MiniMap() {
                 <line x1={fx} y1={fy} x2={Number(b.split(",")[0])} y2={Number(b.split(",")[1])} stroke={col} strokeWidth={5} strokeLinecap="round" opacity={0.55} />
                 {f && <line x1={fx} y1={fy} x2={fillX} y2={fillY} stroke={FLOWN} strokeWidth={5} strokeLinecap="round" />}
                 {flownTicks.map((t, i) => (
-                  <circle key={i} cx={toX(t.x)} cy={toZ(t.z)} r={2.6} fill="#04121c" stroke={FLOWN} strokeWidth={1.2} />
+                  <circle key={i} cx={toX(t.x)} cy={toZ(t.z)} r={2.6} fill="#ffffff" stroke={FLOWN} strokeWidth={1.2} />
                 ))}
-                <line x1={fx} y1={fy} x2={Number(b.split(",")[0])} y2={Number(b.split(",")[1])} stroke="#f0fdff" strokeWidth={1} opacity={0.5} />
+                <line x1={fx} y1={fy} x2={Number(b.split(",")[0])} y2={Number(b.split(",")[1])} stroke="#081722" strokeWidth={1} opacity={0.5} />
               </g>
             );
           }
@@ -304,10 +304,10 @@ export function MiniMap() {
           const y = toZ(w.z);
           return (
             <g key={i}>
-              {st === "current" && <circle cx={x} cy={y} r={r + 9} fill="none" stroke="#f8fafc" strokeWidth={2.5} opacity={0.85} />}
+              {st === "current" && <circle cx={x} cy={y} r={r + 9} fill="none" stroke="#081722" strokeWidth={2.5} opacity={0.85} />}
               {st === "passed" && <text x={x + r - 2} y={y - 3} textAnchor="middle" fontSize={17} fontWeight={700} fill="#34d399" opacity={0.9}>✓</text>}
               <circle cx={x} cy={y} r={r} fill={col} opacity={st === "future" ? 0.95 : 0.9} />
-              <circle cx={x} cy={y} r={r - 4.5} fill="none" stroke="rgba(2,6,10,0.65)" strokeWidth={1.4} />
+              <circle cx={x} cy={y} r={r - 4.5} fill="none" stroke="rgba(19,43,58,0.35)" strokeWidth={1.4} />
             </g>
           );
         })}
@@ -326,7 +326,7 @@ export function MiniMap() {
           return (
             <g transform={`translate(${cx.toFixed(1)},${cz2.toFixed(1)}) rotate(${heading.toFixed(1)})`} opacity={off ? 0.78 : 1}>
               <circle r={26} fill="rgba(248,250,252,0.10)" />
-              {off && <circle r={16} fill="none" stroke="#f8fafc" strokeWidth={1.4} strokeDasharray="5 4" opacity={0.5} />}
+              {off && <circle r={16} fill="none" stroke="#081722" strokeWidth={1.4} strokeDasharray="5 4" opacity={0.5} />}
               <path
                 d="M 0 -22 L 9 14 L 0 8 L -9 14 Z"
                 fill="#f8fafc"

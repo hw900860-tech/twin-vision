@@ -131,10 +131,10 @@ const STATUS_META: Record<
 > = {
   nominal: {
     label: "NOMINAL",
-    text: "text-[#22c55e]",
-    ring: "border-[#22c55e]/40",
-    bg: "bg-[#22c55e]/10",
-    dot: "bg-[#22c55e]",
+    text: "text-[#0f8a4d]",
+    ring: "border-[#0f8a4d]/40",
+    bg: "bg-[#0f8a4d]/10",
+    dot: "bg-[#0f8a4d]",
   },
   drifting: {
     label: "DRIFTING",
@@ -152,13 +152,13 @@ const STATUS_META: Record<
   },
 };
 
-const OVERRIDE = "text-[#0ea5e9]";
+const OVERRIDE = "text-[#0083b3]";
 const OVERRIDE_BORDER = "border-[#0ea5e9]/50";
 const OVERRIDE_BG = "bg-[#0ea5e9]/10";
 
 function SensorIcon({ kind }: { kind: "temp" | "pressure" }) {
   const Icon = kind === "temp" ? Thermometer : Gauge;
-  return <Icon className="h-3.5 w-3.5 shrink-0 text-[#0ea5e9]" />;
+  return <Icon className="h-3.5 w-3.5 shrink-0 text-[#0083b3]" />;
 }
 
 export function SensorHealthMatrix() {
@@ -195,22 +195,22 @@ export function SensorHealthMatrix() {
   };
 
   return (
-    <div className="border border-gray-800 bg-[#0f1015]">
+    <div className="border border-[#c3d2dc] bg-white">
       {/* header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#c3d2dc] px-4 py-3">
         <div className="flex items-center gap-3">
-          <Cpu className="h-5 w-5 text-[#0ea5e9]" />
+          <Cpu className="h-5 w-5 text-[#0083b3]" />
           <div>
-            <h2 className="font-display text-sm tracking-[0.25em] text-white">
-              ANALYTICAL SENSOR REDUNDANCY <span className="text-[#0ea5e9]">& HEALTH MATRIX</span>
+            <h2 className="font-display text-sm tracking-[0.25em] text-[#081722]">
+              ANALYTICAL SENSOR REDUNDANCY <span className="text-[#0083b3]">& HEALTH MATRIX</span>
             </h2>
-            <p className="mt-0.5 text-[10px] font-mono tracking-wider text-gray-500">
+            <p className="mt-0.5 text-[10px] font-mono tracking-wider text-[#5d7385]">
               PHYSICAL SENSOR LOST? THE 0D TWIN RECONSTRUCTS THE CHANNEL — MISSION CONTINUES.
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 font-mono text-[9px] tracking-widest">
-          <span className="border border-[#22c55e]/40 bg-[#22c55e]/10 px-2 py-1 text-[#22c55e]">
+          <span className="border border-[#0f8a4d]/40 bg-[#0f8a4d]/10 px-2 py-1 text-[#0f8a4d]">
             {counts.nominal} NOMINAL
           </span>
           <span className="border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-2 py-1 text-[#f59e0b]">
@@ -230,12 +230,12 @@ export function SensorHealthMatrix() {
 
       <div className="grid gap-4 p-4 xl:grid-cols-[1fr_320px]">
         {/* Component 1 — Sensor Health Matrix */}
-        <div className="overflow-hidden border border-gray-800 bg-[#181922]">
-          <div className="flex items-center justify-between border-b border-gray-800 px-3 py-2">
-            <span className="font-mono text-[9px] tracking-[0.2em] text-gray-400">
+        <div className="overflow-hidden border border-[#c3d2dc] bg-[#f2f6f9]">
+          <div className="flex items-center justify-between border-b border-[#c3d2dc] px-3 py-2">
+            <span className="font-mono text-[9px] tracking-[0.2em] text-[#4a6274]">
               MISSION-CRITICAL SENSOR SUITE · CAN-BUS
             </span>
-            <span className="font-mono text-[9px] tracking-widest text-[#0ea5e9]">
+            <span className="font-mono text-[9px] tracking-widest text-[#0083b3]">
               TWIN EXPECTED = 0D PHYSICS MODEL OUTPUT
             </span>
           </div>
@@ -243,7 +243,7 @@ export function SensorHealthMatrix() {
           <div className="overflow-x-auto">
             <div className="min-w-[720px]">
               {/* column headers */}
-              <div className="grid grid-cols-[1.15fr_1fr_1fr_0.8fr_0.9fr_1.15fr] gap-px border-b border-gray-800 bg-gray-800/40 font-mono text-[9px] tracking-[0.18em] text-gray-500">
+              <div className="grid grid-cols-[1.15fr_1fr_1fr_0.8fr_0.9fr_1.15fr] gap-px border-b border-[#c3d2dc] bg-gray-800/40 font-mono text-[9px] tracking-[0.18em] text-[#5d7385]">
                 <div className="px-3 py-2">SENSOR</div>
                 <div className="px-3 py-2 text-right">RAW PHYSICAL</div>
                 <div className="px-3 py-2 text-right">TWIN EXPECTED</div>
@@ -267,7 +267,7 @@ export function SensorHealthMatrix() {
                     ? "text-[#ef4444]"
                     : s.status === "drifting"
                       ? "text-[#f59e0b]"
-                      : "text-gray-400";
+                      : "text-[#4a6274]";
 
                 return (
                   <motion.div
@@ -282,29 +282,29 @@ export function SensorHealthMatrix() {
                             : "rgba(0,0,0,0)",
                     }}
                     transition={{ duration: 0.4 }}
-                    className="grid grid-cols-[1.15fr_1fr_1fr_0.8fr_0.9fr_1.15fr] gap-px border-b border-gray-800/60 last:border-b-0"
+                    className="grid grid-cols-[1.15fr_1fr_1fr_0.8fr_0.9fr_1.15fr] gap-px border-b border-[#c3d2dc]/60 last:border-b-0"
                   >
                     {/* sensor */}
                     <div className="flex items-center gap-2.5 px-3 py-3">
                       <SensorIcon kind={s.id === "map" || s.id === "oil" ? "pressure" : "temp"} />
                       <div>
-                        <div className="font-display text-[13px] font-medium tracking-wide text-white">
+                        <div className="font-display text-[13px] font-medium tracking-wide text-[#081722]">
                           {s.name}
                         </div>
-                        <div className="font-mono text-[8px] tracking-widest text-gray-500">{s.sub}</div>
+                        <div className="font-mono text-[8px] tracking-widest text-[#5d7385]">{s.sub}</div>
                       </div>
                     </div>
 
                     {/* raw physical */}
                     <div className={`readout flex items-center justify-end px-3 py-3 text-sm ${rawColor}`}>
                       {s.rawReading.toFixed(s.unit === "bar" ? 1 : 0)}
-                      <span className="ml-1 text-[9px] text-gray-500">{s.unit}</span>
+                      <span className="ml-1 text-[9px] text-[#5d7385]">{s.unit}</span>
                     </div>
 
                     {/* twin expected */}
-                    <div className="readout flex items-center justify-end px-3 py-3 text-sm text-[#0ea5e9]">
+                    <div className="readout flex items-center justify-end px-3 py-3 text-sm text-[#0083b3]">
                       {s.expectedReading.toFixed(s.unit === "bar" ? 1 : 0)}
-                      <span className="ml-1 text-[9px] text-gray-500">{s.unit}</span>
+                      <span className="ml-1 text-[9px] text-[#5d7385]">{s.unit}</span>
                     </div>
 
                     {/* residual */}
@@ -332,7 +332,7 @@ export function SensorHealthMatrix() {
                     <div className="flex flex-col items-end justify-center gap-1 px-3 py-3">
                       <div className={`readout flex items-baseline text-sm ${s.isVirtualOverride ? OVERRIDE : "text-gray-100"}`}>
                         {display.toFixed(s.unit === "bar" ? 1 : 0)}
-                        <span className="ml-1 text-[9px] text-gray-500">{s.unit}</span>
+                        <span className="ml-1 text-[9px] text-[#5d7385]">{s.unit}</span>
                       </div>
                       <AnimatePresence>
                         {s.isVirtualOverride && (
@@ -361,24 +361,24 @@ export function SensorHealthMatrix() {
           </div>
 
           {/* legend / method strip */}
-          <div className="grid gap-px border-t border-gray-800 bg-gray-800/40 sm:grid-cols-3">
+          <div className="grid gap-px border-t border-[#c3d2dc] bg-gray-800/40 sm:grid-cols-3">
             {[
               { t: "01 · PLAUSIBILITY CHECK", d: "−273 °C in 50 ms? 0 kPa MAP? Physically impossible → channel dead, not engine failure." },
               { t: "02 · DRIFT DETECTION", d: "Raw diverges from twin physics while siblings stay true → flagged for post-flight recalibration." },
               { t: "03 · VIRTUAL OVERRIDE", d: "Dead channel is isolated; the 0D twin's estimate feeds the flight computer. Mission continues." },
             ].map((step) => (
-              <div key={step.t} className="bg-[#181922] px-3 py-2.5">
-                <div className="font-mono text-[9px] tracking-[0.18em] text-[#0ea5e9]">{step.t}</div>
-                <div className="mt-1 text-[10px] leading-relaxed text-gray-400">{step.d}</div>
+              <div key={step.t} className="bg-[#f2f6f9] px-3 py-2.5">
+                <div className="font-mono text-[9px] tracking-[0.18em] text-[#0083b3]">{step.t}</div>
+                <div className="mt-1 text-[10px] leading-relaxed text-[#4a6274]">{step.d}</div>
               </div>
             ))}
           </div>
         </div>
 
         {/* Component 2 — Fault Sandbox */}
-        <div className="flex flex-col border border-gray-800 bg-[#181922]">
-          <div className="border-b border-gray-800 px-3 py-2">
-            <span className="font-mono text-[9px] tracking-[0.2em] text-gray-400">FAULT SANDBOX · LIVE INJECTION</span>
+        <div className="flex flex-col border border-[#c3d2dc] bg-[#f2f6f9]">
+          <div className="border-b border-[#c3d2dc] px-3 py-2">
+            <span className="font-mono text-[9px] tracking-[0.2em] text-[#4a6274]">FAULT SANDBOX · LIVE INJECTION</span>
           </div>
           <div className="flex flex-1 flex-col gap-2 p-3">
             <button
@@ -411,8 +411,8 @@ export function SensorHealthMatrix() {
               onClick={() => inject("map", 0)}
               className="flex min-h-11 items-center gap-3 border border-[#0ea5e9]/40 bg-[#0ea5e9]/5 px-3 text-left transition-colors hover:bg-[#0ea5e9]/15"
             >
-              <Snowflake className="h-4 w-4 shrink-0 text-[#0ea5e9]" />
-              <span className="font-mono text-[10px] font-bold tracking-[0.14em] text-[#0ea5e9]">
+              <Snowflake className="h-4 w-4 shrink-0 text-[#0083b3]" />
+              <span className="font-mono text-[10px] font-bold tracking-[0.14em] text-[#0083b3]">
                 SIMULATE MAP SENSOR ICING
               </span>
             </button>
@@ -427,9 +427,9 @@ export function SensorHealthMatrix() {
               </span>
             </button>
           </div>
-          <div className="border-t border-gray-800 px-3 py-2.5">
-            <p className="flex items-start gap-2 text-[10px] leading-relaxed text-gray-500">
-              <Activity className="mt-0.5 h-3 w-3 shrink-0 text-gray-500" />
+          <div className="border-t border-[#c3d2dc] px-3 py-2.5">
+            <p className="flex items-start gap-2 text-[10px] leading-relaxed text-[#5d7385]">
+              <Activity className="mt-0.5 h-3 w-3 shrink-0 text-[#5d7385]" />
               No triple physical redundancy on a weight-restricted airframe — analytical
               redundancy via the digital twin keeps the engine flying with a dead sensor.
             </p>

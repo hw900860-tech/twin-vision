@@ -358,6 +358,10 @@ export function CinematicIntro({
     <div
       aria-hidden={!active}
       className="fixed inset-0 z-[80] bg-[#040609]"
+      /* The dissolve now carries the dark cinematic INTO the bright aerospace
+         environment: the overlay's backdrop is dark while opaque (so the clip
+         reads cinematically), but as it fades the blur-dissolve brightens the
+         frame toward the site's blue-white atmosphere instead of a plain cut. */
       style={{
         // The crossfade: opacity 1 → 0 over ~1.4s while the video KEEPS PLAYING
         // (motion continues into the GLB beneath). Pointer events release the
@@ -366,10 +370,11 @@ export function CinematicIntro({
         // engine and the X-ray twin overlap most, so the dissolve reads as one
         // object transforming instead of a hard hand-off.
         opacity: active ? 1 : 0,
-        // Blur-dissolve: as the video fades it also defocuses + brightens, so
-        // the emerging X-ray twin beneath reads as one object materialising
-        // instead of a hard cross-dissolve of two different renderings.
-        filter: active ? "none" : "blur(10px) brightness(1.12)",
+        // Blur-dissolve: as the video fades it defocuses + brightens hard, so
+        // the dark cinematic frame blooms into the site's bright blue-white
+        // atmosphere — the dark scene literally lifts into daylight as the
+        // X-ray twin materialises beneath.
+        filter: active ? "none" : "blur(14px) brightness(1.55) saturate(0.9)",
         transition: active
           ? "none"
           : `opacity ${FADE_S * 1000}ms cubic-bezier(0.65, 0, 0.35, 1), filter ${FADE_S * 1000}ms cubic-bezier(0.65, 0, 0.35, 1)`,
@@ -391,12 +396,13 @@ export function CinematicIntro({
         style={{ opacity: videoOn ? 1 : 0, transform: "translateZ(0)", willChange: "opacity, transform" }}
       />
 
-      {/* Gentle vignette so the cinematic bleeds into the site's near-black atmosphere. */}
+      {/* Gentle vignette so the cinematic bleeds into the site's atmosphere —
+          dark navy at the edges, dissolving as the bright hero emerges. */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse at 50% 46%, transparent 55%, oklch(0.05 0.01 240 / 62%) 100%)",
+            "radial-gradient(ellipse at 50% 46%, transparent 55%, oklch(0.16 0.01 240 / 55%) 100%)",
         }}
       />
 

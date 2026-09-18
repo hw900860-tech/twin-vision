@@ -83,7 +83,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         name: "description",
         content: "An explainable digital twin for aero piston engines: predictive diagnostics, RUL and mission-risk assessment.",
       },
-      { name: "theme-color", content: "#0b0e11" },
+      { name: "theme-color", content: "#eaf1f5" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],

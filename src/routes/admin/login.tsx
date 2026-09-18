@@ -50,7 +50,7 @@ function AdminLoginPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#07090b] text-foreground">
+    <main className="relative min-h-screen overflow-hidden bg-[#eaf1f5] text-foreground">
       <div className="pointer-events-none absolute inset-0 grid-bg opacity-30" />
       <div className="pointer-events-none absolute -right-40 top-1/2 h-[38rem] w-[38rem] -translate-y-1/2 rounded-full border border-cyan/10 shadow-[0_0_120px_rgba(65,211,224,0.06)]" />
       <div className="pointer-events-none absolute right-0 top-1/2 h-[24rem] w-[24rem] -translate-y-1/2 rounded-full border border-amber/10" />

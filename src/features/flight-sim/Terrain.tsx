@@ -175,8 +175,8 @@ function RegionMarker({ region, active }: { region: FlightRegion; active: boolea
             fontSize: 11,
             fontWeight: 700,
             borderColor: color,
-            background: 'rgba(6,10,14,0.88)',
-            color: active ? '#ffffff' : color,
+            background: 'rgba(255,255,255,0.92)',
+            color: active ? '#081722' : color,
             boxShadow: active ? `0 0 12px ${color}88` : `0 0 4px ${color}44`,
             opacity: active ? 1 : 0.92,
           }}

@@ -7,7 +7,7 @@ import { engineViewerAudio } from '../digital-twin/engineViewerAudio';
 const EngineCanvas = lazy(() => import('../digital-twin/EngineCanvas'));
 
 const STATUS_COLOR: Record<SubsystemStatus, string> = {
-  NOMINAL: '#06b6d4',
+  NOMINAL: '#0083b3',
   WARNING: '#f59e0b',
   CRITICAL: '#ef4444',
 };
@@ -166,7 +166,7 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
   const overallColor = STATUS_COLOR[overallStatus];
 
   return (
-    <div className="flex h-full w-full flex-col bg-[#070a0d] text-foreground select-none border-l border-cyan/30 shadow-2xl backdrop-blur-xl overflow-hidden">
+    <div className="flex h-full w-full flex-col bg-white text-foreground select-none border-l border-cyan/30 shadow-2xl backdrop-blur-xl overflow-hidden">
       {/* Console Top Bar */}
       <div className="flex flex-wrap items-center justify-between border-b border-cyan/30 bg-panel/90 px-3 py-1.5 backdrop-blur-md gap-2">
         <div className="flex items-center gap-2">
@@ -235,7 +235,7 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
       </div>
 
       {/* Stress Heatmap Scale Legend Bar */}
-      <div className="flex items-center justify-between border-b border-border/80 bg-[#05080c] px-3 py-1 font-mono text-[8px] text-muted-foreground">
+      <div className="flex items-center justify-between border-b border-border/80 bg-[#f2f6f9] px-3 py-1 font-mono text-[8px] text-muted-foreground">
         <div className="flex items-center gap-3">
           <span className="font-bold text-cyan">STRESS HEATMAP LEGEND:</span>
           <div className="flex items-center gap-2">
@@ -255,7 +255,7 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
       </div>
 
       {/* Top Engine Live Health & Telemetry Summary Header */}
-      <div className="grid grid-cols-2 sm:grid-cols-6 border-b border-border/80 bg-[#040608] px-3 py-1.5 gap-2 font-mono text-[9px] text-cyan">
+      <div className="grid grid-cols-2 sm:grid-cols-6 border-b border-border/80 bg-[#eef4f8] px-3 py-1.5 gap-2 font-mono text-[9px] text-cyan">
         <div className="flex flex-col">
           <span className="text-[7.5px] text-muted-foreground">ENGINE HEALTH</span>
           <span className="font-bold text-xs" style={{ color: overallColor }}>{decision?.overallHealth ?? 96}%</span>
@@ -285,7 +285,7 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
       {/* Main Console Body */}
       <div className="flex flex-1 flex-col overflow-y-auto lg:flex-row">
         {/* Left Column: 3D Engine Hero Viewport */}
-        <div className="relative flex flex-1 flex-col min-h-[300px] bg-[#040608] border-b lg:border-b-0 lg:border-r border-border/80">
+        <div className="relative flex flex-1 flex-col min-h-[300px] bg-[#eef4f8] border-b lg:border-b-0 lg:border-r border-border/80">
           <Suspense fallback={<div className="grid h-full place-items-center label-xs text-cyan">LOADING 3D ENGINE MODEL...</div>}>
             <EngineCanvas
               interactive
@@ -339,7 +339,7 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
                 <span className="text-[7.5px] text-muted-foreground">CYLINDER HEAD</span>
                 <div className="flex justify-between items-center mt-0.5">
                   <span className="font-bold text-foreground">{(Math.max(...s.componentStress.cylinders) * 100).toFixed(0)}%</span>
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: Math.max(...s.componentStress.cylinders) > 0.7 ? '#ef4444' : '#06b6d4' }} />
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: Math.max(...s.componentStress.cylinders) > 0.7 ? '#ef4444' : '#0083b3' }} />
                 </div>
               </div>
 
@@ -347,7 +347,7 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
                 <span className="text-[7.5px] text-muted-foreground">EXHAUST MANIFOLD</span>
                 <div className="flex justify-between items-center mt-0.5">
                   <span className="font-bold text-foreground">{(Math.max(...s.componentStress.exhaustRunners) * 100).toFixed(0)}%</span>
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: Math.max(...s.componentStress.exhaustRunners) > 0.7 ? '#ef4444' : '#06b6d4' }} />
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: Math.max(...s.componentStress.exhaustRunners) > 0.7 ? '#ef4444' : '#0083b3' }} />
                 </div>
               </div>
 
@@ -355,7 +355,7 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
                 <span className="text-[7.5px] text-muted-foreground">TURBO / INTAKE</span>
                 <div className="flex justify-between items-center mt-0.5">
                   <span className="font-bold text-foreground">{(s.componentStress.turbo * 100).toFixed(0)}%</span>
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.componentStress.turbo > 0.7 ? '#ef4444' : '#06b6d4' }} />
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.componentStress.turbo > 0.7 ? '#ef4444' : '#0083b3' }} />
                 </div>
               </div>
 
@@ -363,7 +363,7 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
                 <span className="text-[7.5px] text-muted-foreground">CRANKCASE / BEARING</span>
                 <div className="flex justify-between items-center mt-0.5">
                   <span className="font-bold text-foreground">{(s.componentStress.crankcase * 100).toFixed(0)}%</span>
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.componentStress.crankcase > 0.7 ? '#ef4444' : '#06b6d4' }} />
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.componentStress.crankcase > 0.7 ? '#ef4444' : '#0083b3' }} />
                 </div>
               </div>
 
@@ -371,7 +371,7 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
                 <span className="text-[7.5px] text-muted-foreground">OIL LUBRICATION</span>
                 <div className="flex justify-between items-center mt-0.5">
                   <span className="font-bold text-foreground">{(s.componentStress.oilSystem * 100).toFixed(0)}%</span>
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.componentStress.oilSystem > 0.7 ? '#ef4444' : '#06b6d4' }} />
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.componentStress.oilSystem > 0.7 ? '#ef4444' : '#0083b3' }} />
                 </div>
               </div>
 
@@ -379,7 +379,7 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
                 <span className="text-[7.5px] text-muted-foreground">GEARBOX & PROP</span>
                 <div className="flex justify-between items-center mt-0.5">
                   <span className="font-bold text-foreground">{(s.componentStress.gearbox * 100).toFixed(0)}%</span>
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.componentStress.gearbox > 0.7 ? '#ef4444' : '#06b6d4' }} />
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.componentStress.gearbox > 0.7 ? '#ef4444' : '#0083b3' }} />
                 </div>
               </div>
             </div>
@@ -492,7 +492,7 @@ export function SimEngineTwinConsole({ onClose }: { onClose?: () => void }) {
               <span className="font-mono text-[7.5px] text-muted-foreground">PAST 30 SECONDS</span>
             </div>
 
-            <div className="relative h-16 w-full border border-border/60 bg-[#040608] overflow-hidden rounded">
+            <div className="relative h-16 w-full border border-border/60 bg-[#eef4f8] overflow-hidden rounded">
               <div className="absolute top-0 inset-x-0 h-1/4 bg-critical/10 border-b border-critical/20" />
               <div className="absolute top-1/4 inset-x-0 h-1/4 bg-amber/10 border-b border-amber/20" />
 

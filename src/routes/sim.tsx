@@ -38,7 +38,7 @@ export const Route = createFileRoute("/sim")({
 function SimPage() {
   return (
     <ProtectedRoute>
-      <ClientOnly fallback={<div className="grid h-screen w-screen place-items-center bg-[#040608] font-mono text-cyan text-xs tracking-wider animate-pulse">INITIALIZING AEROSPACE COMMAND CONSOLE…</div>}>
+      <ClientOnly fallback={<div className="grid h-screen w-screen place-items-center bg-[#eaf1f5] font-mono text-[#0083b3] text-xs tracking-wider animate-pulse">INITIALIZING AEROSPACE COMMAND CONSOLE…</div>}>
         <SimPageContent />
       </ClientOnly>
     </ProtectedRoute>
@@ -239,7 +239,7 @@ function SimPageContent() {
   const [showMap, setShowMap] = useState(true);
 
   return (
-    <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-[#040608] text-foreground select-none">
+    <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-[#eaf1f5] text-foreground select-none">
       {/* Top Header Bar */}
       <header className="flex h-10 shrink-0 items-center justify-between border-b border-cyan/30 bg-panel/90 px-4 backdrop-blur-md z-50">
         <div className="flex items-center gap-4">
@@ -300,7 +300,7 @@ function SimPageContent() {
       <FlightSimAudio />
 
       {/* Main Flight Viewport: full-screen UAV simulator */}
-      <div className="relative flex-1 overflow-hidden bg-[#020406]">
+      <div className="relative flex-1 overflow-hidden bg-[#dfe9ef]">
         <ClientOnly>
           <FlightSimulator />
         </ClientOnly>
@@ -344,7 +344,7 @@ function SimPageContent() {
         )}
 
       {/* Bottom Footer: flight telemetry + recording + datalink readout */}
-      <footer className="shrink-0 border-t border-cyan/30 bg-[#040608] px-3 py-1.5 z-40 font-mono text-[8.5px] flex flex-wrap items-center justify-between gap-2">
+      <footer className="shrink-0 border-t border-cyan/30 bg-[#eaf1f5] px-3 py-1.5 z-40 font-mono text-[8.5px] flex flex-wrap items-center justify-between gap-2">
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 text-cyan">
           <div><span className="text-[7.5px] text-muted-foreground block">ALTITUDE</span><span className="font-bold text-foreground">{s.altitude.toFixed(0)} ft</span></div>
           <div><span className="text-[7.5px] text-muted-foreground block">SPEED</span><span className="font-bold text-foreground">{s.speed.toFixed(0)} kts</span></div>
