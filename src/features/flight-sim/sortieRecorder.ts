@@ -14,6 +14,7 @@
 import type { FlightState } from "./flightStore";
 import { MISSIONS, useFlightStore } from "./flightStore";
 import type { SortieEndReason, SortieRecord, SortieSample } from "@/lib/datalink/sortie";
+import { broadcastSortie, storeSortie } from "@/lib/datalink/sortieBridge";
 
 /** Fault bit order — matches the CAN fault bitmap and FAULT_KEYS (protocol). */
 const FAULT_NAMES = ["c2Overheat", "turboFail", "bearingFail", "injectorClog", "misfire3"] as const;
@@ -32,6 +33,7 @@ interface OpenRecord {
 
 let installed = false;
 let open: OpenRecord | null = null;
+let unsubscribe: (() => void) | null = null;
 
 function finalizeReason(s: FlightState): SortieEndReason {
   switch (s.emergencyState) {
@@ -99,6 +101,12 @@ function finalizeAndQueue(): void {
   if (!last || st.missionElapsed - last.t > 0.25) {
     pushSample(rec, sampleOf(st, st.missionElapsed));
   }
+  // Local bridge first: the record is saved in this browser and broadcast to
+  // other tabs, so the GCS replay works even when the datalink relay is
+  // unreachable (e.g. on the Vercel deployment, which has no relay process).
+  // queueSortie below keeps the wire path for when a relay IS reachable.
+  storeSortie(rec);
+  broadcastSortie(rec);
   useFlightStore.getState().queueSortie(rec);
 
 }
@@ -154,12 +162,18 @@ function observe(prev: FlightState, next: FlightState): void {
 export function installSortieRecorder(): void {
   if (installed) return;
   installed = true;
-  useFlightStore.subscribe((state, prevState) => observe(prevState, state));
+  unsubscribe = useFlightStore.subscribe((state, prevState) => observe(prevState, state));
 }
 
 export function uninstallSortieRecorder(): void {
-  // The store subscription lives for the lifetime of the /sim session; there is
-  // no per-component teardown needed (the module-level singleton is per window).
+  // Unsubscribe for real: the old code only flipped the flag and left the
+  // subscription alive, so every revisit to /sim added another observer and
+  // each mission launch finalized a spurious empty ABORTED sortie (the second
+  // observer saw an already-open record and closed it immediately).
+  if (unsubscribe) {
+    unsubscribe();
+    unsubscribe = null;
+  }
   installed = false;
   open = null;
 }

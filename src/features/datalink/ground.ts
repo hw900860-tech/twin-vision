@@ -20,7 +20,7 @@
 import { useFlightStore } from "@/features/flight-sim/flightStore";
 import { regionById } from "@/features/flight-sim/regions";
 import { runEngineDecisionEngine } from "@/features/digital-twin/engineMlService";
-import { LinkSocket } from "@/lib/datalink/client";
+import { createLinkSocket, type LinkSocketLike } from "@/lib/datalink/localLink";
 import { OrderedReceiver } from "@/lib/datalink/orderReceiver";
 import {
   CMD_ALTITUDE,
@@ -43,13 +43,18 @@ import {
 } from "@/lib/datalink/codec";
 import type { WeatherObservation } from "@/lib/domain/engine/environment";
 import { useLinkStore } from "./linkStore";
+import { loadStoredSorties, subscribeSorties } from "@/lib/datalink/sortieBridge";
 import { RegionExcursionRecorder } from "./regionExcursions";
 
 let started = false;
+// Local sortie bridge (localStorage + BroadcastChannel): delivers completed
+// sorties to the replay panel when the datalink relay is unreachable, e.g.
+// on the Vercel deployment where no relay process exists.
+let stopSortieBridge: (() => void) | null = null;
 // Correlates region enter/exit alerts with the telemetry stream so the GCS can
 // show engine-response excursions (MAP/EGT/CHT) while the UAV was inside a region.
 let recorder: RegionExcursionRecorder | null = null;
-let socket: LinkSocket | null = null;
+let socket: LinkSocketLike | null = null;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
 let ageTimer: ReturnType<typeof setInterval> | null = null;
 let rateTimer: ReturnType<typeof setInterval> | null = null;
@@ -467,25 +472,41 @@ export function startGroundLink(): void {
     onGap: () => requestGap(),
   });
 
-  socket = new LinkSocket(ls.relayUrl, {
-    onOpen: () => {
-      useLinkStore.getState().setWsStatus("online");
-      socket?.sendControl({ type: "hello", role: "ground" });
-      // Reconnected mid-stream: anything the aircraft sent while we were down
-      // is sitting in its ring — ask for it immediately.
-      if (receiver?.started) {
-        gapReqAtMs = 0;
-        requestGap();
-      }
+  // Sorties flown in this browser are saved locally at mission end: hydrate
+  // them now (oldest first — pushSortie prepends, so newest ends up on top)
+  // and pick up any that finish in another tab while this console is open.
+  for (const rec of loadStoredSorties().slice().reverse()) {
+    useLinkStore.getState().pushSortie(rec);
+  }
+  stopSortieBridge = subscribeSorties((rec) => useLinkStore.getState().pushSortie(rec));
+
+  // Relay first, local in-browser channel as fallback (localLink.ts) — the
+  // live site has no relay server, so without the fallback the link here
+  // would stay down forever.
+  socket = createLinkSocket(
+    ls.relayUrl,
+    {
+      onOpen: () => {
+        useLinkStore.getState().setWsStatus("online");
+        useLinkStore.getState().patch({ transport: socket?.transport ?? "relay" });
+        socket?.sendControl({ type: "hello", role: "ground" });
+        // Reconnected mid-stream: anything the aircraft sent while we were down
+        // is sitting in its ring — ask for it immediately.
+        if (receiver?.started) {
+          gapReqAtMs = 0;
+          requestGap();
+        }
+      },
+      onClose: () => {
+        useLinkStore.getState().setWsStatus("offline");
+        useLinkStore.getState().setAirborneOnline(false);
+        useLinkStore.getState().patch({ cmdStatus: "idle" });
+      },
+      onBinary,
+      onControl,
     },
-    onClose: () => {
-      useLinkStore.getState().setWsStatus("offline");
-      useLinkStore.getState().setAirborneOnline(false);
-      useLinkStore.getState().patch({ cmdStatus: "idle" });
-    },
-    onBinary,
-    onControl,
-  });
+    "ground",
+  );
   socket.connect();
 
   pingTimer = setInterval(() => socket?.sendControl({ type: "ping", ts: Date.now() }), 1000);
@@ -524,6 +545,10 @@ export function stopGroundLink(): void {
   socket = null;
   receiver = null;
   recorder = null;
+  if (stopSortieBridge) {
+    stopSortieBridge();
+    stopSortieBridge = null;
+  }
   restoreGroundActions();
   useLinkStore.getState().setRole("offline");
   useLinkStore.getState().setWsStatus("offline");

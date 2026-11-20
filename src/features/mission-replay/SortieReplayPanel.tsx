@@ -3,7 +3,10 @@
  *
  * The aircraft's mission recorder captures every sortie (route snapshot,
  * waypoint capture times, ~1 Hz position/engine samples) and streams it over
- * the datalink as a MISSION_RECORD frame when the sortie ends. This panel:
+ * the datalink as a MISSION_RECORD frame when the sortie ends. Sorties are
+ * also saved in this browser (local sortie bridge), so replay works even
+ * when the datalink relay is unreachable, as on the Vercel deployment.
+ * This panel:
  *   - lists received sorties (preset, biome, outcome, duration),
  *   - replays the selected sortie as an animated top-down flight: the planned
  *     route (dashed) vs the actual flown path (emerald trail that grows with
@@ -470,16 +473,17 @@ export function SortieReplayPanel() {
   }, [sorties, selId]);
 
   return (
-    <Panel label="SORTIE REPLAY" corner={sorties.length > 0 ? `MISSION RECORDER · ${sorties.length} SORTIE${sorties.length > 1 ? "S" : ""} ON LINK` : "MISSION RECORDER"}>
+    <Panel label="SORTIE REPLAY" corner={sorties.length > 0 ? `MISSION RECORDER · ${sorties.length} SORTIE${sorties.length > 1 ? "S" : ""}` : "MISSION RECORDER"}>
       <div className="grid gap-3 p-3 lg:grid-cols-[240px_1fr]">
         {/* sortie list */}
         <div className="flex max-h-[520px] flex-col gap-1 overflow-y-auto pr-1">
           {sorties.length === 0 && (
             <div className="rounded border border-border/60 bg-panel-2/60 p-3 text-[10px] leading-relaxed text-muted-foreground">
-              <div className="mb-1 font-bold text-cyan">NO SORTIES RECEIVED</div>
+              <div className="mb-1 font-bold text-cyan">NO SORTIES YET</div>
               The mission recorder captures every preset flight on <span className="text-cyan">/sim</span> — route snapshot,
-              waypoint capture times and a live position/engine trace — and streams it to this console the moment the
-              sortie ends (complete, crash, forced landing, abort or recovery). Fly and finish a mission to see it here.
+              waypoint capture times and a live position/engine trace — and saves it in this browser the moment the
+              sortie ends (complete, crash, forced landing, abort or recovery). Fly and finish a mission, then come
+              back here to replay it.
             </div>
           )}
           {sorties.map((s) => (

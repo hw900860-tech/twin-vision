@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { DEFAULT_RELAY_URL } from "@/lib/datalink/protocol";
 import type { LinkMode, LinkRole, WsStatus } from "@/lib/datalink/types";
 import type { DecodedRegionAlert } from "@/lib/datalink/codec";
+import type { LinkTransportKind } from "@/lib/datalink/localLink";
 import { regionById, type RegionSeverity } from "@/features/flight-sim/regions";
 import type { RegionExcursion } from "./regionExcursions";
 import type { SortieRecord } from "@/lib/datalink/sortie";
@@ -28,6 +29,8 @@ export interface LinkStatsState {
   /** True when the gateway relay reports an airborne session connected. */
   airborneOnline: boolean;
   relayUrl: string;
+  /** Which transport carries the link: the WS relay, or the local in-browser channel. */
+  transport: LinkTransportKind;
 
   // transmit side (airborne)
   txFrames: number;
@@ -97,6 +100,7 @@ export const useLinkStore = create<LinkStatsState>((set) => ({
   wsStatus: "offline",
   airborneOnline: false,
   relayUrl: (import.meta.env["VITE_RELAY_URL"] as string | undefined) || DEFAULT_RELAY_URL,
+  transport: "relay",
 
   txFrames: 0,
   txBytes: 0,
@@ -162,7 +166,15 @@ export const useLinkStore = create<LinkStatsState>((set) => ({
   clearAlerts: () => set({ alerts: [] }),
   pushExcursion: (e) => set((s) => ({ excursions: [e, ...s.excursions].slice(0, 10) })),
   clearExcursions: () => set({ excursions: [] }),
-  pushSortie: (r) => set((s) => ({ sorties: [r, ...s.sorties].slice(0, 8) })),
+  // Deduped by id: a sortie can now arrive twice — once over the datalink
+  // (MISSION_RECORD) and once over the local bridge (localStorage /
+  // BroadcastChannel) — and must appear exactly once in the replay list.
+  pushSortie: (r) =>
+    set((s) =>
+      s.sorties.some((x) => x.id === r.id)
+        ? s
+        : { sorties: [r, ...s.sorties].slice(0, 8) },
+    ),
   clearSorties: () => set({ sorties: [] }),
   resetRx: () =>
     set({

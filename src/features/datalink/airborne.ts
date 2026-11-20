@@ -7,7 +7,7 @@
  * gateway. Also receives + acknowledges GCS command frames.
  */
 import { useFlightStore } from "@/features/flight-sim/flightStore";
-import { LinkSocket } from "@/lib/datalink/client";
+import { createLinkSocket, type LinkSocketLike } from "@/lib/datalink/localLink";
 import { DatalinkChannel } from "@/lib/datalink/channel";
 import {
   CMD_ALTITUDE,
@@ -30,13 +30,14 @@ import {
   type TelemetrySnapshot,
 } from "@/lib/datalink/codec";
 import type { WeatherObservation } from "@/lib/domain/engine/environment";
+import { decimateSortie } from "@/lib/datalink/sortieBridge";
 import { useLinkStore } from "./linkStore";
 import { buildCanTelemetrySnapshot, useCanBusStore } from "@/lib/datalink/can/gateway";
 
 const TX_INTERVAL_MS = 50; // 20 Hz sampling — matches the authoritative sim cadence
 
 let started = false;
-let socket: LinkSocket | null = null;
+let socket: LinkSocketLike | null = null;
 let channel: DatalinkChannel | null = null;
 let txTimer: ReturnType<typeof setInterval> | null = null;
 let rateTimer: ReturnType<typeof setInterval> | null = null;
@@ -228,13 +229,23 @@ function drainPendingSorties(): void {
   if (pending.length === 0) return;
   useFlightStore.getState().clearPendingSorties();
   for (const rec of pending) {
-    try {
-      const frame = encodeMissionRecord(rec, 0, Date.now());
+    const send = (r: typeof rec): void => {
+      const frame = encodeMissionRecord(r, 0, Date.now());
       channel?.dispatch(frame, (b) => {
         if (socket?.connected) socket.sendBinary(b);
       });
-    } catch (e) {
-      console.warn("[airborne] sortie record send failed", e);
+    };
+    try {
+      send(rec);
+    } catch {
+      // Long sorties can exceed the 60 KB MISSION_RECORD payload cap and the
+      // old code dropped them silently. Retry once thinned to 240 samples
+      // (~45 KB) — the replay keeps its shape, just fewer points.
+      try {
+        send(decimateSortie(rec, 240));
+      } catch (e) {
+        console.warn("[airborne] sortie record send failed", e);
+      }
     }
   }
 }
@@ -276,17 +287,33 @@ export function startAirborneLink(): void {
   const link = useLinkStore.getState();
   channel = new DatalinkChannel();
   channel.setMode(link.mode);
-  socket = new LinkSocket(link.relayUrl, {
-    onOpen: () => {
-      useLinkStore.getState().setWsStatus("online");
-      socket?.sendControl({ type: "hello", role: "airborne" });
+  // Relay first, local in-browser channel as fallback (localLink.ts) — the
+  // live site has no relay server, so without the fallback the link here
+  // would stay down forever.
+  socket = createLinkSocket(
+    link.relayUrl,
+    {
+      onOpen: () => {
+        useLinkStore.getState().setWsStatus("online");
+        useLinkStore.getState().patch({ transport: socket?.transport ?? "relay" });
+        socket?.sendControl({ type: "hello", role: "airborne" });
+      },
+      onClose: () => {
+        useLinkStore.getState().setWsStatus("offline");
+        useLinkStore.getState().setAirborneOnline(false);
+      },
+      onBinary: handleBinary,
+      // The relay never sends link-state to the airborne side, so this only
+      // fires on the local transport — where it tells the sim a GCS tab is
+      // listening (the DATALINK panel's PEER readout).
+      onControl: (msg) => {
+        if (msg["type"] === "link") {
+          useLinkStore.getState().setAirborneOnline(typeof msg["grounds"] === "number" && msg["grounds"] > 0);
+        }
+      },
     },
-    onClose: () => {
-      useLinkStore.getState().setWsStatus("offline");
-      useLinkStore.getState().setAirborneOnline(false);
-    },
-    onBinary: handleBinary,
-  });
+    "airborne",
+  );
   socket.connect();
 
   txTimer = setInterval(tick, TX_INTERVAL_MS);

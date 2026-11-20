@@ -15,6 +15,10 @@ import { evaluateMayday, maydayAudio } from "@/features/telemetry/mayday";
  * after the operator has interacted with the page once (browser autoplay
  * policy). A single ACKNOWLEDGE silences it until the condition clears; the
  * operator can also toggle the alarm channel on/off.
+ *
+ * ACK also collapses the banner to a small chip so the operator can keep
+ * working. The chip stays until the emergency clears — or a NEW cause
+ * appears, which pops the full banner back up and re-sounds the siren.
  */
 export function MaydayBanner() {
   const healthIndex = useFlightStore((s) => s.healthIndex) ?? 0.96;
@@ -31,6 +35,10 @@ export function MaydayBanner() {
 
   const [armed, setArmed] = useState(maydayAudio.isEnabled); // operator alarm-channel switch
   const [acknowledged, setAcknowledged] = useState(false);
+  /** Full banner visible while acknowledged (via SHOW on the collapsed chip). */
+  const [expanded, setExpanded] = useState(false);
+  /** Cause ids present when the operator last pressed ACK. */
+  const ackedIds = useRef<Set<string>>(new Set());
 
   // Refs mirror the live values so the gesture-unlock handler can start the
   // siren immediately even when the alarm was already tripped.
@@ -95,8 +103,19 @@ export function MaydayBanner() {
     }
     if (!mayday) {
       setAcknowledged(false);
+      setExpanded(false);
+      ackedIds.current = new Set();
     }
   }, [mayday, armed, acknowledged]);
+
+  // A NEW cause after ACK re-trips the alarm: full banner + siren resume.
+  useEffect(() => {
+    if (!acknowledged || !mayday) return;
+    if (causes.some((c) => !ackedIds.current.has(c.id))) {
+      setAcknowledged(false);
+      setExpanded(false);
+    }
+  }, [causes, acknowledged, mayday]);
 
   // Leave the audio graph pristine when the host unmounts.
   useEffect(() => {
@@ -106,6 +125,35 @@ export function MaydayBanner() {
   }, []);
 
   if (!mayday) return null;
+
+  const handleAck = () => {
+    ackedIds.current = new Set(causes.map((c) => c.id));
+    setAcknowledged(true);
+    setExpanded(false);
+    maydayAudio.silence();
+  };
+
+  // Acknowledged + collapsed: a small chip instead of the full banner.
+  if (acknowledged && !expanded) {
+    return (
+      <div
+        role="alert"
+        className="fixed left-1/2 top-2 z-[70] flex -translate-x-1/2 items-center gap-3 border border-critical/60 bg-[#18090a]/95 px-3 py-1.5 font-mono text-[10px] tracking-wider text-critical shadow-[0_0_20px_rgba(226,82,63,0.35)]"
+      >
+        <span className="flex items-center gap-1.5 font-bold">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          MAYDAY ACKED · {causes.length} CAUSE{causes.length === 1 ? "" : "S"} · SIREN SILENCED
+        </span>
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="border border-critical/60 px-2 py-0.5 font-bold text-critical transition-colors hover:bg-critical hover:text-white"
+        >
+          SHOW
+        </button>
+      </div>
+    );
+  }
 
   const toggleArmed = () => {
     const next = !armed;
@@ -154,16 +202,22 @@ export function MaydayBanner() {
               {armed ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
               {armed ? "ALARM ON" : "ALARM OFF"}
             </button>
-            <button
-              onClick={() => {
-                setAcknowledged(true);
-                maydayAudio.silence();
-              }}
-              className="flex h-8 items-center gap-1.5 border border-critical bg-critical/20 px-3 font-mono text-[9px] font-bold tracking-wider text-critical transition-colors hover:bg-critical/40"
-            >
-              <Check className="h-3.5 w-3.5" />
-              ACK
-            </button>
+            {acknowledged ? (
+              <button
+                onClick={() => setExpanded(false)}
+                className="flex h-8 items-center gap-1.5 border border-critical bg-critical/20 px-3 font-mono text-[9px] font-bold tracking-wider text-critical transition-colors hover:bg-critical/40"
+              >
+                HIDE
+              </button>
+            ) : (
+              <button
+                onClick={handleAck}
+                className="flex h-8 items-center gap-1.5 border border-critical bg-critical/20 px-3 font-mono text-[9px] font-bold tracking-wider text-critical transition-colors hover:bg-critical/40"
+              >
+                <Check className="h-3.5 w-3.5" />
+                ACK
+              </button>
+            )}
           </div>
         </div>
         {acknowledged && (

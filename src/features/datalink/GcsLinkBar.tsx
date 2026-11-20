@@ -12,6 +12,7 @@ function fmtMs(v: number): string {
 export function GcsLinkBar() {
   const wsStatus = useLinkStore((s) => s.wsStatus);
   const airborneOnline = useLinkStore((s) => s.airborneOnline);
+  const transport = useLinkStore((s) => s.transport);
   const mode = useLinkStore((s) => s.mode);
   const latencyMs = useLinkStore((s) => s.latencyMs);
   const rttMs = useLinkStore((s) => s.rttMs);
@@ -60,7 +61,15 @@ export function GcsLinkBar() {
           }}
         />
         <span style={{ color: streaming ? "#10b981" : connected && !airborneOnline ? "#eab308" : "#ef4444" }}>
-          {streaming ? `LINK ${mode} — LIVE` : connected && !airborneOnline ? "LINK UP — AWAITING AIRBORNE" : "LINK DOWN"}
+          {streaming
+            ? transport === "local"
+              ? `LINK ${mode} — LIVE · LOCAL`
+              : `LINK ${mode} — LIVE`
+            : connected && !airborneOnline
+              ? transport === "local"
+                ? "LOCAL LINK — AWAITING AIRBORNE"
+                : "LINK UP — AWAITING AIRBORNE"
+              : "LINK DOWN"}
         </span>
       </span>
 

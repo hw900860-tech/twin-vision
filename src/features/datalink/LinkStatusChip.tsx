@@ -6,6 +6,7 @@ export function LinkStatusChip({ detailed = false }: { detailed?: boolean }) {
   const mode = useLinkStore((s) => s.mode);
   const wsStatus = useLinkStore((s) => s.wsStatus);
   const airborneOnline = useLinkStore((s) => s.airborneOnline);
+  const transport = useLinkStore((s) => s.transport);
   const latencyMs = useLinkStore((s) => s.latencyMs);
   const rttMs = useLinkStore((s) => s.rttMs);
   const lossPct = useLinkStore((s) => s.lossPct);
@@ -17,6 +18,7 @@ export function LinkStatusChip({ detailed = false }: { detailed?: boolean }) {
   const stale = isGround && (lastFrameAgeMs > 1200 || !airborneOnline);
   const down = wsStatus === "offline";
   const color = down || stale ? "#ef4444" : wsStatus === "connecting" ? "#eab308" : "#10b981";
+  const localTag = transport === "local" ? " · LOCAL" : "";
   const label = down
     ? "LINK DOWN"
     : stale
@@ -24,14 +26,14 @@ export function LinkStatusChip({ detailed = false }: { detailed?: boolean }) {
       : wsStatus === "connecting"
         ? "CONNECTING…"
         : isGround
-          ? `LINK ${mode}`
-          : `DATALINK ${mode}`;
+          ? `LINK ${mode}${localTag}`
+          : `DATALINK ${mode}${localTag}`;
 
   return (
     <span
       className="inline-flex items-center gap-1.5 border px-2 py-0.5 font-mono text-[8.5px] tracking-wider whitespace-nowrap"
       style={{ borderColor: color + "88", background: color + "1a", color }}
-      title={`Relay: ${useLinkStore.getState().relayUrl}`}
+      title={transport === "local" ? "Local in-browser link (no relay server)" : `Relay: ${useLinkStore.getState().relayUrl}`}
     >
       <span
         className="inline-block h-1.5 w-1.5 rounded-full"
